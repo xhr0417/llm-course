@@ -81,23 +81,36 @@ class RMSNorm(nn.Module):
 
     def forward(self, x):
         # x: [..., d_model]
-        rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt()   # [..., 1]
-        return x / (rms + self.eps) * self.g
+        # 标准形式：x / sqrt(mean(x²) + eps) —— 注意 eps 在根号【内】
+        rms_inv = torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        return x * rms_inv * self.g
 
-# 验证
+# 验证 1：形状与 RMS≈1
 x = torch.randn(2, 5, 256)
 out = RMSNorm(256)(x)
 assert out.shape == x.shape
 assert torch.allclose(out.pow(2).mean(-1), torch.ones(2, 5), atol=1e-3)  # RMS≈1
+
+# 验证 2：与官方实现数值对比（torch.nn.RMSNorm 同样把 eps 放在根号内）
+official = torch.nn.RMSNorm(256, eps=1e-6)
+mine = RMSNorm(256)
+assert torch.allclose(mine(x), official(x), atol=1e-5)   # 两者 weight 都初始化为全 1
+print("RMSNorm 与 torch.nn.RMSNorm 输出一致 ✅")
 ```
 
-:::math 与 LayerNorm 的代码差异
+:::math 与 LayerNorm 的代码差异（顺带纠正一个常见错误写法）
 ```python
 # LayerNorm 需要：减均值 → 除标准差
 x = (x - x.mean(-1, keepdim=True)) / x.std(-1, keepdim=True) * g + b
-# RMSNorm 只要：除均方根（省掉减均值、省掉 bias b）
-x = x / x.pow(2).mean(-1, keepdim=True).sqrt() * g
+
+# ✅ RMSNorm 标准写法：eps 在根号内（与论文 / torch.nn.RMSNorm 一致）
+x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps) * g
+
+# ❌ 常见错误写法：eps 加在根号外 —— 当 mean(x²) 很小时行为与标准实现不同
+# x = x / (x.pow(2).mean(-1, keepdim=True).sqrt() + eps) * g
 ```
+
+区别在哪：标准写法是 $\dfrac{x}{\sqrt{\mathbb E[x^2]+\epsilon}}$；错误写法是 $\dfrac{x}{\sqrt{\mathbb E[x^2]}+\epsilon}$。虽然 eps 很小时数值接近，但**公式含义不同**（前者防止根号内除零，后者改变了归一化尺度），工程实现（如 LLaMA 系）统一采用标准写法。
 :::
 
 ## Lab 3：实现 RoPE（旋转位置编码）

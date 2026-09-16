@@ -358,12 +358,22 @@ class TokenDataset(Dataset):
         self.seq_len = seq_len
 
     def __len__(self):
-        return len(self.data) - self.seq_len - 1
+        # 合法起点 i 满足 i+1+seq_len <= N，即 i ∈ [0, N-seq_len-1]，共 N-seq_len 个样本
+        return len(self.data) - self.seq_len
 
     def __getitem__(self, i):
         x = torch.from_numpy(self.data[i:i + self.seq_len].astype("int64"))
         y = torch.from_numpy(self.data[i + 1:i + 1 + self.seq_len].astype("int64"))
         return x, y                      # 输入与「右移一位」的标签
+
+# 自测：N=10、S=4 时应恰好 6 个样本，最后一个样本是 x=data[5:9], y=data[6:10]
+import numpy as np
+arr = np.arange(10, dtype=np.uint16)
+arr.tofile("/tmp/tiny.bin")
+tiny = TokenDataset("/tmp/tiny.bin", seq_len=4)
+assert len(tiny) == 6, len(tiny)
+x_last, y_last = tiny[5]
+assert x_last.tolist() == [5, 6, 7, 8] and y_last.tolist() == [6, 7, 8, 9]
 
 ds = TokenDataset("data.bin", seq_len=512)
 loader = DataLoader(ds, batch_size=32, shuffle=True, num_workers=4, pin_memory=True)

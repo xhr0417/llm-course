@@ -82,7 +82,7 @@ warp 里的 32 个线程执行同一条指令。如果代码有 `if` 分支导�
 ## 15.4 存储层次：GPU 世界的「内存墙」
 
 :::unfold 先懂直觉
-GPU 算得极快，但数据住在离计算单元很远的 HBM 里。计算单元等数据的时间可能比算的时间还长——这就是「内存墙」。所有高性能 kernel（FlashAttention 等）本质上都在做同一件事：**让数据尽量待在离计算近的地方**。
+GPU 算得极快，但数据住在离计算单元很远的 HBM 里。计算单元等数据的时间可能比算的时间还长——这就是「内存墙」。很多高性能 kernel（FlashAttention 等）的优化思路正是：**让数据尽量待在离计算近的地方**。
 :::
 
 ```
@@ -161,13 +161,13 @@ LayerNorm 处理 `[B, S, d] = [8, 512, 4096]`，bf16：
 
 （这是假设带宽 100% 利用率的**理想下界**；真实 kernel 通常达到峰值带宽的 60%~80%。）
 
-结论：LayerNorm 再省计算也没用，唯一的优化是**少读写**。
+结论：LayerNorm 再省计算也没用，优化方向主要是**少读写**（融合进邻近算子、避免多余的中间张量）。
 :::
 
 ## 15.6 为什么 GEMM 快：分块与 Tensor Core
 
 :::unfold 先懂直觉
-矩阵乘是大模型唯一的 compute-bound 主力。它快的秘诀是「分块（tiling）」：把大矩阵切成小块，反复复用搬到 shared memory / register 里的小块——同一份数据用很多次，掩盖了 HBM 的慢。
+在典型 dense Transformer 训练中，大型 GEMM 通常是主要的 compute-bound 工作负载之一。它快的秘诀是「分块（tiling）」：把大矩阵切成小块，反复复用搬到 shared memory / register 里的小块——同一份数据用很多次，掩盖了 HBM 的慢。
 :::
 
 ```
@@ -184,11 +184,12 @@ LayerNorm 处理 `[B, S, d] = [8, 512, 4096]`，bf16：
 | 双缓冲（double buffering） | 算当前块时预取下一块 |
 | cuBLAS / CUTLASS | 官方高度优化实现（大模型都直接调用） |
 
-:::note 大模型里的「GEMM 等级」
-NVIDIA 给矩阵乘按精度分类（也是性能对比的行业术语）：
-- **GEMM「9」**：理论峰值 ~100%（极难达到）
-- 实际训练中 GEMM 时间占比：LLM 前向反向约 70%~90%
-- 所以 cuBLAS 的效率直接决定模型 FLOPS 利用率
+:::note 从 GEMM 视角看「为什么矩阵乘快」（标准概念，不用黑话）
+- **GEMM 的三个维度 M / N / K**：决定计算量（$2MNK$ FLOPs）与数据复用空间；
+- **Tensor Core 可用条件**：数据类型（如 bf16/fp16）与矩阵形状满足对齐要求（常见实现偏好 16 或 64 的倍数）——形状不对齐会退回到更慢的路径；
+- **Tile（分块）大小**：决定 shared memory / register 的复用率与 occupancy（占用率），是 cuBLAS / CUTLASS 调优的核心旋钮；
+- **算术强度**：大 GEMM（M、N、K 都大）的 AI 高，属于 compute-bound；这也是它成为训练主力的原因。
+- 实际训练中，GEMM 类 kernel 通常占前向+反向耗时的大部分（经验值约 70%~90%，随模型结构与实现变化）。
 :::
 
 ## 15.7 Kernel 与融合：省的是带宽
@@ -292,19 +293,19 @@ C. 两者都不是
 D. 取决于 batch size
 
 答案: B
-解析: AI=2 远低于拐点，性能由带宽×AI 决定，属于 memory-bound。Softmax（0.25）、LayerNorm（0.5）、逐元素操作都在这一象限。
+解析: AI=2 远低于拐点 153，性能由带宽×AI 决定，属于 memory-bound。Softmax（约 1）、LayerNorm（约 1.3）、逐元素操作都在这一象限。
 :::
 
 :::quiz
 为什么 FlashAttention 能大幅加速注意力计算，却没有改变 O(S²) 的复杂度？
 
 A. 它用了近似算法
-B. 它通过分块 + 在线 softmax 避免把 S×S 矩阵写入 HBM，优化的是内存流量而不是计算量
+B. 它通过分块 + 在线 softmax，不在 HBM 中物化完整的 S×S 注意力矩阵，显著减少 HBM ↔ SRAM 的数据搬运
 C. 它减少了 Q/K/V 的维度
 D. 它跳过了 softmax
 
 答案: B
-解析: 朴素 attention 的主要代价是读写 O(S²) 的中间矩阵。FlashAttention 让这些中间结果留在片上 SRAM 中完成计算，HBM 流量降到 O(S)，但计算次数仍是 O(S²)。
+解析: 朴素 attention 要把 S×S 的中间矩阵写入再读出 HBM，数据搬运量很大。FlashAttention 用 tiling + 在线 softmax 让中间结果留在片上 SRAM 中完成计算，**避免物化完整 S×S 矩阵**，HBM 访问大幅减少。注意：计算复杂度仍是 O(S²)——本课程只讲「减少 HBM 搬运」这个正确边界，精确的 I/O 复杂度分析留到第二批 FlashAttention 章节。
 :::
 
 :::quiz

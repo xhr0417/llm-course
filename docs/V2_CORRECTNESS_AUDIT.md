@@ -147,3 +147,80 @@
 - **遗留：上述 12 项教学简化**，均已在页面明确标注，不构成事实错误
 
 **第一批 V2 可以进入第二批升级**（Data Pipeline → FlashAttention/Triton → Inference Systems → LLM Evaluation），前提是第二批继续遵守本报告确立的三类数字规范（数学恒等 / 硬件规格 / 教学假设）。
+
+---
+
+# Correctness Pass 2
+
+> 目标：修掉 Pass 1 之后仍残留的渲染问题、代码 bug、复杂度表述错误与编号不一致。
+> 本轮同样遵循：正确性 > 可运行性 > 一致性 > 表达 > 新增内容。
+> 新增工具：`tools/validate-static.js`（静态渲染自动检查）。
+
+## 一、本轮发现并修复的问题（16 项，全部修复）
+
+| # | 类别 | 文件 | 原问题 | 修复 | 验证 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **渲染** | 13-build-llm-2.md | Lab 9 警告框附近有一条**孤立闭合围栏**（上次编辑遗留），导致其后的 `:::note` / `:::fold` 被吞进 `<pre><code>`，静态页大面积损坏 | 删除孤立围栏；全仓库扫描 20 个文件确保围栏全部配对 | 新脚本 `validate-static.js`：0 容器残留 / 0 fence 错位；浏览器实测「第一次训练应该期待什么」以 box 正常渲染、未进 pre ✅ |
+| 2 | **代码** | 13-build-llm-2.md | loss 日志：累加的是 `loss.item()`（= L/accum），却除以 `50*accum` → 显示值偏小 accum 倍 | 拆分 `raw_loss`（日志用）与 `loss = raw_loss/accum`（backward 用）；日志除以 `50*accum` | 验证脚本 5a/5b：正确公式还原 2.0；反例复现 0.5（=2/4）✅ |
+| 3 | **代码** | 13-build-llm-2.md | `while global_step < max_steps` 内层 for 不会中途停止 → max_steps 到达后仍跑完当前 epoch | 更新后 `if global_step >= max_steps: stop=True; break` | 验证脚本 4：max_steps=3、accum=2 → optimizer.step 恰好 3 次、micro=6 立即停止 ✅ |
+| 4 | **代码** | 13-build-llm-2.md + 11-pretrain-sft.md | warmup 第一步 `lr_at(0) = 0` → 第一次更新无参数变化（ch18 的 LambdaLR 同样存在，构造时即以 step=0 调用） | 统一采用方案 A：Build 章用 `lr_at(global_step+1)`；ch18 的 `lr_lambda` 加 `step+1` 并加警告框说明两种约定 | 验证脚本 6：第一次更新 lr = base/warmup = 0.01（>0）✅ |
+| 5 | **数学/代码** | 12-build-llm-1.md、10-modern-llm.md、demos-llm.js | RMSNorm 的 eps 加在根号**外**（`x/(√E[x²]+ε)`），与论文/官方实现（eps 在根号内）不符 | 代码改 `x * rsqrt(E[x²]+ε)`；公式改 `x/√(RMS²+ε)`；对比代码加「❌常见错误写法」；演示同步 | 验证脚本 1a：与 `torch.nn.RMSNorm` 输出 max diff = 0；1b：错误写法在大 eps 下 diff=1.53（可见差异）✅ |
+| 6 | **代码** | 11-pytorch.md、13-build-llm-2.md | `TokenDataset.__len__` 少 1（`N-S-1`），最后一个合法窗口永远取不到 | 改为 `N - seq_len`，并加 N=10/S=4 自测 | 验证脚本 2a/2b：len=6，最后样本 x=[5..8]、y=[6..9] ✅ |
+| 7 | **复杂度** | 10-modern-llm.md、13-build-llm-2.md、07-transformer.md、demos-llm.js | 「KV Cache 让 decode 每步 O(1)、总计算 O(n²)→O(n)」——**严重过度简化**：有缓存时注意力分数仍随上下文线性增长 | 全部改写：明确拆分「省掉的（prefix 投影/FFN/Norm 重算）」与「没省的（新 Query × 历史 K，每步 O(t·d)）」；给出每步成本对比公式；补充显存带宽视角；quiz、面试答案、演示文案全部同步 | 浏览器 grep 验证 4 个文件的新表述；quiz 答案已同步 ✅ |
+| 8 | **测量** | 13-build-llm-2.md | CUDA 计时未同步（测到的是入队时间）、无 warmup、单次测量；标题「完整生成速度对比」过度承诺 | 改为 `torch.cuda.synchronize()` + warmup + 3 次取 min + `time.perf_counter`；改名「Attention-only 教学 microbenchmark」并注明不等同端到端 serving benchmark | 验证脚本 12/13：CPU 回退路径正常结束；**CUDA 路径标记 NOT EXECUTED（本机无 CUDA）** |
+| 9 | **表述** | 13-build-llm-2.md | CachedAttention 无 RoPE，可能被误当「完整 LLM inference 实现」 | docstring 明确列出省略项：RoPE、position index、GQA 映射、mask；说明真实实现需缓存这些状态 | 静态页渲染检查 ✅ |
+| 10 | **编号** | 13-efficient.md / 11-pretrain-sft.md / 12-rl-grpo.md / 13-build-llm-2.md | 文件内仍是旧编号（13.x / 11.x / 12.x / 13.x） | 全部同步为用户可见编号：17.1–17.9 / 18.1–18.16 / 19.1–19.10；「13.x 全课验收」→「13.8」 | grep 验证：17×9、18×16、19×10；浏览器 TOC 正常 ✅ |
+| 11 | **表述** | 15-gpu.md | 来源不明的术语「GEMM『9』/ 理论峰值 ~100%」 | 删除，替换为标准概念：GEMM 的 M/N/K、Tensor Core 对齐条件、Tile 大小、occupancy、算术强度；占比数字标注为经验值 | 浏览器验证「无 GEMM 9」且新概念存在 ✅ |
+| 12 | **表述** | 15-gpu.md | 「FlashAttention 把 HBM 流量从 O(S²) 降到 O(S)」——无假设的过度简化 | 改为「不在 HBM 中物化完整 S×S 矩阵、显著减少 HBM↔SRAM 搬运；计算复杂度仍 O(S²)」，精确 I/O 分析留到第二批 | 浏览器验证新 quiz 文案 ✅ |
+| 13 | **表述** | 15-gpu.md、10-modern-llm.md | 绝对化措辞：「唯一 compute-bound 主力」「所有高性能 kernel」「唯一途径」「质量几乎无损」 | 改为「通常/主要…之一」；GQA 改为「实验表明质量损失很小（具体随配置变化）」 | 浏览器验证 ✅ |
+| 14 | **口径** | 13-efficient.md | 18 bytes/param 缺框架差异说明 | 新增「口径说明（16 vs 18）」：现代框架可能用 bf16 梯度（16）/无独立 master weights；18 是保守教学估算 | 浏览器验证 ✅ |
+| 15 | **表述** | 13-efficient.md | 「激活显存下降 k 倍」易误导（仿佛总显存也降 k 倍） | 改为「单次 micro-batch 的激活约按比例缩小；参数/梯度/优化器状态/缓冲不降，总显存不会整体下降 k 倍」 | 浏览器验证 ✅ |
+| 16 | **工程** | tools/ | 「build 成功 ≠ 页面正确」缺少自动检查 | 新增 `tools/validate-static.js`：检查未解析容器、fence 残留、`<pre><code>` 包裹组件、占位符、LaTeX 残留、正文量下限、章节文件齐全、index 目录 | 运行通过：20/20 静态页 ✅ |
+
+## 二、Pass 2 实际运行测试（14 项全部 PASS）
+
+环境：Python 3.9.6 + PyTorch 2.8.0（CPU）；另加静态验证与浏览器验证。
+
+| # | 测试 | 结果 |
+| --- | --- | --- |
+| 1a | RMSNorm 与 `torch.nn.RMSNorm` 数值一致（eps 在根号内） | PASS（max diff = 0） |
+| 1b | 反例验证：「eps 在根号外」与标准实现有可见差异 | PASS（diff = 1.53） |
+| 2a | TokenDataset 长度 = N−S（N=10,S=4 → 6） | PASS |
+| 2b | 最后一个合法窗口 x=[5..8], y=[6..9] | PASS |
+| 3 | 梯度累积：micro 40 / optimizer.step 10 / global 10 三者一致 | PASS |
+| 4 | max_steps=3, accum=2 → 恰好 3 次更新并立即停止 | PASS |
+| 5a | loss 日志公式还原 raw loss（累加 raw ÷ (50·accum)） | PASS（2.0） |
+| 5b | 反例：累加缩放 loss 再除 (50·accum) 会小 accum 倍 | PASS（复现 0.5） |
+| 6 | warmup 第一次更新 lr = base/warmup > 0 | PASS（0.01） |
+| 7 | SFT shift + loss mask 手工核对 | PASS（4.665315 == 4.665315） |
+| 8 | DPO 不变量：策略==参考 → loss = ln2 | PASS（0.693147） |
+| 9 | RoPE 相对位置：Δ=2 相同、Δ=4 不同 | PASS |
+| 12 | KV Cache benchmark 代码可运行（warmup+sync+min） | PASS（CPU 3.50ms vs 2.90ms，**仅供代码正确性**） |
+| 13 | CPU 环境 benchmark 正常结束、不影响构建 | PASS |
+
+**CUDA benchmark：NOT EXECUTED ON CUDA**（本机无 CUDA 设备；只验证了代码静态正确与 CPU 回退路径。GPU 数值结论请勿引用本机结果。）
+
+## 三、静态渲染与浏览器验证
+
+| 检查 | 结果 |
+| --- | --- |
+| `validate-static.js`（20 页：容器残留/fence/`<pre>`组件/占位符/正文量） | ✅ 全部通过 |
+| build-llm-2 页：note 未进 `<pre>`、以 box 渲染、fold 正常、字面 `:::` 残留 = 0 | ✅ |
+| 全站回归：20 章 / 65 demos / 340 quizOptions / **0 console error** | ✅ |
+| 被修改的演示（norm-compare、kv-cache）文案与数值 | ✅ |
+| GPU / Scaling / Distributed / Efficient 页关键修正点抽查 | ✅ |
+
+## 四、Pass 2 遗留的教学简化（已标注，不属错误）
+
+1. KV Cache 复杂度：课程现在使用「每步 O(d²) + O(t·d)」的教学分解；精确的端到端 serving 性能模型（批处理、带宽竞争）留到第二批 Inference Systems。
+2. FlashAttention：只保留「不物化 S×S 矩阵、减少 HBM 搬运」的正确边界，精确 I/O complexity 公式留到第二批。
+3. Roofline AI 表、GPU 延迟数字：量级近似（页面已标注）。
+4. KV Cache benchmark 为单层注意力 microbenchmark，非端到端生成 benchmark（页面已标注）。
+5. 16 vs 18 bytes/参数：两种口径均有效，页面已明确假设条件。
+
+## 五、结论
+
+- **Pass 2 发现 16 项问题，修复 16 项（100%）**；其中 6 项为代码逻辑/数值 bug（均有实测）、3 项为复杂度/表述纠错、1 项为渲染回归、1 项为工程工具缺口。
+- 新增的 `validate-static.js` 使「构建成功但页面损坏」这类回归在流程上被自动拦截。
+- **第一批 V2 可以正式冻结**：所有已知技术错误已修复，14 项 Python 测试 + 静态验证 + 全站浏览器回归全部通过；唯一未执行项为 CUDA benchmark（已明确标注 NOT EXECUTED）。
+- 可以进入第二批：Data Pipeline → FlashAttention/Triton → Inference Systems → LLM Evaluation。

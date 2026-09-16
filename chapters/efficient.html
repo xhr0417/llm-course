@@ -37,7 +37,7 @@
 <blockquote>
 <p><strong>本章对应课件</strong>：《3.1 大模型工程专题》后半部分。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
 </blockquote>
-<h2>13.1 FP32、FP16、BF16：数值格式 ★</h2>
+<h2>17.1 FP32、FP16、BF16：数值格式 ★</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>每个数字在计算机里占多少位，决定了它能表示多大范围、多高精度。位数越少越省显存、算得越快，但越容易溢出或精度不够。大模型训练就是在「省」和「稳」之间找平衡。</p>
 </div></details>
 <h3>数字算例（7B 模型的权重显存）</h3>
@@ -139,7 +139,7 @@
 <div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么训练用 BF16 而不是 FP16？</strong></p>
 <details class="answer"><summary>查看答案</summary><div class="answer-body"><p>训练中梯度动态范围极大，FP16 的 5 位指数范围小，容易上溢（inf）或下溢（0），需要 GradScaler 做损失缩放；BF16 的 8 位指数与 FP32 相同，几乎不会溢出，训练更稳，代价是尾数精度低（对训练影响很小）。</p>
 </div></details></div></div>
-<h2>13.2 为什么 BF16 很重要</h2>
+<h2>17.2 为什么 BF16 很重要</h2>
 <p><strong>FP16</strong>：精度较高，但 exponent（指数）范围相对有限。</p>
 <p><strong>BF16</strong>：mantissa（尾数）精度低一些，但 exponent 范围更接近 FP32。</p>
 <p><strong>直觉对比</strong>：</p>
@@ -148,7 +148,7 @@
 <li>BF16 像「刻度粗但尺子很长」——范围大，适合梯度这种动态范围极大的数值。</li>
 </ul>
 <p>现在很多 GPU（A100、H100、H800）上的大模型训练大量使用 BF16。</p>
-<h2>13.3 Mixed Precision：混合精度训练 ★</h2>
+<h2>17.3 Mixed Precision：混合精度训练 ★</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>前向反向用低精度（省显存、用 Tensor Core 加速），但参数更新必须用高精度（否则微小更新会被舍入成 0）。所以维护一份 FP32 的「主权重」，更新后再转回低精度使用。</p>
 </div></details>
 <h3>配置</h3>
@@ -205,7 +205,7 @@ for x, y in loader:
 <div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：混合精度训练为什么需要 FP32 master weights？</strong></p>
 <details class="answer"><summary>查看答案</summary><div class="answer-body"><p>低精度格式在参数附近的表示精度有限，小学习率下更新量（如 1e-5）可能小于该格式的最小间隔，导致更新被舍入为 0、模型学不动。用 FP32 保存主权重做累加更新，再转成 BF16/FP16 供前向使用，兼顾显存效率与数值精度。</p>
 </div></details></div></div>
-<h2>13.4 训练显存估算 ★</h2>
+<h2>17.4 训练显存估算 ★</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练时显存里不只有权重，还有梯度、优化器状态（Adam 的 m 和 v）、激活值、临时缓冲。所以「模型文件 14GB」绝不等于「训练只要 14GB 显存」。</p>
 </div></details>
 <h3>公式（每参数）</h3>
@@ -286,6 +286,14 @@ c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
 <td><strong>约 18 bytes/参数</strong></td>
 </tr>
 </tbody></table>
+<div class="box box-note"><div class="box-title">📘 口径说明（16 vs 18 bytes/参数）</div><div class="box-body"><p>上表是<strong>教学用的经典混合精度模型</strong>：BF16 权重 + FP32 主权重 + FP32 梯度 + Adam m/v = 18 bytes/参数。
+现代框架（PyTorch AMP、FSDP、DeepSpeed）的参数/梯度存储方式可能不同：</p>
+<ul>
+<li>梯度以 bf16/fp16 保存（而非 FP32）→ 约 <strong>16 bytes/参数</strong>（ZeRO 论文口径，见第 16 章）；</li>
+<li>有的实现不单独维护 FP32 master weights（依赖优化器内部高精度累加或 bf16 优化器变体）。
+所以 <strong>18 是一个常见且保守的教学估算</strong>，不是所有框架的精确值——估算显存时请明确所用口径。</li>
+</ul>
+</div></div>
 <h3>数字算例</h3>
 <table>
 <thead>
@@ -351,7 +359,7 @@ c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
 <div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么 7B 模型训练需要 100GB+ 显存？</strong></p>
 <details class="answer"><summary>查看答案</summary><div class="answer-body"><p>混合精度 + Adam 下每参数约 18 字节（BF16 权重 2 + FP32 主权重 4 + FP32 梯度 4 + Adam m/v 8），7×10⁹×18 ≈ 126 GB，再加上激活值（与 batch、序列长度成正比）。所以必须用 ZeRO/FSDP、张量并行、梯度检查点等分布式技术。</p>
 </div></details></div></div>
-<h2>13.5 两个显存开关：梯度累积与激活检查点</h2>
+<h2>17.5 两个显存开关：梯度累积与激活检查点</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>显存不够时有两个「以时间换空间」的标准动作：<strong>梯度累积</strong>（用时间换 batch 等价性）和 <strong>激活检查点</strong>（用重算换显存）。它们和混合精度一起，构成训练显存调优的三件套。</p>
 </div></details>
 <h3>开关一：梯度累积（Gradient Accumulation）</h3>
@@ -374,8 +382,12 @@ for micro_step, (x, y) in enumerate(loader):
 </tr>
 </thead>
 <tbody><tr>
-<td>激活显存</td>
-<td>只需放下 1 个 micro-batch → 下降 k 倍</td>
+<td><strong>单次 micro-batch 的激活显存</strong></td>
+<td>与等效大 batch 相比，约按 micro-batch 比例缩小</td>
+</tr>
+<tr>
+<td><strong>总显存</strong></td>
+<td><strong>不会整体下降 k 倍</strong>：参数、梯度、优化器状态、临时缓冲不随 micro-batch 变化</td>
 </tr>
 <tr>
 <td>等效 batch</td>
@@ -430,7 +442,7 @@ h = checkpoint(block, x, use_reentrant=False)   # 用重算换显存</code></pre
 <blockquote>
 <p><strong>FP8 简报</strong>：H100 起支持 FP8（E4M3/E5M2）训练，进一步减半显存与带宽需求，但需要缩放与兼容的 kernel 支持。它属于「前沿选项」——本节不展开，知道它存在即可。</p>
 </blockquote>
-<h2>13.6 LoRA：低秩微调 ★</h2>
+<h2>17.6 LoRA：低秩微调 ★</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>微调不需要改动整个大矩阵——模型只需要在一个「低维方向」上调整。LoRA 把权重更新分解成两个瘦长矩阵相乘（低秩分解），只训练这两个小矩阵，参数量降到 1% 以下。</p>
 </div></details>
 <h3>公式</h3>
@@ -508,7 +520,7 @@ l0,-1344c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
 <p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
 <div class="demo-block"><div class="demo-head">🎮 交互：参数量对比<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动秩 r 滑块，实时看 LoRA 可训练参数量（r×(d+k)）与全量微调（d×k）的对比和百分比。</p>
 <p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
-<h2>13.7 为什么 LoRA 省参数 ★</h2>
+<h2>17.7 为什么 LoRA 省参数 ★</h2>
 <h3>公式与算例</h3>
 <p>假设 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>4096</mn><mo>×</mo><mn>4096</mn></mrow></msup></mrow><annotation encoding="application/x-tex">W \in \mathbb R^{4096 \times 4096}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">4096</span><span class="mbin mtight">×</span><span class="mord mtight">4096</span></span></span></span></span></span></span></span></span></span></span></span></span>：</p>
 <p><strong>全量微调</strong>：</p>
@@ -577,7 +589,7 @@ model = get_peft_model(base_model, config)
 model.print_trainable_parameters()
 # trainable params: 4,194,304 || all params: 6,742,609,920 || trainable%: 0.0622</code></pre>
 </div></details>
-<h2>13.8 LoRA 为什么可行</h2>
+<h2>17.8 LoRA 为什么可行</h2>
 <p>它背后的假设：</p>
 <blockquote>
 <p><strong>模型微调所需要的参数变化，并不一定占满整个高维参数空间，可能只需要在一个较低维的方向上调整。</strong></p>
@@ -612,7 +624,7 @@ model.print_trainable_parameters()
 </div></details><p><strong>Q3：LoRA 和全量微调怎么选？</strong></p>
 <details class="answer"><summary>查看答案</summary><div class="answer-body"><p>数据量小、任务适配（风格、格式、领域术语）→ LoRA 性价比最高；需要注入大量新知识或大幅改变行为 → 全量微调或继续预训练。LoRA 的另一个优势是可以为不同任务训练多个适配器，共享同一个基座。</p>
 </div></details></div></div>
-<h2>13.9 本章总结</h2>
+<h2>17.9 本章总结</h2>
 <div class="box box-key"><div class="box-title">🔑 本节必须记住</div><div class="box-body"><table>
 <thead>
 <tr>

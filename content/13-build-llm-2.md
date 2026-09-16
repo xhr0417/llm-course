@@ -60,7 +60,8 @@ class TokenDataset(torch.utils.data.Dataset):
         self.data = np.memmap(path, dtype=np.uint16, mode="r")
         self.seq_len = seq_len
     def __len__(self):
-        return len(self.data) - self.seq_len - 1
+        # 合法起点共 N - seq_len 个（最后一个样本 y 的右端恰好取到 data[N-1]）
+        return len(self.data) - self.seq_len
     def __getitem__(self, i):
         x = torch.from_numpy(self.data[i:i+self.seq_len].astype("int64"))
         y = torch.from_numpy(self.data[i+1:i+1+self.seq_len].astype("int64"))
@@ -99,39 +100,48 @@ model = TinyLM(cfg["vocab_size"], cfg["d_model"], cfg["n_layers"], cfg["n_heads"
 optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], betas=(0.9, 0.95), weight_decay=0.1)
 
 # ============ 学习率调度：warmup + cosine ============
+# 约定：lr_at(k) 表示「第 k 次参数更新」使用的学习率（k 从 1 开始）
 def lr_at(step):
     if step < cfg["warmup"]:
         return cfg["lr"] * step / cfg["warmup"]
     progress = (step - cfg["warmup"]) / (cfg["max_steps"] - cfg["warmup"])
     return cfg["lr"] * (cfg["min_lr_ratio"] + (1 - cfg["min_lr_ratio"]) * 0.5 * (1 + math.cos(math.pi * progress)))
 
+# 注意传入的是 global_step + 1：
+# 第 1 次更新（global_step=0）使用 lr_at(1) = base_lr / warmup，而不是 lr_at(0) = 0。
+# 这样 warmup 的第一步就有实际步长（否则第一次更新参数完全不变）。
+
 # ============ 训练循环 ============
 # 术语约定（全文统一）：
 #   micro_step   ：每喂一个 micro-batch +1（无论是否更新参数）
 #   global_step  ：每个【参数更新】+1（优化器真正 step 一次）
 #   lr 调度 / eval / checkpoint 全部基于 global_step
+# loss 有两个变量，语义不同，不要混：
+#   raw_loss ：当前 micro-batch 的原始交叉熵（用于日志）
+#   loss     ：raw_loss / accum，只用于 backward（梯度累积缩放）
 model.train()
 micro_step, global_step, tokens_seen = 0, 0, 0
 t0 = time.time()
 loss_running = 0.0
-while global_step < cfg["max_steps"]:
+stop = False
+while not stop and global_step < cfg["max_steps"]:
     for x, y in train_loader:
         x, y = x.to(device), y.to(device)
 
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             logits = model(x)
-            loss = F.cross_entropy(logits.view(-1, cfg["vocab_size"]), y.view(-1))
-            loss = loss / cfg["accum"]                     # 梯度累积：缩放损失
+            raw_loss = F.cross_entropy(logits.view(-1, cfg["vocab_size"]), y.view(-1))
+            loss = raw_loss / cfg["accum"]                 # 梯度累积：只缩放 backward 用的 loss
 
         loss.backward()
         micro_step += 1
-        loss_running += loss.item()                        # 记录（含缩放，最后还原）
+        loss_running += raw_loss.item()                    # 记录【原始】loss
 
         # 每 accum 个 micro-batch 才更新一次参数
         if micro_step % cfg["accum"] == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["grad_clip"])
             for g in optimizer.param_groups:
-                g["lr"] = lr_at(global_step)
+                g["lr"] = lr_at(global_step + 1)           # warmup 第一个更新用 lr_at(1)>0
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             global_step += 1
@@ -139,7 +149,7 @@ while global_step < cfg["max_steps"]:
 
             if global_step % 50 == 0:
                 dt = time.time() - t0
-                avg_loss = loss_running / (50 * cfg["accum"])   # 还原真实 loss
+                avg_loss = loss_running / (50 * cfg["accum"])   # 50 个 global step = 50*accum 个 micro-batch
                 print(f"step {global_step:5d} | loss {avg_loss:.4f} | lr {lr_at(global_step):.2e} | {tokens_seen/1e6:.1f}M tok | {dt:.0f}s")
                 loss_running = 0.0
 
@@ -153,10 +163,16 @@ while global_step < cfg["max_steps"]:
                 print(f"           val loss {vl.item():.4f} | ppl {math.exp(vl.item()):.1f}")
                 model.train()
 
+            # 定期保存 checkpoint（都基于 global_step）
             if global_step % cfg["ckpt_every"] == 0:
                 torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
                             "global_step": global_step, "micro_step": micro_step}, f"ckpt_{global_step}.pt")
                 print(f"           saved ckpt_{global_step}.pt")
+
+            # 到达 max_steps 立即停止（不能等当前 epoch 跑完）
+            if global_step >= cfg["max_steps"]:
+                stop = True
+                break
 ```
 
 :::warning 一个真实的 bug（原版代码踩过）
@@ -174,7 +190,6 @@ if (step + 1) % accum == 0:    # ❌ step 一直是 0 → 条件永远为 False
 **根因**：把「micro-batch 计数」和「参数更新计数」混为一个变量。
 **修法**：如上文，明确分开 `micro_step`（每个 batch +1）与 `global_step`（每次更新 +1）。
 :::
-```
 
 :::note 第一次训练应该期待什么
 以 TinyLM（12.9M）+ 100MB 中文语料为例：
@@ -288,15 +303,25 @@ print(generate(model, tok, "从前有座山，", max_new_tokens=80))
 ### 先看问题：无缓存时每一步都在重算
 
 ```python
-# 生成第 t 个 token 时，模型对前 t 个位置全部重新做一遍 QKV 投影
-# 总计算量 ∝ 1 + 2 + 3 + ... + n = O(n²)
+# 无缓存的问题：生成第 t 个 token 时，模型对整个 prefix 重新做一遍完整前向
+# （历史 token 的 QKV 投影、注意力、FFN 全部重算）
+# 仅 K/V 投影的累计计算量：1 + 2 + 3 + ... + n = O(n²)
 ```
 
 ### 最小实现：带缓存的单层注意力
 
 ```python
 class CachedAttention(nn.Module):
-    """演示版：一层带 KV Cache 的注意力"""
+    """演示版：一层带 KV Cache 的注意力。
+
+    【简化说明】为了突出 KV Cache 机制，这里**省略了 RoPE**、省略了多层结构与
+    causal mask 的逐 token 处理。真实推理实现还需要缓存/传递：
+      - position index（每个 token 的绝对位置，用于 RoPE 旋转）
+      - RoPE 的 cos/sin 查表
+      - GQA 的 KV head 映射（多个 Q head 共享一组 K/V）
+      - attention mask（padding / causal）
+    完整推理系统见第二批章节；这里只用于理解缓存的读写模式。
+    """
     def __init__(self, d_model, n_heads):
         super().__init__()
         self.h, self.d = n_heads, d_model // n_heads
@@ -324,38 +349,89 @@ class CachedAttention(nn.Module):
         return self.Wo(out), new_cache
 ```
 
-### 速度对比（同一层，生成 200 个 token）
+### 速度对比：Attention-only 教学 microbenchmark（同一层，生成 200 个 token）
+
+> 说明：这是**单层注意力的教学 microbenchmark**，用于展示「缓存避免 K/V 投影重算」的趋势，**不等同于端到端 LLM serving benchmark**（真实 serving 还涉及整个模型前向、批处理、显存带宽、调度等，见第二批推理系统章节）。
 
 ```python
-import time
-layer = CachedAttention(256, 8).cuda().eval()
+import time, torch
 
-# 无缓存：每一步重新喂入整个序列
-x = torch.randn(1, 1, 256).cuda()
-seq = x.clone()
-t0 = time.time()
-with torch.no_grad():
-    for _ in range(200):
-        out, _ = layer(seq)          # 全序列重算
-        seq = torch.cat([seq, out[:, -1:]], dim=1)
-t_no = time.time() - t0
+layer = CachedAttention(256, 8)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+layer = layer.to(device).eval()
 
-# 有缓存：每次只喂新 token
-seq = x.clone(); cache = None
-t0 = time.time()
-with torch.no_grad():
-    for _ in range(200):
-        out, cache = layer(seq[:, -1:], cache)
-        seq = torch.cat([seq, out], dim=1)
-t_yes = time.time() - t0
+def sync():
+    """CUDA 是异步执行：计时前必须同步，否则测到的是 kernel 排队时间"""
+    if device == "cuda":
+        torch.cuda.synchronize()
 
-print(f"无缓存 {t_no:.2f}s  有缓存 {t_yes:.2f}s  加速 {t_no/t_yes:.1f}×")
+def make_input():
+    return torch.randn(1, 1, 256, device=device)
+
+N_TOKENS, WARMUP = 200, 10
+
+def bench_no_cache():
+    seq = make_input()
+    with torch.no_grad():
+        for _ in range(WARMUP):                       # ① warmup（避免把 CUDA 初始化/编译算进去）
+            out, _ = layer(seq)
+            seq = torch.cat([seq, out[:, -1:]], dim=1)
+        sync()
+        t0 = time.perf_counter()                      # ② 正式计时
+        for _ in range(N_TOKENS):
+            out, _ = layer(seq)                       # 全序列重算
+            seq = torch.cat([seq, out[:, -1:]], dim=1)
+        sync()
+        return time.perf_counter() - t0
+
+def bench_cache():
+    seq, cache = make_input(), None
+    with torch.no_grad():
+        for _ in range(WARMUP):
+            out, cache = layer(seq[:, -1:], cache)
+            seq = torch.cat([seq, out], dim=1)
+        sync()
+        t0 = time.perf_counter()
+        for _ in range(N_TOKENS):
+            out, cache = layer(seq[:, -1:], cache)    # 只喂新 token
+            seq = torch.cat([seq, out], dim=1)
+        sync()
+        return time.perf_counter() - t0
+
+t_no = min(bench_no_cache() for _ in range(3))        # ③ 多次重复取最小值，降低噪声
+t_yes = min(bench_cache() for _ in range(3))
+print(f"无缓存 {t_no*1000:.1f} ms  有缓存 {t_yes*1000:.1f} ms  加速 {t_no/t_yes:.1f}×")
 ```
 
-:::math 为什么序列越长收益越大
-无缓存第 t 步要算 $t$ 个位置 → 总计算 $\sum t = O(n^2)$；
-有缓存每步只算 1 个位置 → 总计算 $O(n)$。
-代价是显存：缓存大小 = $2 \times L \times H \times d_h \times n \times \text{bytes}$（第 10 章公式，`kv-cache` 演示的估算器可复核）。
+:::warning 测量陷阱（为什么上面的写法是对的）
+- **CUDA 异步**：不 `synchronize()` 就计时，测到的是「kernel 入队时间」而不是执行时间；
+- **warmup 必做**：第一次运行包含 CUDA 上下文初始化等一次性开销；
+- **重复取 min**：单次测量受系统噪声影响；
+- **CPU 环境也能跑**（同步是 no-op），但结论只对当前设备成立。
+:::
+
+:::math KV Cache 到底省了什么？（一个常被讲错的点）
+先看**无缓存**：生成第 t 个 token 时，对**整个 prefix（t 个 token）**重新做完整 Transformer 前向——历史 token 的 Q/K/V 投影、注意力、FFN、Norm 全部重算：
+
+- K/V 投影重算量：$\sum_{t=1}^{n} t = O(n^2)$（这就是 Lab 里 1+2+3+4 的来源）
+- 每步还要对 prefix 内部做一遍注意力：单步 $O(t^2 d)$
+
+**有缓存**后，第 t 步只做：**1 个新 token 的完整计算 + 新 Query 对 t 个历史 K/V 的注意力**：
+
+- 新 token 的投影/FFN/Norm：$O(d^2)$（常量，不随 t 变）
+- **注意力部分：仍要算 $\text{score} = Q_{new} K_{past}^\top \in \mathbb R^{1 \times t}$ → $O(t \cdot d)$，随上下文长度线性增长**
+
+所以准确的结论是：
+
+$$
+\text{每步成本：}\quad \underbrace{O(t \cdot d^2 + t^2 d)}_{\text{无缓存}} \;\longrightarrow\; \underbrace{O(d^2 + t \cdot d)}_{\text{有缓存}}
+$$
+
+- **省掉的是**：历史 token 的 K/V 投影、FFN、Norm 等**完整前向重算**；
+- **没有省掉**：新 token 仍需对全部历史 K 做注意力——**decode 并不变成「每 token O(1)」**；
+- 生成 n 个 token：注意力累计仍约 $O(n^2 d)$；但由于免去了 prefix 的重复前向，总成本从「每步重跑整个 prefix」降为「每步只处理一个新 token + 注意力」。
+
+**另一个隐藏成本**：KV Cache 每步要从显存读取 $t \times d \times 2$ 个元素，长上下文时 decode 往往受**显存带宽**限制（见第 15 章 Roofline）。缓存大小 = $2 \times L \times H \times d_h \times n \times \text{bytes}$（第 10 章公式，`kv-cache` 演示的估算器可复核）。
 :::
 
 ## Lab 13：SFT（让模型学会「回答问题」）
@@ -526,7 +602,7 @@ for prompt in prompts:
 | 需要 Reference | 需要（冻结副本） | 需要（冻结副本） |
 | 适合 | 有偏好数据 | 可验证任务（数学/代码） |
 
-## 13.x 全课验收：你现在能做什么
+## 13.8 全课验收：你现在能做什么
 
 :::key 完工清单
 完成 14 个 Lab 后，你应该能够独立完成：
@@ -568,12 +644,12 @@ D. 防止过拟合
 KV Cache 为什么能在推理时带来加速？
 
 A. 它减少了模型的参数量
-B. 新 token 只需计算自己的 K/V，历史 K/V 直接读缓存，总计算从 O(n²) 降到 O(n)
+B. 它避免了历史 token 的 K/V 投影与完整前向重算；新 token 仍需对全部历史 K 做注意力（该部分随上下文线性增长）
 C. 它使用更低的精度
 D. 它跳过了 softmax
 
 答案: B
-解析: 无缓存时每生成一步都要重算整个前缀的 K/V；缓存后每步只算 1 个新位置。代价是显存随序列增长。
+解析: 无缓存时每生成一步都要对整个前缀做完整 Transformer 前向；缓存后只做新 token 的计算。注意：注意力分数仍需与全部历史 K 计算（每步 O(t·d)），并非「每 token O(1)」。代价是显存随序列增长。
 :::
 
 :::related

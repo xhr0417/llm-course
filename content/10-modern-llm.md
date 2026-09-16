@@ -39,7 +39,17 @@ Q_new [B, H_q, 1, d_head] × Kᵀ [B, H_kv, d_head, t] → scores [B, H_q, 1, t]
 | 第 4 步 | 4 个 token | 1 个 token |
 | **总计** | **1+2+3+4 = 10** | **1+1+1+1 = 4** |
 
-序列越长差距越大：$n$ 个 token 时，无缓存 $O(n^2)$ vs 有缓存 $O(n)$。
+上表数的是 **K/V 投影的重复计算次数**：无缓存时累计 $O(n^2)$，有缓存时 $O(n)$——被消掉的是「历史 token 的投影与完整前向重算」。
+
+:::warning 一个常见的过度简化
+不要说「有了 KV Cache，decode 每步变成 O(1)」。准确地说：
+
+- 新 token 的**投影/FFN/Norm**：每步 $O(d^2)$（常量）；
+- **注意力分数**：新 Query 仍要与 t 个历史 K 做点积 → 每步 $O(t \cdot d)$，**随上下文长度线性增长**；
+- 生成 n 个 token：注意力累计仍是 $O(n^2 d)$，只是免去了对 prefix 的重复完整前向。
+
+KV Cache 省的是「重算历史」；**没有**让长上下文 decode 变成与上下文无关的常数成本。此外，每步还要从显存读取 t×d×2 个缓存元素——长上下文时 decode 常受**显存带宽**限制。
+:::
 
 ### 显存公式与算例
 
@@ -82,7 +92,7 @@ class CachedAttention(nn.Module):
 **Q1：KV Cache 为什么能加速推理？代价是什么？**
 
 :::answer
-生成第 t 个 token 时，历史 K/V 已在缓存中，只需计算新 token 的 K/V，把单步计算从 O(t) 降到 O(1)，总计算量从 O(n²) 降到 O(n)。代价是显存：缓存大小随层数、KV head 数、序列长度线性增长（公式见上），长上下文时非常可观。
+无缓存时，生成第 t 个 token 要对整个 prefix（t 个 token）重跑完整前向（历史 token 的 Q/K/V 投影、注意力、FFN 全部重算）；有缓存后，只计算新 token 自己的投影/FFN，历史 K/V 直接读缓存。但注意：**新 Query 仍需与全部 t 个历史 K 计算注意力分数（每步 O(t·d)，随上下文增长）**——缓存省掉的是「重算历史」，不是注意力本身。代价是显存：缓存大小随层数、KV head 数、序列长度线性增长（公式见上），长上下文时非常可观。
 :::
 
 **Q2：为什么只缓存 K/V，不缓存 Q？**
@@ -145,7 +155,7 @@ print(cfg.num_attention_heads, cfg.num_key_value_heads)   # 32 8
 **Q：为什么大模型推理用 GQA 而不是 MQA？**
 
 :::answer
-MQA 把 KV head 压到 1，KV Cache 最省，但所有 Q head 共享同一组 K/V，表达力下降明显、质量损失较大；GQA 用分组折中（如 8 组），KV Cache 降到 1/4~1/8，质量几乎无损。因此现代 LLM（LLaMA-2-70B、LLaMA-3、Qwen）普遍采用 GQA。
+MQA 把 KV head 压到 1，KV Cache 最省，但所有 Q head 共享同一组 K/V，表达力下降明显、质量损失较大；GQA 用分组折中（如 8 组），KV Cache 降到 1/4~1/8，实验表明质量损失很小（loss/评测上接近 MHA，具体随模型与训练配置变化）。因此现代 LLM（LLaMA-2-70B、LLaMA-3、Qwen）普遍采用 GQA。
 :::
 :::
 
@@ -246,8 +256,10 @@ LayerNorm 要算均值和方差；RMSNorm 发现「减均值」这一步其实�
 ### 公式
 
 $$
-\text{RMS}(x) = \sqrt{\frac{1}{d}\sum_i x_i^2}, \qquad \text{RMSNorm}(x) = \gamma \cdot \frac{x}{\text{RMS}(x) + \epsilon}
+\text{RMS}(x) = \sqrt{\frac{1}{d}\sum_i x_i^2}, \qquad \text{RMSNorm}(x) = \gamma \cdot \frac{x}{\sqrt{\text{RMS}(x)^2 + \epsilon}}
 $$
+
+> 注意 eps 的位置：在根号**内**（标准实现，与 LLaMA 系及 `torch.nn.RMSNorm` 一致），即 $x / \sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}\cdot\gamma$。
 
 ### 逐项拆解
 
@@ -486,7 +498,7 @@ Logits
 :::key 本节必须记住
 | 组件 | 解决的问题 | 一句话 |
 | --- | --- | --- |
-| KV Cache | 推理重复计算 | 缓存历史 K/V，省计算花显存（O(n²)→O(n)） |
+| KV Cache | 推理重复计算 | 缓存历史 K/V，省掉 prefix 重算（K/V 投影 $O(n^2)\to O(n)$；注意力仍随上下文增长） |
 | GQA | KV Cache 太大 | 多个 Q head 共享 K/V（如 32→8，降到 1/4） |
 | RoPE | 位置信息 | 旋转 Q/K，点积只依赖相对位置 m−n |
 | RMSNorm | 归一化成本 | 不减均值，只除均方根 |
@@ -503,7 +515,7 @@ C. 提高模型精度
 D. 加速训练
 
 答案: B
-解析: KV Cache 缓存历史的 Key/Value，新 token 只算自己的 K/V，把推理计算从 O(n²) 降到 O(n)。代价是显存占用随序列增长（A 说反了）。
+解析: KV Cache 缓存历史的 Key/Value，新 token 不再重算历史投影与完整前向（K/V 投影的重复量从 O(n²) 降到 O(n)）；但注意力分数仍需与历史 K 计算，随上下文增长。代价是显存占用随序列增长（A 说反了）。
 :::
 
 :::quiz
@@ -539,7 +551,7 @@ C. RMSNorm 不能用于 Transformer
 D. RMSNorm 参数量更大
 
 答案: A
-解析: RMSNorm = x / RMS(x) · γ，省掉减均值（和 β），计算更简单、更省带宽，效果接近 LayerNorm，被 LLaMA/Qwen 等采用。
+解析: RMSNorm = x / √(mean(x²)+ε) · γ，省掉减均值（和 β），计算更简单、更省带宽，效果接近 LayerNorm，被 LLaMA/Qwen 等采用。
 :::
 
 :::quiz

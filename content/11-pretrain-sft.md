@@ -1,6 +1,6 @@
 > **本章对应课件**：《3.1 大模型工程专题》。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。
 
-## 11.1 大模型训练完整生命周期
+## 18.1 大模型训练完整生命周期
 
 :::unfold 先懂直觉
 训练一个可用的大模型分三个阶段：预训练（读遍海量文本，学语言和知识）→ 监督微调（学会按指令回答）→ 偏好优化（学会人类更喜欢哪种回答）。前面几章都在讲「模型是什么」，本章开始讲「怎么真正训出来」。
@@ -28,7 +28,7 @@ Data → Tokenizer → Pretrain → SFT → RL / Preference Optimization → Eva
 :::
 :::
 
-## 11.2 Pretrain 数据从哪里来
+## 18.2 Pretrain 数据从哪里来
 
 课件列出的主要来源：
 
@@ -47,7 +47,7 @@ Data → Tokenizer → Pretrain → SFT → RL / Preference Optimization → Eva
 模型的能力上限很大程度上由数据决定：没有代码数据，代码能力无从谈起；没有数学语料，数学推理弱；中文语料占比低，中文能力就差。所以「数据配比」本身就是模型设计的核心决策。
 :::
 
-## 11.3 数据清洗
+## 18.3 数据清洗
 
 :::unfold 先懂直觉
 原始网页数据充满广告、模板、乱码、重复内容。清洗就是把「垃圾」去掉、把「重复」去掉、把「有毒」去掉，留下高质量文本。这一步的质量直接决定预训练效果。
@@ -67,7 +67,7 @@ Data → Tokenizer → Pretrain → SFT → RL / Preference Optimization → Eva
 **清洗不是「越干净越好」**：过度过滤会损失多样性（如删掉所有短文本、口语内容），导致模型能力变窄。过滤规则需要在大规模消融实验中权衡。
 :::
 
-## 11.4 MinHash 去重 ★
+## 18.4 MinHash 去重 ★
 
 :::unfold 先懂直觉
 完全一样的文本可以用哈希精确去重，但互联网文本经常「99% 相同、只差一行版权声明」。MinHash 用一个巧妙的方法估计两段文本的相似度，从而找出「近似重复」。
@@ -136,7 +136,7 @@ print(lsh.query(m2))       # 找出近似重复的文档
 :::
 :::
 
-## 11.5 数据配比
+## 18.5 数据配比
 
 不能只拿「50% GitHub + 50% Wikipedia」随便训练。不同数据影响能力：
 
@@ -150,7 +150,7 @@ print(lsh.query(m2))       # 找出近似重复的文档
 
 课件第 3～4 页专门展示了不同开源模型的数据分布。配比通常按「域（domain）」设定权重，并反复做消融实验（ablation）。
 
-## 11.6 训练 Tokenizer
+## 18.6 训练 Tokenizer
 
 大模型训练之前，先训练 tokenizer。需要决定：
 
@@ -165,7 +165,7 @@ print(lsh.query(m2))       # 找出近似重复的文档
 **Tokenizer 通常在大模型训练之前就固定了**，而且中途换 tokenizer 意味着 embedding 层作废、需要重新训练——代价极高。所以词表设计必须提前想清楚。
 :::
 
-## 11.7 Warmup + Learning Rate Decay ★
+## 18.7 Warmup + Learning Rate Decay ★
 
 :::unfold 先懂直觉
 训练刚开始时参数是随机的，梯度方向不可靠。一上来用大学习率容易把模型带偏。所以先用小学习率「热热身」（warmup），再逐渐升高，训练后期再慢慢降下来（decay）。
@@ -209,6 +209,9 @@ $$
 import math
 
 def lr_lambda(step):
+    # 注意 +1：LambdaLR 在创建时就以 step=0 调用一次，若不 +1，
+    # 第一次 optimizer.step() 会用 lr = 0（什么都不更新），第二次才真正开始 warmup。
+    step = step + 1
     if step < warmup_steps:
         return step / warmup_steps
     progress = (step - warmup_steps) / (total_steps - warmup_steps)
@@ -216,6 +219,14 @@ def lr_lambda(step):
 
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 ```
+:::
+
+:::warning 关于 warmup 的第一个 step（教学细节，容易踩坑）
+PyTorch 的 `LambdaLR` 在**构造时**就会以 `step=0` 调用一次 `lr_lambda`，因此：
+- 直接写 `step / warmup_steps` → 初始 lr = **0**，第一次 `optimizer.step()` 不会改变参数；
+- 加上 `+1` → 第一次更新使用 $lr_{peak}/T_{warmup}$，warmup 从第一个有效更新开始。
+
+两种写法都有人用，关键是**知道自己在用哪一种**，并保证 lr 日志与实际使用的 lr 一致（本课程统一采用 `+1` 的方案）。
 :::
 
 :::warning 常见误区
@@ -232,7 +243,7 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 :::
 :::
 
-## 11.8 为什么看 Loss 还不够
+## 18.8 为什么看 Loss 还不够
 
 训练日志：
 
@@ -266,7 +277,7 @@ NaN
 - 数据质量监控；
 - 遇到 spike 时回滚到上一个 checkpoint，跳过坏数据继续。
 
-## 11.9 Perplexity ★
+## 18.9 Perplexity ★
 
 :::unfold 先懂直觉
 PPL 是「模型每一步平均在多少个候选之间犹豫」。loss 是交叉熵（越小越好），PPL 就是把它指数化，变成更容易直觉理解的「困惑度」。
@@ -303,7 +314,7 @@ PPL = e^loss，表示模型预测每个 token 时的平均「犹豫程度」（�
 :::
 :::
 
-## 11.10 Pretrain 与 SFT ★
+## 18.10 Pretrain 与 SFT ★
 
 :::unfold 先懂直觉
 Pretrain 像「读书读得多」——模型见识广、知识多，但只会续写；SFT 像「学会礼貌对话」——用示范数据教它按人类期望的格式回答。
@@ -348,7 +359,7 @@ Assistant: 法国的首都是巴黎。
 :::
 :::
 
-## 11.11 Chat Template
+## 18.11 Chat Template
 
 现代 chat model 往往写成：
 
@@ -384,7 +395,7 @@ ids = tok(text, return_tensors="pt").input_ids
 **训练和推理必须使用完全相同的 chat template**。如果训练时用 `<|im_start|>` 格式、推理时手工拼成 `User: ... Assistant: ...`，模型表现会明显下降——因为输入分布不匹配。
 :::
 
-## 11.12 SFT 的 Loss Mask ★
+## 18.12 SFT 的 Loss Mask ★
 
 :::unfold 先懂直觉
 一条对话里，用户的问题不是模型该学的；模型只需要学「assistant 该怎么回答」。所以把用户/system 部分的 loss 权重设为 0，只在 assistant 回复上算 loss。
@@ -450,7 +461,7 @@ SFT 的目标是「教模型如何回答」，而不是「教模型模仿用户�
 :::
 :::
 
-## 11.13 SFT 数据：质量与多样性
+## 18.13 SFT 数据：质量与多样性
 
 **SFT 并不是数据越多越好**。特别重要的是：
 
@@ -464,7 +475,7 @@ SFT 的目标是「教模型如何回答」，而不是「教模型模仿用户�
 - multi-turn（多轮对话）
 - tool use（工具调用）
 
-## 11.14 Synthetic Data（合成数据）
+## 18.14 Synthetic Data（合成数据）
 
 :::unfold 先懂直觉
 人工标注数据又贵又慢，于是用更强的模型批量生成「指令 + 回答」，再拿来训练小模型——这就是 Self-Instruct 和蒸馏的基本思路。
@@ -485,7 +496,7 @@ GPT-5 → 生成 instruction + response → 小模型学习
 常见缓解：与真实数据混合、质量过滤、多样性约束、教师模型校验。
 :::
 
-## 11.15 SFT 怎么评估
+## 18.15 SFT 怎么评估
 
 不仅看 loss。还要评估不同 task type：
 
@@ -501,7 +512,7 @@ GPT-5 → 生成 instruction + response → 小模型学习
 | Benchmark（MMLU/GSM8K 等） | 便宜、可复现 | 可能被刷榜、覆盖有限 |
 | LLM-as-a-judge | 便宜、灵活 | 有偏差（偏爱长回答等） |
 
-## 11.16 本章总结
+## 18.16 本章总结
 
 :::key 本节必须记住
 | 环节 | 关键点 |

@@ -214,9 +214,10 @@
       ]));
       out.textContent =
         "生成第 t 个 token 时：\n" +
-        "· 无缓存：重算 t 个 token 的 K/V → 总计算量 O(n²)\n" +
-        "· 有缓存：只算 1 个新 token → 总计算量 O(n)，代价是显存里保存所有历史的 K/V\n\n" +
-        "结论：KV Cache 是「用显存换计算」的经典 trade-off。序列越长、生成越多，收益越大。";
+        "· 无缓存：对整个 prefix 重跑完整前向，历史 token 的 K/V 投影全部重算（本演示只统计投影次数）→ 累计 O(n²)\n" +
+        "· 有缓存：只算 1 个新 token 的投影，历史 K/V 直接读缓存 → 投影累计 O(n)\n\n" +
+        "注意（常被讲错）：即使有缓存，新 Query 仍要与全部历史 K 计算注意力分数——每步 O(t·d)，随上下文线性增长。\n" +
+        "KV Cache 省掉的是「重算历史」，不是注意力本身；代价是显存里保存所有历史的 K/V、每步读取缓存的带宽开销。";
     }
     function stepOnce() {
       if (step >= TOKENS.length) return;
@@ -395,7 +396,8 @@
       var std = Math.sqrt(varr);
       var ln = x.map(function (v) { return (v - mean) / (std + 1e-5); });
       var rms = Math.sqrt(x.reduce(function (a, b) { return a + b * b; }, 0) / d);
-      var rn = x.map(function (v) { return v / (rms + 1e-6); });
+      // 标准 RMSNorm：x / sqrt(mean(x²)+ε)（ε 在根号内）
+      var rn = x.map(function (v) { return v / Math.sqrt(rms * rms + 1e-6); });
 
       wrap.innerHTML = "";
       wrap.appendChild(LC.panel("LayerNorm：减均值 + 除标准差", [
@@ -404,14 +406,14 @@
         h("div", { class: "stat-line", html: "(x − mean)/std = <b>[" + ln.map(function (v) { return LC.fmt(v, 2); }).join(", ") + "]</b>" }),
         h("div", { class: "stat-line", text: "输出均值 = 0，标准差 = 1" })
       ]));
-      wrap.appendChild(LC.panel("RMSNorm：只除均方根（不减均值）", [
+      wrap.appendChild(LC.panel("RMSNorm：只除均方根（不减均值，ε 在根号内）", [
         h("div", { class: "stat-line", html: "RMS = √((1²+2²+3²+4²)/4) = √(30/4) = <b>" + LC.fmt(rms, 3) + "</b>" }),
-        h("div", { class: "stat-line", html: "x / RMS = <b>[" + rn.map(function (v) { return LC.fmt(v, 2); }).join(", ") + "]</b>" }),
+        h("div", { class: "stat-line", html: "x / √(RMS²+ε) = <b>[" + rn.map(function (v) { return LC.fmt(v, 2); }).join(", ") + "]</b>" }),
         h("div", { class: "stat-line", text: "没有减均值步骤 → 少一次归约运算，更快" })
       ]));
       out.textContent =
         "输入 x = [" + x.join(", ") + "]\n\n" +
-        "LayerNorm = (x − μ)/σ · γ + β      RMSNorm = x/RMS(x) · γ\n\n" +
+        "LayerNorm = (x − μ)/σ · γ + β      RMSNorm = x/√(mean(x²)+ε) · γ\n\n" +
         "RMSNorm 省掉了「减均值」和 β 偏置：在 Transformer 中效果几乎一样好，但计算更简单、更省带宽 —— 所以 LLaMA/Qwen 等现代 LLM 都用 RMSNorm。";
     }
     var controls = h("div", { class: "demo-controls" });
