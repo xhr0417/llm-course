@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Inference Systems：从 Prefill 到 vLLM / SGLang · 大模型知识体系</title>
+<meta name="description" content="Prefill/Decode、TTFT/ITL、Continuous Batching、PagedAttention、Prefix Cache、投机解码、Serving 指标模拟器。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/inference.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 20 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/inference">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="flash-attention.html">← FlashAttention 与 Triton：为什么 Attention 还能更快</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/inference">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 20 章 · 第四部分 · 服务 (Serve)</div><h1 class="chapter-title">LLM Inference Systems：从 Prefill 到 vLLM / SGLang</h1><p class="chapter-desc">Prefill/Decode、TTFT/ITL、Continuous Batching、PagedAttention、Prefix Cache、投机解码、Serving 指标模拟器。</p><p class="chapter-source">对应课件：LLM Systems（第二批新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：第二批最重要的章节之一。目标不是「会用 vLLM」，而是回答：<strong>为什么需要 serving system？</strong> 学完你应该能解释：prefill/decode 为什么是两个性能阶段、continuous batching 与 PagedAttention 各自解决什么问题。</p>
+</blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）</li>
+<li>【Runnable on CUDA】需要 GPU（当前验证环境无 CUDA，标注 NOT EXECUTED）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备环境</li>
+</ul>
+</div></div>
+<h2>20.1 先从一张图开始：Serving Pipeline</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>一次「对话」在服务端要经过：排队 → 切词 → 调度 → 预填充（prefill）→ 逐字解码（decode）→ 采样 → 返回。Serving system 的全部工作，就是把这条流水线上的每个环节<strong>同时服务很多请求</strong>，并且在延迟与吞吐之间做取舍。</p>
+</div></details>
+<pre><code class="lang-">Request
+  ↓  Tokenizer          文本 → token ids
+  ↓  Scheduler          排队 / 组批 / 分配 KV 空间
+  ↓  Prefill            一次处理完整 prompt（大矩阵计算）
+  ↓  KV Cache           每层缓存 K/V
+  ↓  Decode             每次生成 1 个 token（循环）
+  ↓  Sampler            temperature / top-p → 选出 token
+  ↓  Detokenizer        拼回文本
+Response</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：点击每个阶段看它在做什么<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<h2>20.2 Prefill vs Decode：两个完全不同的性能阶段 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p><strong>Prefill</strong>：把整段 prompt 一次性喂进模型——序列长、矩阵大、并行度高，是「计算密集型」的大 GEMM。
+<strong>Decode</strong>：每次只生成一个 token——序列长度是 1，但每一步都要读取全部历史 KV，是「带宽密集 + 串行依赖」。
+两者对硬件的需求完全不同，现代 serving 的核心挑战就是把它们高效地混合调度。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Prefill</th>
+<th>Decode</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>输入</td>
+<td>完整 prompt（S 个 token）</td>
+<td>1 个新 token（+ 历史 KV）</td>
+</tr>
+<tr>
+<td>主要矩阵形状</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">[</mo><mi>S</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">]</mo><mo>×</mo><mo stretchy="false">[</mo><mi>d</mi><mo separator="true">,</mo><mo>⋅</mo><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[S, d] \times [d, \cdot]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">]</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord mathnormal">d</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">⋅</span><span class="mclose">]</span></span></span></span></span>（大）</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">[</mo><mn>1</mn><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">]</mo><mo>×</mo><mo stretchy="false">[</mo><mi>d</mi><mo separator="true">,</mo><mo>⋅</mo><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[1, d] \times [d, \cdot]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">]</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord mathnormal">d</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">⋅</span><span class="mclose">]</span></span></span></span></span>（瘦长）</td>
+</tr>
+<tr>
+<td>并行度</td>
+<td>高（序列维并行）</td>
+<td>低（每步串行依赖）</td>
+</tr>
+<tr>
+<td>瓶颈</td>
+<td>常见为 <strong>compute-bound</strong></td>
+<td>常见为 <strong>memory-bandwidth-bound</strong>（KV 读取）</td>
+</tr>
+<tr>
+<td>典型指标</td>
+<td>TTFT</td>
+<td>ITL / TPOT</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：切换看两个阶段的计算形态<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换 Prefill / Decode，观察输入形状、KV 读取量、瓶颈类型的变化。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<h2>20.3 TTFT：Time To First Token</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>用户发出请求到看到<strong>第一个字</strong>的时间。它包含：排队时间 + prefill 计算 + 采样。长 prompt 的 TTFT 会显著变大——这是用户「感知卡顿」的主要来源。</p>
+</div></details>
+<pre><code class="lang-">Request → [queue] → [prefill + first decode] → First Token
+         ↑ 调度决定     ↑ 与 prompt 长度近似成正比</code></pre>
+<h2>20.4 ITL / TPOT：逐 token 延迟</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>第一个字出来后，后面的字是<strong>一个个</strong>生成的：token1 → token2 → token3…… 相邻两个 token 的间隔叫 ITL（Inter-Token Latency），平均到每个输出 token 叫 TPOT。</p>
+</div></details>
+<div class="box box-warning"><div class="box-title">⚠️ 为什么 decode 不能并行生成同一序列的未来 token</div><div class="box-body"><p>自回归依赖：生成 token t+1 需要 token t 作为输入。<strong>同一序列的生成天然串行</strong>——这就是 decode 阶段 GPU 利用率上不去（每步矩阵太瘦）的根本原因，也是 batching 存在的意义。</p>
+</div></div>
+<h2>20.5 Throughput vs Latency：serving 的核心取舍 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>批越大，GPU 越满，吞吐（tokens/s）越高；但每个请求要等更久才轮到处理，延迟变差。Serving system 的调度器就是在「一次服务多少人」和「每个人等多久」之间找平衡。</p>
+</div></details>
+<div class="demo-block"><div class="demo-head">🎮 交互：Serving 指标模拟器（教学模型）<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>调整请求数 / prompt 长度 / 输出长度 / batch size / prefill 与 decode 速度，实时观察 TTFT、ITL、tokens/s 与 KV 显存占用的变化趋势。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<blockquote>
+<p>⚠️ 该模拟器是<strong>教学模型</strong>（简化假设、不是真实硬件 benchmark），用于建立「参数怎么影响指标」的直觉。</p>
+</blockquote>
+<h2>20.6 Static Batching：GPU 空位的浪费</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>最朴素的组批：把同时到达的请求凑成一批，一起 prefill、一起 decode，直到<strong>最长的那个</strong>生成完才释放整批资源。</p>
+</div></details>
+<pre><code class="lang-">Request A: 10 tokens
+Request B: 100 tokens
+Request C: 30 tokens
+→ 固定批：B 还在生成时，A/C 已经结束但槽位仍被占用（空转）</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：Static vs Continuous Batching<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换两种策略，逐步播放生成过程，观察 GPU 槽位的空转与利用率差别。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<h2>20.7 Continuous Batching：批的「动态进出」★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>不等整批结束：<strong>哪个请求生成完了，立刻把它移出、把等待队列里的新请求塞进来</strong>。批的组成是流动的，GPU 槽位几乎不空转。</p>
+</div></details>
+<p>这是 vLLM / SGLang 等现代 serving 系统最重要的调度思想之一：</p>
+<ul>
+<li>每步 decode 后检查：谁完成了？释放它的资源（KV 块）；队列里有谁可以加入？</li>
+<li>新请求可以立即开始 prefill（或与 decode 交错——见 chunked prefill）。</li>
+</ul>
+<h2>20.8 KV Cache 的系统视角</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>第 10 章从模型角度讲了 KV Cache（缓存历史 K/V，避免前缀重算）。在 serving 里，KV Cache 升级成一个<strong>资源管理问题</strong>：同时服务 N 个请求，每个请求都要一块可持续增长的 KV 空间。</p>
+</div></details>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>KV 总量</mtext><mo>≈</mo><mn>2</mn><mo>×</mo><mi>L</mi><mo>×</mo><msub><mi>H</mi><mrow><mi>k</mi><mi>v</mi></mrow></msub><mo>×</mo><msub><mi>d</mi><mrow><mi>h</mi><mi>e</mi><mi>a</mi><mi>d</mi></mrow></msub><mo>×</mo><mtext>batch</mtext><mo>×</mo><msub><mi>S</mi><mrow><mi>t</mi><mi>o</mi><mi>t</mi><mi>a</mi><mi>l</mi></mrow></msub><mo>×</mo><mtext>bytes</mtext></mrow><annotation encoding="application/x-tex">\text{KV 总量} \approx 2 \times L \times H_{kv} \times d_{head} \times \text{batch} \times S_{total} \times \text{bytes}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">KV </span><span class="mord cjk_fallback">总量</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.08125em;">H</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0813em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mord mathnormal mtight" style="margin-right:0.03588em;">v</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">h</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight">d</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord">batch</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0576em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">bytes</span></span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>随序列<strong>动态增长</strong></td>
+<td>无法预知每个请求要多少（生成多久不知道）</td>
+</tr>
+<tr>
+<td>生命周期与请求绑定</td>
+<td>请求结束才释放</td>
+</tr>
+<tr>
+<td>体量巨大</td>
+<td>长上下文 + 高并发时，KV 显存常常先于权重成为瓶颈</td>
+</tr>
+</tbody></table>
+<h2>20.9 KV Cache 碎片化</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>如果给每个请求预分配一整块连续的显存，问题立刻出现：A 要 0.8GB、B 要 0.3GB、C 要 1.2GB——<strong>申请大小未知、生命周期不同</strong>，很快产生大量无法利用的碎片。</p>
+</div></details>
+<pre><code class="lang-">连续内存布局（碎片化示意）：
+[ A（已占用） ][ 空洞 ][ B（已占用） ][ 空洞 ][ C … ]
+→ 新请求 D 需要连续 1GB：虽然总空闲够，但没有连续块 → 失败或浪费预留</code></pre>
+<h2>20.10 PagedAttention：从操作系统借来的思路 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>操作系统解决「内存碎片」的经典方案是<strong>虚拟内存分页</strong>：进程看到连续地址，物理内存却不连续。PagedAttention 把 KV Cache 也切成固定大小的 <strong>page/block</strong>（如 16 个 token 一页），逻辑上连续、物理上可以散落。</p>
+</div></details>
+<pre><code class="lang-">逻辑视图（请求看到的）：  block0 → block1 → block2 → …
+物理视图（显存里的）：    block 在池子里任意位置分配
+→ 按需分配：生成到哪、分配到哪；请求结束 → 整块回收</code></pre>
+<table>
+<thead>
+<tr>
+<th>收益</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>减少碎片</td>
+<td>固定大小的块可被任意复用</td>
+</tr>
+<tr>
+<td>按需增长</td>
+<td>不再预分配「最大长度」</td>
+</tr>
+<tr>
+<td>内存共享</td>
+<td>相同前缀的块可以共享（→ Prefix Cache）</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：分页分配演示<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换「连续分配」与「分页分配」，观察碎片率与「能否放下新请求」的差别。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-note"><div class="box-title">📘 类比不是巧合</div><div class="box-body"><p>PagedAttention（vLLM 的核心机制之一）就是显式借用 OS 虚拟内存/分页的设计哲学。想通「为什么 OS 要用分页」，就理解了它在 serving 中要解决什么。</p>
+</div></div>
+<h2>20.11 Prefix Cache：复用相同的开头</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>很多请求共享同一段前缀：同一个 system prompt、同一篇长文档（问答场景）、同一个 few-shot 示例。前缀的 KV 完全一样——算一次、缓存起来、后续请求直接复用。</p>
+</div></details>
+<div class="demo-block"><div class="demo-head">🎮 交互：cache hit / miss<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换「无缓存 / 有前缀缓存」，看相同前缀的请求是否需要重新 prefill。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<table>
+<thead>
+<tr>
+<th>命中条件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>前缀 token 完全一致</td>
+<td>通常按块匹配（paged blocks）</td>
+</tr>
+<tr>
+<td>多请求共享</td>
+<td>引用计数 + 写时复制（copy-on-write）</td>
+</tr>
+</tbody></table>
+<h2>20.12 Chunked Prefill：把长 prompt 切开</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>一个 8K token 的 prompt 如果一次性 prefill，会长时间占住 GPU，让其他正在 decode 的请求「卡住」——ITL 抖动。<strong>Chunked prefill</strong> 把它切成几个小块，与 decode 交错执行：<code>prefill chunk → decode → prefill chunk → decode …</code>，改善延迟公平性。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>TTFT</th>
+<th>其他人的 ITL</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>一次性 prefill</td>
+<td>最短</td>
+<td>被长请求阻塞，抖动大</td>
+</tr>
+<tr>
+<td>Chunked prefill</td>
+<td>略长</td>
+<td>更稳定（交错执行）</td>
+</tr>
+</tbody></table>
+<h2>20.13 Speculative Decoding：用小模型「试稿」</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Decode 每步只算一个 token，太浪费。投机解码让一个<strong>小模型（draft）<strong>先连续猜出 k 个 token，然后</strong>大模型（target）一次前向并行验证</strong>这 k 个位置：接受正确的、拒绝错误的。因为验证是并行的，只要接受率够高，等效速度提升。</p>
+</div></details>
+<pre><code class="lang-">draft:  猜 A B C D
+target: 并行打分 → A B C 接受（D 拒绝）
+→ 一次 target 前向推进了 3 个 token</code></pre>
+<div class="box box-note"><div class="box-title">📘 为什么输出分布仍然正确</div><div class="box-body"><p>验证阶段的接受/拒绝是<strong>按概率比</strong>进行的（拒绝时回退到 target 自己的采样），数学上保证最终输出分布与「完全用 target 逐步采样」一致。本课程只建立直觉；完整证明见原始论文。</p>
+</div></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：draft 与 verify<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>逐步播放：draft 猜 4 个 → target 验证 → 接受前缀、拒绝并重采样。可以调接受率看平均推进速度。</p>
+<p><a class="static-link" href="../index.html#/inference">在交互版中打开这个演示 →</a></p></div></div>
+<h2>20.14 CUDA Graph：省掉 launch 开销</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Decode 每步是一串<strong>很多小 kernel</strong>（每层好几个）。每个 kernel 的 CPU 启动（launch）都有固定开销；当 kernel 又小又多时，GPU 在等 CPU 发指令。<strong>CUDA Graph</strong> 把一串 kernel 的调用序列「录下来」，之后一键回放，跳过逐条 launch 的开销。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>常规</th>
+<th>CUDA Graph</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>每步</td>
+<td>逐个 launch kernel</td>
+<td>replay 预录制的图</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>形状多变</td>
+<td><strong>固定形状的重复循环（decode 典型）</strong></td>
+</tr>
+</tbody></table>
+<h2>20.15 Quantization：Why it matters for serving</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>推理的瓶颈常是显存容量与带宽。把权重从 FP16/BF16 降到 INT8/FP8/INT4：权重显存减半/再减半，每步读取的字节数下降，decode 直接受益——代价是精度与实现复杂度。</p>
+</div></details>
+<pre><code class="lang-">FP16/BF16 → INT8 / FP8 → INT4
+权重显存 ↓    带宽需求 ↓    质量风险 ↑</code></pre>
+<blockquote>
+<p>本节只建立连接：量化是 serving 的关键优化方向之一。完整的量化理论与工程（校准、per-channel、KV 量化等）适合作为后续专题。</p>
+</blockquote>
+<h2>20.16 vLLM：它到底解决什么问题</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>vLLM 不是「一个更快的模型」，而是一个<strong>推理引擎/服务系统</strong>。它的价值在于把前面几节的问题系统性地解决：</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>vLLM 的答案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>KV 显存碎片</td>
+<td><strong>PagedAttention</strong>（分页化的 KV 管理）</td>
+</tr>
+<tr>
+<td>批利用率</td>
+<td><strong>Continuous batching</strong>（动态进出）</td>
+</tr>
+<tr>
+<td>相同前缀重复算</td>
+<td><strong>前缀缓存</strong>（分页块共享）</td>
+</tr>
+<tr>
+<td>高并发调度</td>
+<td>调度器 + 分块 prefill 等策略</td>
+</tr>
+<tr>
+<td>分布式推理</td>
+<td>多卡并行（张量并行等）</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>不要把它当「pip install 教程」——真正要理解的是：<strong>它为什么需要这些机制</strong>（就是本章前面 15 节）。</p>
+</blockquote>
+<h2>20.17 SGLang：Serving / Runtime 的另一个方向</h2>
+<p>SGLang 关注的方向包括：</p>
+<ul>
+<li><strong>前缀复用</strong>（RadixAttention：用前缀树组织缓存，提升多轮/共享前缀场景的命中率）；</li>
+<li><strong>结构化生成</strong>（约束解码：按 JSON/正则等约束采样，适合 agent/工具调用场景）；</li>
+<li><strong>调度与运行时优化</strong>。</li>
+</ul>
+<blockquote>
+<p>不比较「框架谁快」——不同系统的优化重心不同，且版本迭代很快。学完本章你应该能看懂它们的 README 在说什么。</p>
+</blockquote>
+<h2>20.18 生态对照：FlashInfer 与 TensorRT-LLM</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>定位</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>FlashInfer</strong></td>
+<td>推理 kernel 库</td>
+<td>attention/采样等 serving 核心 kernel 的高性能实现，位于 kernel 层</td>
+</tr>
+<tr>
+<td><strong>TensorRT-LLM</strong></td>
+<td>NVIDIA 的推理栈</td>
+<td>编译式优化 + 融合 kernel + engine 构建</td>
+</tr>
+</tbody></table>
+<p><strong>层次关系</strong>（重要）：</p>
+<pre><code class="lang-">你的应用
+  ↓
+Serving runtime（vLLM / SGLang / TensorRT-LLM runtime）
+  ↓
+Kernel 库（cuBLAS / FlashAttention / FlashInfer / Triton kernels）
+  ↓
+GPU</code></pre>
+<p>前面第 19 章的 kernel 知识在这里闭环：<strong>serving 系统的下限由 kernel 与调度的质量决定</strong>。</p>
+<h2>20.19 综合练习：三步定位性能问题</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>给你一个「变慢了」的推理服务，按顺序问三个问题：</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>问题</th>
+<th>可能结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>① 看指标</td>
+<td>TTFT 大还是 ITL 大？</td>
+<td>TTFT 大 → prefill/排队问题；ITL 大 → decode/带宽问题</td>
+</tr>
+<tr>
+<td>② 看资源</td>
+<td>KV 显存是否接近上限？</td>
+<td>是 → 并发被 KV 卡住（分页/量化/换更长序列策略）</td>
+</tr>
+<tr>
+<td>③ 看瓶颈</td>
+<td>GPU 利用率和带宽读数？</td>
+<td>双低 → 调度/launch 问题（batching、CUDA Graph）</td>
+</tr>
+</tbody></table>
+<details class="fold"><summary>课堂案例（教学模拟）</summary><div class="fold-body"><p><strong>案例 1</strong>：短 prompt 很快，长 prompt TTFT 暴涨 → prefill 计算随长度增长；考虑 chunked prefill 改善公平性，或限制最大 prompt。
+<strong>案例 2</strong>：并发一高，吞吐不升反降，还出现请求失败 → KV 显存耗尽（OOM）；分页管理 + 限制并发 + 量化。
+<strong>案例 3</strong>：GPU 利用率只有 20%，ITL 却很大 → decode 每步太瘦（batch 太小 / launch 开销）；continuous batching + CUDA Graph。</p>
+</div></details>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Prefill</td>
+<td>一次算完 prompt：大 GEMM、compute-bound，决定 TTFT</td>
+</tr>
+<tr>
+<td>Decode</td>
+<td>每步 1 token：瘦矩阵 + 读 KV，带宽受限，决定 ITL</td>
+</tr>
+<tr>
+<td>Continuous batching</td>
+<td>批动态进出，消除 static batching 的空转</td>
+</tr>
+<tr>
+<td>KV 碎片</td>
+<td>变长 + 生命周期不同 → 连续分配必碎</td>
+</tr>
+<tr>
+<td>PagedAttention</td>
+<td>分页化 KV：逻辑连续、物理分块，按需增长与共享</td>
+</tr>
+<tr>
+<td>Prefix Cache</td>
+<td>相同前缀的 KV 复用</td>
+</tr>
+<tr>
+<td>Chunked Prefill</td>
+<td>长 prompt 切开与 decode 交错，稳定 ITL</td>
+</tr>
+<tr>
+<td>Speculative Decoding</td>
+<td>小模型试稿 + 大模型并行验证</td>
+</tr>
+<tr>
+<td>CUDA Graph</td>
+<td>录制重复的 kernel 序列，省 launch 开销</td>
+</tr>
+<tr>
+<td>vLLM / SGLang</td>
+<td>把上述机制工程化的 serving 系统</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么 decode 阶段通常比 prefill 更「吃带宽」？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>decode 的计算量更大</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>decode 每步只算 1 个 token（矩阵很瘦），但要读取全部历史 KV，计算单元常闲着等数据</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>decode 不需要 GPU</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>decode 的 batch 更大</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>prefill 是大矩阵计算（compute-bound）；decode 每步输入只有 1 个 token，主要成本是 KV 的读取（memory-bandwidth-bound），GPU 计算单元利用率低。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">PagedAttention 主要解决什么问题？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>提高模型精度</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>KV Cache 的显存碎片与按需增长问题（借用 OS 分页思想）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>加快 tokenizer</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>减少模型参数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>变长序列 + 不同生命周期导致连续分配产生碎片；分页化后固定大小的块可任意复用、按需分配、支持前缀共享（copy-on-write）。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Continuous batching 相比 static batching 的核心优势是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>模型变小</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>请求完成后立即腾出槽位，新请求随时加入，GPU 空转大幅减少</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>不需要 KV Cache</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>不需要调度器</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>static batching 要等整批最慢的请求结束才释放资源；continuous batching 让批「流动」起来，每个 decode 步后检查完成/加入，显著提升吞吐。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 10 章 KV Cache</span><span class="tag">第 15 章 GPU 带宽</span><span class="tag">第 19 章 FlashAttention（prefill 加速）</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">生产部署</span><span class="tag">推理优化</span><span class="tag">后续 advanced serving 专题</span></div></div>
+</div>
+<div class="static-nav"><a href="flash-attention.html">← FlashAttention 与 Triton：为什么 Attention 还能更快</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/20-inference.md">content/20-inference.md</a></div>
+</main>
+</body>
+</html>

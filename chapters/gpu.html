@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GPU Fundamentals：从 SM 到 Roofline · 大模型知识体系</title>
-<meta name="description" content="SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。">
+<meta name="description" content="SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/gpu.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="scaling-laws.html">← Scaling Laws 与算力：为什么这样配置训练</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="distributed.html">Distributed Training：从 DDP 到 3D 并行 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/gpu">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 15 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">GPU Fundamentals：从 SM 到 Roofline</h1><p class="chapter-desc">SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 15 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">GPU Fundamentals：从 SM 到 Roofline</h1><p class="chapter-desc">SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章定位</strong>：Scale 主线的地基。不理解 GPU 的算力与带宽模型，后面 FlashAttention、分布式训练、推理优化都只能「背结论」。本章目标：让你看到任何算子都能问出「它是 compute-bound 还是 memory-bound」。</p>

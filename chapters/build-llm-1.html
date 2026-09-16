@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Build Your Own Small LLM（上）：组件篇 · 大模型知识体系</title>
-<meta name="description" content="Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM，每步可运行可验证。">
+<meta name="description" content="Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/build-llm-1.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="pytorch.html">← PyTorch for LLM：动手之前的必备工具箱</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="build-llm-2.html">Build Your Own Small LLM（下）：训练篇 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/build-llm-1">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 12 章 · 第二部分 · 构建 (Build)</div><h1 class="chapter-title">Build Your Own Small LLM（上）：组件篇</h1><p class="chapter-desc">Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM，每步可运行可验证。</p><p class="chapter-source">对应课件：工程实战（新增）</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 12 章 · 第二部分 · 构建 (Build)</div><h1 class="chapter-title">Build Your Own Small LLM（上）：组件篇</h1><p class="chapter-desc">Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM。</p><p class="chapter-source">对应课件：工程实战（新增）</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章定位</strong>：Build 主线核心。7 个 Lab 从零搭出一个可运行的 decoder-only LM（约 10M 参数，单卡可训）。每个 Lab 都是<strong>小而完整</strong>的：有代码、有测试、有 shape 检查。做完本章，你已经手写过现代 LLM 的每一个零件。</p>

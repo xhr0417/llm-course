@@ -54,7 +54,7 @@ $$
 | 缺点 | 模型必须能放进单卡 |
 
 :::warning 学习率要调整
-DP 等价于 batch 变大 N 倍。经验规则：lr 随 batch 增大而适度放大（linear scaling 或 sqrt scaling），并配合 warmup（第 18 章）。
+DP 等价于 batch 变大 N 倍。经验规则：lr 随 batch 增大而适度放大（linear scaling 或 sqrt scaling），并配合 warmup（第 21 章）。
 :::
 
 ## 16.3 AllReduce 与 Ring AllReduce

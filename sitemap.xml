@@ -19,6 +19,10 @@
   <url><loc>https://llm.xhr0417.cn/chapters/gpu.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
   <url><loc>https://llm.xhr0417.cn/chapters/distributed.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
   <url><loc>https://llm.xhr0417.cn/chapters/efficient.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
+  <url><loc>https://llm.xhr0417.cn/chapters/data-pipeline.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
+  <url><loc>https://llm.xhr0417.cn/chapters/flash-attention.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
+  <url><loc>https://llm.xhr0417.cn/chapters/inference.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
   <url><loc>https://llm.xhr0417.cn/chapters/pretrain-sft.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
   <url><loc>https://llm.xhr0417.cn/chapters/rl-grpo.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
+  <url><loc>https://llm.xhr0417.cn/chapters/llm-eval.html</loc><lastmod>2026-09-16</lastmod><priority>0.8</priority></url>
 </urlset>

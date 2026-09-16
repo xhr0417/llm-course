@@ -25,7 +25,7 @@ TinyLM（第 12 章）──→ [Lab 9] 预训练循环 ──→ ckpt.pt
 ## Lab 8：准备数据集
 
 :::unfold 目标
-把原始文本变成「一个巨大的 token 数组」。LLM 数据集的本质就这么简单——复杂的是清洗和配比（第 18 章）。
+把原始文本变成「一个巨大的 token 数组」。LLM 数据集的本质就这么简单——复杂的是清洗和配比（第 21 章）。
 :::
 
 ```python
@@ -69,13 +69,13 @@ class TokenDataset(torch.utils.data.Dataset):
 ```
 
 :::warning 文档边界问题
-直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 `<|endoftext|>` 分隔并在 loss 上跳过边界，要么按文档 packing（第 18 章）。
+直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 `<|endoftext|>` 分隔并在 loss 上跳过边界，要么按文档 packing（第 21 章）。
 :::
 
 ## Lab 9：预训练
 
 :::unfold 目标
-把第 11 章的五步循环 + 第 18 章将学的 warmup/decay 组合成一个**完整的、可断点续训的**训练脚本。
+把第 11 章的五步循环 + 第 21 章将学的 warmup/decay 组合成一个**完整的、可断点续训的**训练脚本。
 :::
 
 ```python
@@ -243,7 +243,7 @@ print(f"val loss {loss:.4f}  ppl {ppl:.1f}")
 | 指标 | 含义 | 注意 |
 | --- | --- | --- |
 | val loss | 每个 token 的平均交叉熵 | 最有用的训练监控信号 |
-| PPL = e^loss | 平均「犹豫多少个候选」 | 只能和同 tokenizer 比（第 18 章） |
+| PPL = e^loss | 平均「犹豫多少个候选」 | 只能和同 tokenizer 比（第 21 章） |
 | 采样目测 | 生成几句话看语法/事实 | 最终用户视角，loss 不能替代 |
 
 :::demo next-token 交互：生成流程三步（第 9 章实现）
@@ -437,11 +437,11 @@ $$
 ## Lab 13：SFT（让模型学会「回答问题」）
 
 :::unfold 目标
-在预训练模型上做指令微调：数据换成「指令-回答」对，损失只算回答部分（第 18 章 Loss Mask 原理）。
+在预训练模型上做指令微调：数据换成「指令-回答」对，损失只算回答部分（第 21 章 Loss Mask 原理）。
 :::
 
 ```python
-# ① 构造 SFT 数据（格式 = 第 18 章的 chat template）
+# ① 构造 SFT 数据（格式 = 第 21 章的 chat template）
 data = [
     {"instruction": "把下面的话翻译成英文：我爱编程。", "response": "I love programming."},
     {"instruction": "3 + 5 等于几？", "response": "3 + 5 = 8。"},
@@ -529,7 +529,7 @@ print("SFT 后:", after)
 ## Lab 14：DPO / GRPO 小实验
 
 :::unfold 目标
-在 mini 模型上体验一次偏好优化（第 19 章完整原理）。DPO 用「更好/更差」回答对直接优化模型；GRPO 用「同一问题采样一组 + 组内比较」。
+在 mini 模型上体验一次偏好优化（第 22 章完整原理）。DPO 用「更好/更差」回答对直接优化模型；GRPO 用「同一问题采样一组 + 组内比较」。
 :::
 
 ### DPO：用偏好对直接训练
@@ -580,7 +580,7 @@ def dpo_loss(policy, ref, batch, beta=0.1):
 
 ### GRPO：同一问题采样一组，组内比较
 
-以下为**算法伪代码**（不保证直接运行，完整原理见第 19 章）：
+以下为**算法伪代码**（不保证直接运行，完整原理见第 22 章）：
 
 ```python
 # 【Pseudo-code】算法示意
@@ -637,7 +637,7 @@ C. 标记特殊 token
 D. 防止过拟合
 
 答案: B
-解析: PyTorch 的 cross_entropy 用 ignore_index=-100 跳过这些位置。这保证模型学习「如何回答」而不是「复述问题」（第 18 章 Loss Mask）。
+解析: PyTorch 的 cross_entropy 用 ignore_index=-100 跳过这些位置。这保证模型学习「如何回答」而不是「复述问题」（第 21 章 Loss Mask）。
 :::
 
 :::quiz
@@ -653,6 +653,6 @@ D. 它跳过了 softmax
 :::
 
 :::related
-依赖 | 第 12 章 组件篇, 第 9 章 生成, 第 10 章 KV Cache, 第 18 章 Loss Mask
-用于 | 第 14 章 Scaling Laws, 第 17 章 显存, 第 19 章 Post-training
+依赖 | 第 12 章 组件篇, 第 9 章 生成, 第 10 章 KV Cache, 第 21 章 Loss Mask
+用于 | 第 14 章 Scaling Laws, 第 17 章 显存, 第 22 章 Post-training
 :::

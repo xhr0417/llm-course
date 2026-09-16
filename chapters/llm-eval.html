@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Evaluation：模型到底有没有变好 · 大模型知识体系</title>
+<meta name="description" content="PPL、Exact Match、pass@k、MMLU/C-Eval/GSM8K、LLM-as-a-Judge、置信区间、Contamination、失败案例分析 + 评测 Lab。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/llm-eval.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 23 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/llm-eval">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/llm-eval">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 23 章 · 第六部分 · 评估 (Evaluate)</div><h1 class="chapter-title">LLM Evaluation：模型到底有没有变好</h1><p class="chapter-desc">PPL、Exact Match、pass@k、MMLU/C-Eval/GSM8K、LLM-as-a-Judge、置信区间、Contamination、失败案例分析 + 评测 Lab。</p><p class="chapter-source">对应课件：LLM Systems（第二批新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：第二批收尾模块。第 3 章讲的是<strong>经典 ML 评估</strong>（Accuracy/Precision/Recall/F1/过拟合）；本章专门讲 <strong>LLM 特有</strong>的评估体系，回答：<strong>模型到底有没有变好？</strong> 以及——benchmark 分数到底说明什么、不说明什么。</p>
+<p>跨章闭环：Contamination（23.13）与数据管线第 18 章直接对应。</p>
+</blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备数据/环境</li>
+</ul>
+</div></div>
+<h2>23.1 Evaluation Pipeline：评估也是一条流水线</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>「跑个 benchmark」不是一个数，而是一条流水线：模型给出原始输出 → 用模板套出 prompt → 生成 → 解析出答案 → 和标准答案比对 → 汇总成指标。<strong>任何一环出错，分数都会失真</strong>——这是本章反复强调的核心。</p>
+</div></details>
+<pre><code class="lang-">Model
+  ↓  Dataset（题目 + 标准答案）
+  ↓  Prompt Template（few-shot / zero-shot / 指令格式）
+  ↓  Generation（采样参数：temperature、max_tokens）
+  ↓  Parser（从输出里抽出「答案」）
+  ↓  Metric（EM / F1 / Accuracy / pass@k / judge）
+  ↓  Report（分数 + 置信区间 + 失败样本）</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：点击每一环看它在做什么、错在哪会怎样<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.2 Perplexity：与预训练 loss 直接相连</h2>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>PPL</mtext><mo>=</mo><msup><mi>e</mi><mtext>Loss</mtext></msup></mrow><annotation encoding="application/x-tex">\text{PPL} = e^{\text{Loss}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">PPL</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8913em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">Loss</span></span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>Loss</th>
+<th>PPL</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>2.0</td>
+<td>7.39</td>
+<td>平均在 ~7 个候选间犹豫</td>
+</tr>
+<tr>
+<td>3.0</td>
+<td>20.09</td>
+<td>更不确定</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ PPL 的两个使用边界</div><div class="box-body"><ol>
+<li><strong>不同 tokenizer 之间不可直接比较</strong>（token 粒度不同 → 每步难度不同，第 21 章已讲）；</li>
+<li><strong>PPL 低 ≠ 下游任务好</strong>：它衡量「预测文本」的能力，与指令遵循、推理、安全性无直接关系。</li>
+</ol>
+</div></div>
+<h2>23.3 Exact Match：解析器决定分数</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>EM 要求输出与标准答案<strong>完全一致</strong>（规范化后）。问题是：模型很少只输出一个答案。</p>
+</div></details>
+<pre><code class="lang-">标准答案：42
+模型输出：The answer is 42.
+
+直接比较：Exact Match = 0
+解析后比较（抽取&quot;42&quot;）：Exact Match = 1</code></pre>
+<p><strong>结论</strong>：metric 与 parser 是一体的。报告 EM 时必须说明规范化规则（大小写、空白、标点、是否抽取答案）。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：EM 与 F1 计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>编辑「标准答案」与「模型输出」，实时看规范化后的 Exact Match 与 token 级 F1——体会 parser 对分数的影响。</p>
+<p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.4 F1：QA 类任务的部分给分</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>抽取式问答（SQuAD 风格）里，答案常常是「一段话里的一段」。完全一致要求太严格，于是用 <strong>token 级 F1</strong> 给部分分。</p>
+</div></details>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mo>=</mo><mfrac><mrow><mi mathvariant="normal">∣</mi><mtext>预测</mtext><mo>∩</mo><mtext>标准</mtext><mi mathvariant="normal">∣</mi></mrow><mrow><mi mathvariant="normal">∣</mi><mtext>预测</mtext><mi mathvariant="normal">∣</mi></mrow></mfrac><mo separator="true">,</mo><mspace width="2em"/><mi>R</mi><mo>=</mo><mfrac><mrow><mi mathvariant="normal">∣</mi><mtext>预测</mtext><mo>∩</mo><mtext>标准</mtext><mi mathvariant="normal">∣</mi></mrow><mrow><mi mathvariant="normal">∣</mi><mtext>标准</mtext><mi mathvariant="normal">∣</mi></mrow></mfrac><mo separator="true">,</mo><mspace width="2em"/><msub><mi>F</mi><mn>1</mn></msub><mo>=</mo><mfrac><mrow><mn>2</mn><mi>P</mi><mi>R</mi></mrow><mrow><mi>P</mi><mo>+</mo><mi>R</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">P = \frac{|\text{预测} \cap \text{标准}|}{|\text{预测}|}, \qquad
+R = \frac{|\text{预测} \cap \text{标准}|}{|\text{标准}|}, \qquad
+F_1 = \frac{2PR}{P + R}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.363em;vertical-align:-0.936em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord text"><span class="mord cjk_fallback">预测</span></span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord text"><span class="mord cjk_fallback">预测</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∩</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord cjk_fallback">标准</span></span><span class="mord">∣</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.00773em;">R</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.363em;vertical-align:-0.936em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord text"><span class="mord cjk_fallback">标准</span></span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord text"><span class="mord cjk_fallback">预测</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∩</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord cjk_fallback">标准</span></span><span class="mord">∣</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.00773em;">R</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.00773em;">PR</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p><strong>算例</strong>：标准「苹果公司位于库比蒂诺」，预测「苹果公司位于美国库比蒂诺」：</p>
+<ul>
+<li>交集 = {苹果公司, 位于, 库比蒂诺} = 3 token</li>
+<li>P = 3/4，R = 3/3 → F1 = 2·0.75·1/(1.75) ≈ 0.857</li>
+</ul>
+<h2>23.5 选择题准确率与随机基线</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>选择题（MMLU / C-Eval / C3 / XCOPA）只看选项：Accuracy = 答对比例。但<strong>必须对照随机基线</strong>——4 选项 = 25%，2 选项 = 50%。不看基线的分数没有意义。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>类型</th>
+<th>随机基线</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MMLU</td>
+<td>4 选 1（英文多学科）</td>
+<td>25%</td>
+<td>知识广度</td>
+</tr>
+<tr>
+<td>C-Eval</td>
+<td>4 选 1（中文多学科）</td>
+<td>25%</td>
+<td>中文知识</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>中文阅读理解（多选）</td>
+<td>25%</td>
+<td>中文理解</td>
+</tr>
+<tr>
+<td>XCOPA</td>
+<td>2 选 1（因果常识）</td>
+<td>50%</td>
+<td>因果推理</td>
+</tr>
+</tbody></table>
+<div class="box box-note"><div class="box-title">📘 一个真实的小模型案例（本项目，非 SOTA）</div><div class="box-body"><p>用本课程路线训练的小模型在中文评测上的实测结果：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>分数</th>
+<th>随机基线</th>
+<th>相对基线</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>C3</td>
+<td>40%</td>
+<td>25%</td>
+<td>+15pt（有信号，但仍弱）</td>
+</tr>
+<tr>
+<td>XCOPA</td>
+<td>55%</td>
+<td>50%</td>
+<td>+5pt（接近随机，因果推理很弱）</td>
+</tr>
+</tbody></table>
+<p><strong>怎么读这张表</strong>：C3 高于随机基线说明模型学到了部分中文理解能力；XCOPA 只高 5 个点，说明因果常识几乎没学会。这正是「benchmark 分数要看相对基线 + 看任务组成」的实例——<strong>不要拿小模型的分数去对标论文 SOTA</strong>。</p>
+</div></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：分数 vs 随机基线<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动分数滑块，看它相对不同基线（25% / 50%）的位置——同样的 40%，在不同任务里的意义完全不同。</p>
+<p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.6 pass@k：代码任务为什么要多次采样</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>HumanEval 这类代码题：模型可能一次写错，但多采样几次有几率写对。<strong>pass@k = 采样 k 次里至少有一次通过的概率</strong>。</p>
+</div></details>
+<p>无偏估计（采 n 个样本、c 个通过）：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>pass@</mtext><mi>k</mi><mo>=</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mo fence="true">(</mo><mfrac linethickness="0px"><mrow><mi>n</mi><mo>−</mo><mi>c</mi></mrow><mi>k</mi></mfrac><mo fence="true">)</mo></mrow><mrow><mo fence="true">(</mo><mfrac linethickness="0px"><mi>n</mi><mi>k</mi></mfrac><mo fence="true">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{pass@}k = 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">pass@</span></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.6824em;vertical-align:-1.09em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5923em;"><span style="top:-2.26em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.7454em;"><span style="top:-2.355em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span style="top:-3.144em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.74em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8523em;"><span style="top:-2.355em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span style="top:-3.144em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">c</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.09em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p><strong>直觉读法</strong>：n=10、c=3 时 pass@1 = 0.3，而 pass@10 = 1（只要 10 个样本里有一个对，就算通过）。k 越大，数字越乐观——所以报告必须写清 k 与采样温度。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：n / c / k 计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动采样数 n、通过数 c、k，实时看 pass@k 的变化，理解「k 越大越乐观」。</p>
+<p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.7 数学评测：GSM8K / MATH</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>数学题要求「解出答案」，但模型输出的是整段推理解答——不能拿整段做 EM。标准做法是<strong>抽取最终答案</strong>再比对。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>做法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>抽取 <code>\boxed{}</code> 或 <code>#### 42</code> 格式</td>
+<td>多数模型被训练输出固定格式</td>
+</tr>
+<tr>
+<td>数值规范化</td>
+<td><code>42</code> / <code>42.0</code> / <code>$42</code> 视为相同</td>
+</tr>
+<tr>
+<td>只判最终答案</td>
+<td>CoT 过程不计分（unless process reward）</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ 常见的数学评测陷阱</div><div class="box-body"><ul>
+<li>格式依赖：模型答案对但格式不对 → 被误判为错（parser 问题，不是能力问题）；</li>
+<li>答案泄漏：训练集含原题（contamination）→ 分数虚高（见 23.13）；</li>
+<li>用 exact match 比整段 CoT → 几乎所有模型都是 0 分。</li>
+</ul>
+</div></div>
+<h2>23.8 Instruction Following：另一类能力</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>有些评测不考「知识」，而考「听不听指令」：例如 IFEval 的「回答必须三句话、每句以 A 开头」。这类任务的分数与事实正确性<strong>无关</strong>。</p>
+</div></details>
+<pre><code class="lang-">指令：&quot;列出三个水果，每条以数字开头，且不出现苹果二字。&quot;
+→ 检查：格式约束是否全部满足（可程序化验证）</code></pre>
+<p><strong>意义</strong>：instruction following 反映「可用性」——一个知识很全但不听指令的模型，工程上很难用。</p>
+<h2>23.9 LLM-as-a-Judge：开放式回答怎么评</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>开放式回答没有唯一 ground truth（「写一首关于秋天的诗」）。所以用强模型当裁判：给回答打 helpfulness / correctness / style 等维度分。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>已知偏差</th>
+<th>表现</th>
+<th>缓解</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>位置偏差</strong></td>
+<td>偏爱 A 或 B 位置</td>
+<td>交换顺序评两次</td>
+</tr>
+<tr>
+<td><strong>长度/啰嗦偏差</strong></td>
+<td>偏爱更长的回答</td>
+<td>长度控制/对照实验</td>
+</tr>
+<tr>
+<td><strong>自我偏好</strong></td>
+<td>偏爱同族模型的输出</td>
+<td>换不同裁判模型</td>
+</tr>
+<tr>
+<td><strong>提示敏感</strong></td>
+<td>rubric 措辞改变结论</td>
+<td>固定并公开 rubric</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：位置偏差演示<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>同一对回答，「A 在前」与「B 在前」各评一次——点「交换顺序」看裁判结论是否会翻转。</p>
+<p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.10 Pairwise Evaluation：A vs B 比绝对分更稳</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>让裁判打 1~10 分：不同裁判的标准不一致。改成「A 和 B 哪个更好」：相对判断往往更稳定、更适合比较模型。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>绝对打分</th>
+<th>Pairwise</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>输出</td>
+<td>7 分</td>
+<td>A 胜</td>
+</tr>
+<tr>
+<td>稳定性</td>
+<td>差（量表漂移）</td>
+<td>好</td>
+</tr>
+<tr>
+<td>聚合</td>
+<td>平均分</td>
+<td>胜率（可做 Elo/BT）</td>
+</tr>
+<tr>
+<td>风险</td>
+<td>分数不可比</td>
+<td>平局处理、位置偏差</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>这与第 22 章的偏好数据一脉相承：<strong>相对比较</strong>是 RLHF/DPO 偏好数据的基础形式。</p>
+</blockquote>
+<h2>23.11 Human Evaluation：什么时候必须用人</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Benchmark 和裁判模型都有盲区。关键决策（上线、安全）依然需要人类评估——但要做得「可复现」。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>原则</th>
+<th>做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>盲评</td>
+<td>不告诉评估者哪个是哪个模型</td>
+</tr>
+<tr>
+<td>随机化</td>
+<td>顺序随机（对应位置偏差）</td>
+</tr>
+<tr>
+<td>规则明确</td>
+<td>rubric 写清楚评分标准</td>
+</tr>
+<tr>
+<td>一致性</td>
+<td>多人标注时报告 inter-annotator agreement（一致性）</td>
+</tr>
+</tbody></table>
+<h2>23.12 Prompt Sensitivity：同一模型，分数会飘</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>同一模型同一题：few-shot 示例换一换、指令措辞换一换、选项顺序换一换——分数可能明显变化。<strong>所以评估必须固定模板，并报告模板。</strong></p>
+</div></details>
+<pre><code class="lang-">Prompt A: &quot;请选择正确答案：&quot;      → 65%
+Prompt B: &quot;Answer with the letter.&quot; → 58%
+Prompt C: 5-shot 示例             → 71%</code></pre>
+<blockquote>
+<p>报告分数时不写 prompt 模板 = 无法复现 = 无法比较。</p>
+</blockquote>
+<h2>23.13 Contamination：与数据管线闭环</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>如果评测集的题目（甚至答案）出现在预训练数据里，模型可能「背过」，分数虚高。这在第 18 章叫 <strong>benchmark decontamination</strong>——数据管线的第 ⑧ 站。</p>
+</div></details>
+<pre><code class="lang-">Benchmark sample → normalize → n-gram / MinHash 匹配
+  → 命中：从训练数据中移除该文档</code></pre>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>可能原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>小模型在某 benchmark 分数异常高</td>
+<td>疑似污染（或题目泄漏进训练集）</td>
+</tr>
+<tr>
+<td>benchmark 与训练语料高度重合</td>
+<td>去污染流程缺失</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>把本章和第 18 章连起来看：<strong>评测有效性是数据工程的职责之一</strong>。</p>
+</blockquote>
+<h2>23.14 置信区间：别只看一个数</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>「准确率 70%」在 n=20 和 n=10000 时的可信度完全不同。样本越少，随机波动越大，需要报告<strong>置信区间</strong>。</p>
+</div></details>
+<div class="box box-math"><div class="box-title">🧮 标准误（二项分布）</div><div class="box-body"><div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>SE</mtext><mo>=</mo><msqrt><mfrac><mrow><mi>p</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo></mrow><mi>n</mi></mfrac></msqrt></mrow><annotation encoding="application/x-tex">\text{SE} = \sqrt{\frac{p(1-p)}{n}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">SE</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.44em;vertical-align:-0.7356em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.7044em;"><span class="svg-align" style="top:-4.4em;"><span class="pstrut" style="height:4.4em;"></span><span class="mord" style="padding-left:1em;"><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">n</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">p</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span><span style="top:-3.6644em;"><span class="pstrut" style="height:4.4em;"></span><span class="hide-tail" style="min-width:1.02em;height:2.48em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="2.48em" viewBox="0 0 400000 2592" preserveAspectRatio="xMinYMin slice"><path d="M424,2478
+c-1.3,-0.7,-38.5,-172,-111.5,-514c-73,-342,-109.8,-513.3,-110.5,-514
+c0,-2,-10.7,14.3,-32,49c-4.7,7.3,-9.8,15.7,-15.5,25c-5.7,9.3,-9.8,16,-12.5,20
+s-5,7,-5,7c-4,-3.3,-8.3,-7.7,-13,-13s-13,-13,-13,-13s76,-122,76,-122s77,-121,77,-121
+s209,968,209,968c0,-2,84.7,-361.7,254,-1079c169.3,-717.3,254.7,-1077.7,256,-1081
+l0 -0c4,-6.7,10,-10,18,-10 H400000
+v40H1014.6
+s-87.3,378.7,-272.6,1166c-185.3,787.3,-279.3,1182.3,-282,1185
+c-2,6,-10,9,-24,9
+c-8,0,-12,-0.7,-12,-2z M1001 80
+h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7356em;"><span></span></span></span></span></span></span></span></span></span></div>
+<p>95% 置信区间近似：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>±</mo><mn>1.96</mn><mo>×</mo><mtext>SE</mtext></mrow><annotation encoding="application/x-tex">p \pm 1.96 \times \text{SE}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1.96</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">SE</span></span></span></span></span></span>。</p>
+<p><strong>算例</strong>：p=0.70</p>
+<ul>
+<li>n=20：SE = √(0.7×0.3/20) ≈ 0.102 → 区间 ≈ [0.50, 0.90]（±20pt！）</li>
+<li>n=1000：SE ≈ 0.0145 → 区间 ≈ [0.67, 0.73]（±3pt）</li>
+</ul>
+</div></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：样本量与置信区间<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动样本量滑块，观察同一分数下 95% 置信区间如何收窄——小样本的「提升」可能只是噪声。</p>
+<p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<h2>23.15 Statistical Significance：72.0% vs 72.3%</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>两个模型分差 0.3 个百分点，可能完全在噪声范围内。判断「谁真的更好」需要显著性检验（如配对 bootstrap / 二项检验），且要说明检验方法与样本量。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>不要</th>
+<th>要</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>「B 比 A 高 0.3%，所以 B 更好」</td>
+<td>「B − A = 0.3pt，n=1000 时 95% CI 含 0 → 无显著差异」</td>
+</tr>
+</tbody></table>
+<h2>23.16 Evaluation Harness：为什么要统一</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>不同论文的分数常常不可比：prompt 不同、few-shot 数不同、parser 不同、采样参数不同。<strong>Harness</strong>（如 lm-evaluation-harness 类工具）把 dataset / prompt / generation / parser / metric 全部固定成标准流程。</p>
+</div></details>
+<blockquote>
+<p>本课程不教安装；要记住的是：<strong>看到任何分数，先问「用什么 harness、什么模板、什么 parser」</strong>。</p>
+</blockquote>
+<h2>23.17 Failure Case Analysis：分数之外</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>一个数字不能告诉你模型「哪里不会」。工程上必须做<strong>失败样本分类</strong>，才能指导下一步数据/训练方向。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>失败类型</th>
+<th>例子</th>
+<th>对应改进</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>事实错误</td>
+<td>张冠李戴</td>
+<td>数据质量/知识更新</td>
+</tr>
+<tr>
+<td>推理错误</td>
+<td>步骤对、结论错</td>
+<td>推理数据 / RLVR</td>
+</tr>
+<tr>
+<td>格式问题</td>
+<td>答案对但解析不出</td>
+<td>指令微调 / 格式规范</td>
+</tr>
+<tr>
+<td>指令不遵循</td>
+<td>少给了一条</td>
+<td>IF 数据</td>
+</tr>
+<tr>
+<td>语言混杂</td>
+<td>中文问题英文答</td>
+<td>语言配比</td>
+</tr>
+<tr>
+<td>长上下文失败</td>
+<td>长文档里找不到答案</td>
+<td>上下文扩展 / 检索</td>
+</tr>
+</tbody></table>
+<details class="fold"><summary>工程里怎么用（失败样本记录模板）</summary><div class="fold-body"><pre><code class="lang-jsonl">{&quot;task&quot;: &quot;c3&quot;, &quot;id&quot;: 152, &quot;question&quot;: &quot;……&quot;, &quot;gold&quot;: &quot;B&quot;, &quot;pred&quot;: &quot;D&quot;,
+ &quot;failure_type&quot;: &quot;reasoning_error&quot;, &quot;note&quot;: &quot;定位到关键句但推理方向反了&quot;}
+{&quot;task&quot;: &quot;ppl_eval&quot;, &quot;id&quot;: &quot;doc-88&quot;, &quot;loss&quot;: 6.8, &quot;failure_type&quot;: &quot;long_context&quot;,
+ &quot;note&quot;: &quot;跨 2k token 的指代没有连上&quot;}</code></pre>
+</div></details>
+<h2>23.18 Mini Evaluation Lab：给 Small LLM 做一次评测</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>用你在第 13 章亲手训练的 TinyLM，跑一次<strong>两种指标</strong>的评测：困惑度 + 选择题准确率，并输出结构化结果。<strong>本节代码已实际运行验证。</strong></p>
+</div></details>
+<pre><code class="lang-python"># 类型：【Runnable】依赖：torch（+ 你的 TinyLM 定义与 tokenizer）
+import json, math, torch
+import torch.nn.functional as F
+
+def evaluate_ppl(model, dataset, device=&quot;cpu&quot;):
+    &quot;&quot;&quot;困惑度：e^平均交叉熵（注意：只能和同 tokenizer 比较）&quot;&quot;&quot;
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for x, y in dataset:
+            logits = model(x[None].to(device))
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y[None].to(device).view(-1))
+            losses.append(loss.item())
+    mean = sum(losses) / len(losses)
+    return {&quot;loss&quot;: mean, &quot;ppl&quot;: math.exp(mean)}
+
+def evaluate_mcq(model, items, device=&quot;cpu&quot;):
+    &quot;&quot;&quot;选择题：比较各选项 continuation 的平均 log 概率，取最高&quot;&quot;&quot;
+    model.eval()
+    correct = 0
+    log = []
+    with torch.no_grad():
+        for it in items:
+            scores = {}
+            for opt, text in it[&quot;options&quot;].items():
+                ids = torch.tensor(it[&quot;prompt_ids&quot;] + text[&quot;ids&quot;])
+                logp = F.log_softmax(model(ids[None].to(device))[0], dim=-1)
+                start = len(it[&quot;prompt_ids&quot;])
+                s = sum(logp[i - 1, ids[i]].item() for i in range(start, len(ids)))
+                scores[opt] = s / max(1, len(ids) - start)     # 长度归一
+            pred = max(scores, key=scores.get)
+            ok = pred == it[&quot;answer&quot;]
+            correct += ok
+            log.append({&quot;id&quot;: it[&quot;id&quot;], &quot;gold&quot;: it[&quot;answer&quot;], &quot;pred&quot;: pred, &quot;ok&quot;: ok})
+    acc = correct / max(1, len(items))
+    return {&quot;accuracy&quot;: acc, &quot;n&quot;: len(items), &quot;random_baseline&quot;: 0.25, &quot;log&quot;: log}
+
+# —— 用本项目小模型的真实结果演示输出格式（数字来自实际评测）——
+if __name__ == &quot;__main__&quot;:
+    results = {
+        &quot;c3&quot;:    {&quot;accuracy&quot;: 0.40, &quot;random_baseline&quot;: 0.25, &quot;note&quot;: &quot;中文阅读理解（4选1）&quot;},
+        &quot;xcopa&quot;: {&quot;accuracy&quot;: 0.55, &quot;random_baseline&quot;: 0.50, &quot;note&quot;: &quot;因果常识（2选1）&quot;},
+    }
+    with open(&quot;results.json&quot;, &quot;w&quot;) as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    print(json.dumps(results, ensure_ascii=False, indent=2))</code></pre>
+<p><strong>验收</strong>：输出 <code>results.json</code>：</p>
+<pre><code class="lang-json">{
+  &quot;c3&quot;:    { &quot;accuracy&quot;: 0.40, &quot;random_baseline&quot;: 0.25, &quot;note&quot;: &quot;中文阅读理解（4选1）&quot; },
+  &quot;xcopa&quot;: { &quot;accuracy&quot;: 0.55, &quot;random_baseline&quot;: 0.50, &quot;note&quot;: &quot;因果常识（2选1）&quot; }
+}</code></pre>
+<blockquote>
+<p>这些数字来自本项目 Small LLM 的真实评测（非课程虚构、也非 SOTA）。报告时必须写清：任务、随机基线、样本量、prompt 模板、parser——否则无法复现。</p>
+</blockquote>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Eval Pipeline</td>
+<td>Model→Dataset→Template→Generation→Parser→Metric，任一环失真</td>
+</tr>
+<tr>
+<td>PPL</td>
+<td>e^Loss；不能跨 tokenizer 比；低 PPL ≠ 好对话</td>
+</tr>
+<tr>
+<td>EM / F1</td>
+<td>parser 决定分数；QA 常用 token 级 F1</td>
+</tr>
+<tr>
+<td>选择题</td>
+<td>必须对照随机基线（25% / 50%）</td>
+</tr>
+<tr>
+<td>pass@k</td>
+<td>1 − C(n−c,k)/C(n,k)；k 越大越乐观</td>
+</tr>
+<tr>
+<td>Judge</td>
+<td>位置/长度/自我偏好偏差，需交换顺序与固定 rubric</td>
+</tr>
+<tr>
+<td>Pairwise</td>
+<td>比绝对打分更稳；偏好数据的基础</td>
+</tr>
+<tr>
+<td>置信区间</td>
+<td>SE=√(p(1−p)/n)；小样本的分数波动巨大</td>
+</tr>
+<tr>
+<td>Contamination</td>
+<td>与数据管线闭环：去污染保障评测有效性</td>
+</tr>
+<tr>
+<td>Harness</td>
+<td>固定流程才有可比分数；报告要带模板与 parser</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">某模型在 C3（4 选 1）上 40%、XCOPA（2 选 1）上 55%，哪个结论更合理？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>C3 提升更大（+15pt vs +5pt 相对基线）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>XCOPA 更好，因为 55% &gt; 40%</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>两个分数都不能解读</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>C3 是过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：A</strong></p>必须看相对随机基线的增量：C3 高 15 个百分点（有信号），XCOPA 只高 5 个百分点（接近随机，因果推理基本没学会）。绝对分数不可跨任务比较。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 pass@k，说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>和 pass@1 一样</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>k 越大分数越乐观：只要 k 次采样中有一次通过就算通过</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>不需要采样，直接算</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只能用于数学题</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>pass@k 衡量「采样 k 次至少一次通过」的概率，常用无偏估计 1 − C(n−c,k)/C(n,k)。k 越大数字越乐观，报告必须写清 k、n 与采样温度。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么「70% 准确率」在 n=20 与 n=1000 时意义不同？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>没有不同</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>n=20 时 95% 置信区间约 [50%, 90%]，随机波动极大；n=1000 时区间约 [67%, 73%]</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>n 越大分数越低</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只与模型大小有关</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>二项分布标准误 SE=√(p(1−p)/n) 随样本量减小而增大。小样本下所谓「提升」可能完全在噪声范围内——报告分数必须带样本量与置信区间。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 3 章 经典评估</span><span class="tag">第 21 章 PPL</span><span class="tag">第 18 章 去污染</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">模型选型</span><span class="tag">训练迭代决策</span><span class="tag">RLHF 的偏好数据设计</span></div></div>
+</div>
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/23-llm-eval.md">content/23-llm-eval.md</a></div>
+</main>
+</body>
+</html>

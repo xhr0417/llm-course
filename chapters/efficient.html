@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>训练显存、混合精度与 LoRA · 大模型知识体系</title>
-<meta name="description" content="显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/INT8/INT4、混合精度与 loss scaling、梯度累积、激活检查点、LoRA。">
+<meta name="description" content="显存构成、FP32/FP16/BF16、混合精度与 loss scaling、梯度累积、激活检查点、LoRA。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/efficient.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -31,8 +31,8 @@
   <a href="../index.html#/efficient">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/efficient">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 17 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">训练显存、混合精度与 LoRA</h1><p class="chapter-desc">显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/INT8/INT4、混合精度与 loss scaling、梯度累积、激活检查点、LoRA。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
+<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="data-pipeline.html">Pretraining Data Engineering：从网页到 Training Batch →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/efficient">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 17 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">训练显存、混合精度与 LoRA</h1><p class="chapter-desc">显存构成、FP32/FP16/BF16、混合精度与 loss scaling、梯度累积、激活检查点、LoRA。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《3.1 大模型工程专题》后半部分。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
@@ -149,18 +149,19 @@
 </ul>
 <p>现在很多 GPU（A100、H100、H800）上的大模型训练大量使用 BF16。</p>
 <h2>17.3 Mixed Precision：混合精度训练 ★</h2>
-<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>前向反向用低精度（省显存、用 Tensor Core 加速），但参数更新必须用高精度（否则微小更新会被舍入成 0）。所以维护一份 FP32 的「主权重」，更新后再转回低精度使用。</p>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>前向反向用低精度（省显存、用 Tensor Core 加速），但<strong>参数更新</strong>可能需要更高精度的累加，否则学习率很小时更新会被舍入成 0。具体怎么存参数，取决于框架与精度策略——本节把「经典模型」和「现代实践」分开讲。</p>
 </div></details>
-<h3>配置</h3>
-<pre><code class="lang-">Forward            → FP16 / BF16
-Backward           → FP16 / BF16
-Master weights     → FP32
-Optimizer states   → FP32</code></pre>
-<h3>逐项拆解（为什么需要 master weights）</h3>
-<p>假设学习率 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>η</mi><mo>=</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\eta = 10^{-5}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span></span></span></span>，某参数 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>=</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">w = 0.5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span></span>。更新量：</p>
+<h3>经典 mixed precision 模型（FP16 时代）</h3>
+<p>这是理解 mixed precision 的<strong>经典教学模型</strong>（以早期 FP16 训练为代表）：</p>
+<pre><code class="lang-">Forward            → FP16
+Backward           → FP16（梯度也是 FP16）
+Master weights     → FP32（额外保存一份高精度参数）
+Optimizer states   → FP32
+Loss scaling       → GradScaler 放大 loss，防止 FP16 梯度下溢</code></pre>
+<p><strong>为什么需要 master weights？</strong> 假设学习率 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>η</mi><mo>=</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\eta = 10^{-5}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span></span></span></span>，某参数 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>=</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">w = 0.5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span></span>，更新量：</p>
 <div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>w</mi><mo>=</mo><mi>η</mi><mo>⋅</mo><mi>g</mi><mo>≈</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\Delta w = \eta \cdot g \approx 10^{-5}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6389em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6776em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">g</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span></span></span></span></div>
-<p>FP16 在 0.5 附近的精度（最小间隔）约为 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mrow><mo>−</mo><mn>11</mn></mrow></msup><mo>≈</mo><mn>4.9</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow><annotation encoding="application/x-tex">2^{-11} \approx 4.9 \times 10^{-4}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">11</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">4.9</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span></span></span></span></span>——<strong>比更新量大一个数量级</strong>。如果直接在 FP16 上更新，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>+</mo><mi mathvariant="normal">Δ</mi><mi>w</mi></mrow><annotation encoding="application/x-tex">w + \Delta w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span> 会被舍入回 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi></mrow><annotation encoding="application/x-tex">w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span>，模型「学不动」。</p>
-<h3>数字算例</h3>
+<p>FP16 在 0.5 附近的精度（最小间隔）约为 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mrow><mo>−</mo><mn>11</mn></mrow></msup><mo>≈</mo><mn>4.9</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow><annotation encoding="application/x-tex">2^{-11} \approx 4.9 \times 10^{-4}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">11</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">4.9</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span></span></span></span></span>——<strong>比更新量大一个数量级</strong>。如果直接在 FP16 上原地更新，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>+</mo><mi mathvariant="normal">Δ</mi><mi>w</mi></mrow><annotation encoding="application/x-tex">w + \Delta w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span> 会被舍入回 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi></mrow><annotation encoding="application/x-tex">w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span>，模型「学不动」。所以在 FP32 副本上累加更新，再转成 FP16 供前向使用。</p>
+<h3>数字算例小结</h3>
 <table>
 <thead>
 <tr>
@@ -179,31 +180,62 @@ Optimizer states   → FP32</code></pre>
 <td>约 6×10⁻⁸</td>
 <td>✅ 精确累加</td>
 </tr>
-<tr>
-<td>BF16 直接更新（w=0.5）</td>
-<td>约 4×10⁻³</td>
-<td>❌ 更糟</td>
-</tr>
 </tbody></table>
-<details class="fold"><summary>工程里怎么用（PyTorch AMP）</summary><div class="fold-body"><pre><code class="lang-python">scaler = torch.cuda.amp.GradScaler()   # FP16 需要，BF16 通常不需要
+<p><strong>16 / 18 bytes per parameter 都只是「明确假设下的估算」</strong>——见 17.4 节的口径说明框。</p>
+<details class="fold"><summary>工程里怎么用（FP16 训练：需要 GradScaler）</summary><div class="fold-body"><pre><code class="lang-python"># 类型：【Skeleton】需要 GPU
+scaler = torch.amp.GradScaler(&quot;cuda&quot;)      # FP16 必须：放大 loss，防止梯度下溢
 
+for x, y in loader:
+    with torch.autocast(device_type=&quot;cuda&quot;, dtype=torch.float16):
+        logits = model(x)
+        loss = loss_fn(logits, y)
+    scaler.scale(loss).backward()          # 放大梯度
+    scaler.step(optimizer)                 # 先 unscale，再 step（内部处理 inf/nan）
+    scaler.update()
+    optimizer.zero_grad()</code></pre>
+</div></details>
+<h3>现代实践：BF16 / torch.amp</h3>
+<p>BF16 的指数范围与 FP32 相同，<strong>通常不需要 GradScaler</strong>：</p>
+<details class="fold"><summary>工程里怎么用（BF16 训练：常见写法）</summary><div class="fold-body"><pre><code class="lang-python"># 类型：【Skeleton】需要 GPU
 for x, y in loader:
     with torch.autocast(device_type=&quot;cuda&quot;, dtype=torch.bfloat16):
         logits = model(x)
         loss = loss_fn(logits, y)
-    scaler.scale(loss).backward()      # 放大 loss 防止梯度下溢
-    scaler.step(optimizer)
-    scaler.update()
+    loss.backward()                        # 直接 backward，无需 scaler
+    optimizer.step()
     optimizer.zero_grad()</code></pre>
 </div></details>
-<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
-<li><strong>混合精度不是「全部用低精度」</strong>：主权重和优化器状态保持 FP32。</li>
-<li><strong>BF16 通常不需要 GradScaler</strong>（范围够大）；FP16 必须用，否则梯度容易下溢成 0。</li>
-<li><strong>低精度计算 + 高精度更新</strong>才是完整方案，缺一不可。</li>
-</ul>
+<div class="box box-warning"><div class="box-title">⚠️ 不要把一个「简化结构」当成所有框架的事实</div><div class="box-body"><p>「一份 BF16 参数 + 一份额外 FP32 参数」是<strong>经典 FP16 时代教学模型</strong>的简化。实际存储取决于：</p>
+<table>
+<thead>
+<tr>
+<th>因素</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>优化器</td>
+<td>AdamW 可能内部维护 fp32 状态；有的优化器有 bf16 变体</td>
+</tr>
+<tr>
+<td>AMP 实现</td>
+<td><code>autocast</code> 只影响<strong>计算</strong>精度，不改变参数的存储位置</td>
+</tr>
+<tr>
+<td>FSDP / DeepSpeed</td>
+<td>参数分片、可能有独立的 master/optimizer 分片</td>
+</tr>
+<tr>
+<td>混合精度策略</td>
+<td>纯 bf16、fp16+master、fp8 等不同方案</td>
+</tr>
+</tbody></table>
+<p>所以：<strong>「参数是否有一份独立的 FP32 master」取决于实现</strong>，不要默认所有混合精度训练都严格等于某个固定字节数。</p>
 </div></div>
-<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：混合精度训练为什么需要 FP32 master weights？</strong></p>
-<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>低精度格式在参数附近的表示精度有限，小学习率下更新量（如 1e-5）可能小于该格式的最小间隔，导致更新被舍入为 0、模型学不动。用 FP32 保存主权重做累加更新，再转成 BF16/FP16 供前向使用，兼顾显存效率与数值精度。</p>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：混合精度训练为什么需要 FP32 master weights？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>在<strong>经典 FP16 训练</strong>里，FP16 在参数附近的表示精度有限，小学习率下的更新量（如 1e-5）可能小于其最小间隔，更新被舍入为 0、模型学不动；用 FP32 副本累加更新再转 FP16 供前向，兼顾显存效率与数值精度。注意：这是 FP16 时代的典型方案；现代 BF16 训练与不同框架的具体存储方式可能不同（BF16 范围大，通常不需要 loss scaling；master weights 取决于 optimizer/FSDP/DeepSpeed 的实现）。</p>
+</div></details><p><strong>Q2：BF16 为什么通常不需要 GradScaler？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>GradScaler 是为 FP16 设计的：FP16 指数位少（5 位），小梯度容易下溢成 0，所以放大 loss 让梯度进入可表示范围。BF16 指数位与 FP32 相同（8 位），动态范围足够，梯度不易下溢，因此通常直接 backward 即可。</p>
 </div></details></div></div>
 <h2>17.4 训练显存估算 ★</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练时显存里不只有权重，还有梯度、优化器状态（Adam 的 m 和 v）、激活值、临时缓冲。所以「模型文件 14GB」绝不等于「训练只要 14GB 显存」。</p>
@@ -399,8 +431,14 @@ for micro_step, (x, y) in enumerate(loader):
 </tr>
 </tbody></table>
 <h3>开关二：激活检查点（Activation Checkpointing / 梯度检查点）</h3>
-<p>反向传播需要前向的中间激活，而这些激活是显存大头。做法：<strong>前向只保存少数「检查点」激活，反向时从检查点重算需要的中间值</strong>。</p>
-<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>激活显存</mtext><mo>≈</mo><mi>O</mi><mo stretchy="false">(</mo><msqrt><mi>L</mi></msqrt><mo stretchy="false">)</mo><mo>∼</mo><mi>O</mi><mo stretchy="false">(</mo><mn>1</mn><mo stretchy="false">)</mo><mtext> （取决于策略）</mtext><mo separator="true">,</mo><mspace width="2em"/><mtext>额外计算</mtext><mo>≈</mo><mo>+</mo><mn>30</mn><mi mathvariant="normal">%</mi><mtext> 前向</mtext></mrow><annotation encoding="application/x-tex">\text{激活显存} \approx O(\sqrt{L}) \sim O(1) \text{ （取决于策略）}, \qquad \text{额外计算} \approx +30\% \text{ 前向}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">激活显存</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.2255em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9755em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal">L</span></span></span><span style="top:-2.9355em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p><strong>正常训练</strong>：前向时把每层的中间激活（activation）都存下来，反向传播时直接拿来用——省计算，但激活非常吃显存。
+<strong>激活检查点</strong>：前向只保存<strong>少量边界激活</strong>，其余中间结果用完即弃；反向传播时，对每个检查点区间<strong>重新执行一次前向</strong>，把需要的中间值算回来。</p>
+</div></details>
+<pre><code class="lang-">正常：      Forward → 保存全部 activation → Backward 直接使用
+Checkpoint：Forward → 只保存边界 activation → 丢弃中间结果
+           Backward → 重新执行对应区间的 forward → 得到中间值 → 继续反传</code></pre>
+<p><strong>核心 trade-off</strong>：<strong>更少的激活显存 ↔ 更多的重计算（时间）</strong>。粒度越粗（检查点区间的层数越多），保存得越少、重算得越多。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 不要把它写成固定的复杂度或固定百分比</div><div class="box-body"><p>你可能会看到「激活显存 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mi>O</mi><mo stretchy="false">(</mo><msqrt><mi>L</mi></msqrt><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\approx O(\sqrt{L})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1767em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9267em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal">L</span></span></span><span style="top:-2.8867em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
 c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
 c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
 c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
@@ -411,10 +449,29 @@ c5.3,-9.3,12,-14,20,-14
 H400000v40H845.2724
 s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
 c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
-M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.0645em;"><span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∼</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord">1</span><span class="mclose">)</span><span class="mord text"><span class="mord"> </span><span class="mord cjk_fallback">（取决于策略）</span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord cjk_fallback">额外计算</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.0833em;"></span><span class="mord">+</span><span class="mord">30%</span><span class="mord text"><span class="mord"> </span><span class="mord cjk_fallback">前向</span></span></span></span></span></span></div>
-<pre><code class="lang-python"># PyTorch 一行开关
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1133em;"><span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>」「重算开销约 +30%」这类说法——它们成立需要非常具体的假设（如均匀层、只检查每 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msqrt><mi>L</mi></msqrt></mrow><annotation encoding="application/x-tex">\sqrt{L}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.04em;vertical-align:-0.1133em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9267em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal">L</span></span></span><span style="top:-2.8867em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1133em;"><span></span></span></span></span></span></span></span></span></span> 层、反向只重算一次前向等），<strong>不能当作普遍事实</strong>。实际表现取决于：</p>
+<ul>
+<li>checkpoint 策略与粒度（每层？每几层？只对 attention 还是整个 block？）</li>
+<li>模型结构与深度、序列长度</li>
+<li>GPU（计算余量 vs 显存余量）</li>
+<li>框架实现（<code>torch.utils.checkpoint</code> / FSDP 内建支持 / Megatron 的方案）</li>
+</ul>
+<p>所以本节只给出<strong>定性结论</strong>：它用「重算时间」换「激活显存」；收益与代价都需要在具体配置下实测。</p>
+</div></div>
+<pre><code class="lang-python"># 类型：【Skeleton】需要模型与输入
 from torch.utils.checkpoint import checkpoint
-h = checkpoint(block, x, use_reentrant=False)   # 用重算换显存</code></pre>
+h = checkpoint(block, x, use_reentrant=False)   # 该 block 的中间激活不再全部保存</code></pre>
 <table>
 <thead>
 <tr>
@@ -426,17 +483,17 @@ h = checkpoint(block, x, use_reentrant=False)   # 用重算换显存</code></pre
 <tbody><tr>
 <td>省的显存</td>
 <td>激活（按 micro-batch 计）</td>
-<td>激活（按层计）</td>
+<td>激活（按被检查的区间计）</td>
 </tr>
 <tr>
 <td>代价</td>
 <td>时间几乎不变，<strong>等效 batch 变小</strong></td>
-<td><strong>多约 30% 计算</strong>（HFU ↑）</td>
+<td><strong>重算带来的时间开销</strong>（随粒度变化，需实测）</td>
 </tr>
 <tr>
 <td>常用场景</td>
 <td>batch 太大装不下</td>
-<td>序列长 / 层数深</td>
+<td>序列长 / 层数深 / 显存紧</td>
 </tr>
 </tbody></table>
 <blockquote>
@@ -673,7 +730,7 @@ model.print_trainable_parameters()
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">LoRA 中 B 矩阵初始化为 0 的目的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加速训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>保证训练开始时 ΔW = 0，不破坏预训练模型</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>减少参数量</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>ΔW = BA，若 B 初始为 0 则初始更新为 0，模型从原始行为开始平稳训练。A 通常用高斯随机初始化。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="basics.html">梯度下降</a><span class="tag">优化器状态</span><a class="tag" href="efficient.html">显存估算</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">指令微调</span><span class="tag">QLoRA</span><span class="tag">多适配器部署</span><span class="tag">分布式训练</span></div></div>
 </div>
-<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-efficient.md">content/13-efficient.md</a></div>
+<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="data-pipeline.html">Pretraining Data Engineering：从网页到 Training Batch →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-efficient.md">content/13-efficient.md</a></div>
 </main>
 </body>
 </html>

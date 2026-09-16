@@ -56,7 +56,7 @@ TinyLM（第 12 章）──→ [Lab 9] 预训练循环 ──→ ckpt.pt
                                             │
                        [Lab 14] DPO / GRPO 小实验</code></pre>
 <h2>Lab 8：准备数据集</h2>
-<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把原始文本变成「一个巨大的 token 数组」。LLM 数据集的本质就这么简单——复杂的是清洗和配比（第 18 章）。</p>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把原始文本变成「一个巨大的 token 数组」。LLM 数据集的本质就这么简单——复杂的是清洗和配比（第 21 章）。</p>
 </div></details>
 <pre><code class="lang-python">import numpy as np
 from tokenizers import Tokenizer
@@ -108,10 +108,10 @@ class TokenDataset(torch.utils.data.Dataset):
         x = torch.from_numpy(self.data[i:i+self.seq_len].astype(&quot;int64&quot;))
         y = torch.from_numpy(self.data[i+1:i+1+self.seq_len].astype(&quot;int64&quot;))
         return x, y</code></pre>
-<div class="box box-warning"><div class="box-title">⚠️ 文档边界问题</div><div class="box-body"><p>直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 <code>&lt;|endoftext|&gt;</code> 分隔并在 loss 上跳过边界，要么按文档 packing（第 18 章）。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 文档边界问题</div><div class="box-body"><p>直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 <code>&lt;|endoftext|&gt;</code> 分隔并在 loss 上跳过边界，要么按文档 packing（第 21 章）。</p>
 </div></div>
 <h2>Lab 9：预训练</h2>
-<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把第 11 章的五步循环 + 第 18 章将学的 warmup/decay 组合成一个<strong>完整的、可断点续训的</strong>训练脚本。</p>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把第 11 章的五步循环 + 第 21 章将学的 warmup/decay 组合成一个<strong>完整的、可断点续训的</strong>训练脚本。</p>
 </div></details>
 <pre><code class="lang-python">import math, time, torch, torch.nn.functional as F
 
@@ -320,7 +320,7 @@ print(f&quot;val loss {loss:.4f}  ppl {ppl:.1f}&quot;)</code></pre>
 <tr>
 <td>PPL = e^loss</td>
 <td>平均「犹豫多少个候选」</td>
-<td>只能和同 tokenizer 比（第 18 章）</td>
+<td>只能和同 tokenizer 比（第 21 章）</td>
 </tr>
 <tr>
 <td>采样目测</td>
@@ -525,9 +525,9 @@ c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
 <p><strong>另一个隐藏成本</strong>：KV Cache 每步要从显存读取 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi><mo>×</mo><mi>d</mi><mo>×</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">t \times d \times 2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6984em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">t</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2</span></span></span></span></span> 个元素，长上下文时 decode 往往受<strong>显存带宽</strong>限制（见第 15 章 Roofline）。缓存大小 = <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mi>L</mi><mo>×</mo><mi>H</mi><mo>×</mo><msub><mi>d</mi><mi>h</mi></msub><mo>×</mo><mi>n</mi><mo>×</mo><mtext>bytes</mtext></mrow><annotation encoding="application/x-tex">2 \times L \times H \times d_h \times n \times \text{bytes}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.08125em;">H</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">h</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">bytes</span></span></span></span></span></span>（第 10 章公式，<code>kv-cache</code> 演示的估算器可复核）。</p>
 </div></div>
 <h2>Lab 13：SFT（让模型学会「回答问题」）</h2>
-<details class="fold" open><summary>目标</summary><div class="fold-body"><p>在预训练模型上做指令微调：数据换成「指令-回答」对，损失只算回答部分（第 18 章 Loss Mask 原理）。</p>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>在预训练模型上做指令微调：数据换成「指令-回答」对，损失只算回答部分（第 21 章 Loss Mask 原理）。</p>
 </div></details>
-<pre><code class="lang-python"># ① 构造 SFT 数据（格式 = 第 18 章的 chat template）
+<pre><code class="lang-python"># ① 构造 SFT 数据（格式 = 第 21 章的 chat template）
 data = [
     {&quot;instruction&quot;: &quot;把下面的话翻译成英文：我爱编程。&quot;, &quot;response&quot;: &quot;I love programming.&quot;},
     {&quot;instruction&quot;: &quot;3 + 5 等于几？&quot;, &quot;response&quot;: &quot;3 + 5 = 8。&quot;},
@@ -637,7 +637,7 @@ print(&quot;SFT 前:&quot;, before)
 print(&quot;SFT 后:&quot;, after)</code></pre>
 </div></details>
 <h2>Lab 14：DPO / GRPO 小实验</h2>
-<details class="fold" open><summary>目标</summary><div class="fold-body"><p>在 mini 模型上体验一次偏好优化（第 19 章完整原理）。DPO 用「更好/更差」回答对直接优化模型；GRPO 用「同一问题采样一组 + 组内比较」。</p>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>在 mini 模型上体验一次偏好优化（第 22 章完整原理）。DPO 用「更好/更差」回答对直接优化模型；GRPO 用「同一问题采样一组 + 组内比较」。</p>
 </div></details>
 <h3>DPO：用偏好对直接训练</h3>
 <p><strong>数据约定</strong>：一条偏好样本 = 同一 prompt 的两个回答（chosen 更好 / rejected 更差）。tokenize 时沿用 SFT 的规则：prompt 部分 label 为 −100，只对回答算 log 概率。<strong>本节代码已实际运行验证</strong>（与手算结果逐位一致）。</p>
@@ -681,7 +681,7 @@ def dpo_loss(policy, ref, batch, beta=0.1):
 </ul>
 </div></div>
 <h3>GRPO：同一问题采样一组，组内比较</h3>
-<p>以下为<strong>算法伪代码</strong>（不保证直接运行，完整原理见第 19 章）：</p>
+<p>以下为<strong>算法伪代码</strong>（不保证直接运行，完整原理见第 22 章）：</p>
 <pre><code class="lang-python"># 【Pseudo-code】算法示意
 for prompt in prompts:
     responses = [sample(model, prompt) for _ in range(G)]     # 采样 G 个回答
@@ -734,9 +734,9 @@ for prompt in prompts:
 <p><strong>接下来往哪走</strong>：第 14 章（Scaling Laws，决定怎么配置训练）→ 第 15 章（GPU 基础，理解为什么慢）→ 第 16 章（分布式，把规模放大）。</p>
 </div></div>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Lab 8 用 uint16 存 token 的前提是什么？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>文本是英文</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>词表大小 &lt; 65536（uint16 的表示范围）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>序列长度小于 512</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>训练数据小于 2GB</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>uint16 最大 65535。vocab 32000 能放下，比 int32 省一半磁盘和 IO。若词表超过 65535 需换 uint32。</div></details></div>
-<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">SFT 训练时 prompt 部分的 label 设为 -100 的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加快训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>在 cross_entropy 中忽略该位置，只对回答部分计算损失</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>标记特殊 token</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PyTorch 的 cross_entropy 用 ignore_index=-100 跳过这些位置。这保证模型学习「如何回答」而不是「复述问题」（第 18 章 Loss Mask）。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">SFT 训练时 prompt 部分的 label 设为 -100 的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加快训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>在 cross_entropy 中忽略该位置，只对回答部分计算损失</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>标记特殊 token</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PyTorch 的 cross_entropy 用 ignore_index=-100 跳过这些位置。这保证模型学习「如何回答」而不是「复述问题」（第 21 章 Loss Mask）。</div></details></div>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">KV Cache 为什么能在推理时带来加速？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>它减少了模型的参数量</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>它避免了历史 token 的 K/V 投影与完整前向重算；新 token 仍需对全部历史 K 做注意力（该部分随上下文线性增长）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>它使用更低的精度</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>它跳过了 softmax</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>无缓存时每生成一步都要对整个前缀做完整 Transformer 前向；缓存后只做新 token 的计算。注意：注意力分数仍需与全部历史 K 计算（每步 O(t·d)），并非「每 token O(1)」。代价是显存随序列增长。</div></details></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 12 章 组件篇</span><span class="tag">第 9 章 生成</span><span class="tag">第 10 章 KV Cache</span><span class="tag">第 18 章 Loss Mask</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 14 章 Scaling Laws</span><span class="tag">第 17 章 显存</span><span class="tag">第 19 章 Post-training</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 12 章 组件篇</span><span class="tag">第 9 章 生成</span><span class="tag">第 10 章 KV Cache</span><span class="tag">第 21 章 Loss Mask</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 14 章 Scaling Laws</span><span class="tag">第 17 章 显存</span><span class="tag">第 22 章 Post-training</span></div></div>
 </div>
 <div class="static-nav"><a href="build-llm-1.html">← Build Your Own Small LLM（上）：组件篇</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="scaling-laws.html">Scaling Laws 与算力：为什么这样配置训练 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-build-llm-2.md">content/13-build-llm-2.md</a></div>
 </main>

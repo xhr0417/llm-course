@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Scaling Laws 与算力：为什么这样配置训练 · 大模型知识体系</title>
-<meta name="description" content="参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。">
+<meta name="description" content="参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/scaling-laws.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="build-llm-2.html">← Build Your Own Small LLM（下）：训练篇</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="gpu.html">GPU Fundamentals：从 SM 到 Roofline →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/scaling-laws">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 14 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">Scaling Laws 与算力：为什么这样配置训练</h1><p class="chapter-desc">参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 14 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">Scaling Laws 与算力：为什么这样配置训练</h1><p class="chapter-desc">参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章定位</strong>：Scale 主线开篇。回答一个现实问题：<strong>给定预算（GPU 数量 × 时间），模型开多大、数据喂多少，才是最优的？</strong> 这是从「会训模型」到「会配置训练」的关键一跃，也是 CS336 的核心前置之一。</p>

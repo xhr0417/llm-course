@@ -1,24 +1,26 @@
-> **本章对应课件**：全站总纲（2026 升级版）。建议先花 15 分钟读完本章，建立全局地图，再进入具体章节。本课程的战略目标是：**中文交互式 LLM 教材 + Stanford CS336 前置能力**。
+> **本章对应课件**：全站总纲（第二批更新版）。建议先花 15 分钟读完本章，建立全局地图，再进入具体章节。本课程定位：**中文交互式 LLM 教材 + Stanford CS336 前置能力**。
 
-## 0.1 五段式学习路线
+## 0.1 完整学习路线（六段式）
 
 :::unfold 先懂直觉
-这套课程讲一条完整的产业链：**理解模型原理 → 亲手构建模型 → 扩展规模 → 服务推理 → 对齐人类偏好**。每一段都有明确的「学完能做什么」。
+这套课程讲一条完整的产业链：**理解模型原理 → 亲手构建模型 → 扩展规模（数据/算力/GPU/内核/分布式）→ 服务推理 → 对齐偏好 → 评估验证**。每一段都有明确的「学完能做什么」。
 :::
 
 ```
-① Understand 理解          ② Build 构建            ③ Scale 扩展
-数学/ML/DL 基础              PyTorch 工具箱            Scaling Laws 算力规划
-Tokenizer / BPE              RMSNorm / RoPE / Attention GPU 基础与 Roofline
-Transformer / GPT            完整 TinyLM 训练           分布式训练（DDP/ZeRO/TP/PP）
-现代架构（RoPE/GQA/SwiGLU）  评估 / 生成 / SFT          训练显存与高效微调
-                                                      数据管线 / FlashAttention（即将）
+① Understand 理解         ② Build 构建              ③ Scale 扩展
+数学/ML/DL 基础            PyTorch 工具箱             Scaling Laws 算力规划
+Tokenizer / BPE            RMSNorm / RoPE / Attention  GPU 基础与 Roofline
+Transformer / GPT          完整 TinyLM 训练            分布式训练（DDP/ZeRO/TP/PP）
+现代架构（RoPE/GQA）       评估 / 生成 / SFT / DPO     训练显存与高效微调
+                                                      Pretraining Data Engineering
+                                                      FlashAttention + Triton
 
-④ Serve 服务               ⑤ Align 对齐
-推理系统（prefill/decode）   Pretrain → SFT
-KV Cache / 连续批处理        Preference Data / RM / DPO
-vLLM / 分页注意力             PPO / GRPO / RLVR
-                             LLM Evaluation（即将）
+④ Serve 服务              ⑤ Train & Align 对齐       ⑥ Evaluate 评估
+Prefill / Decode          Pretrain → SFT             PPL / EM / F1 / pass@k
+Continuous Batching       Preference / RM / DPO      MMLU / C-Eval / GSM8K
+PagedAttention            PPO / GRPO / RLVR          LLM-as-a-Judge / 置信区间
+Prefix Cache / 投机解码                               Contamination / 失败分析
+vLLM / SGLang
 ```
 
 :::demo pipeline 交互：训练完整流水线
@@ -31,84 +33,103 @@ $$
 \text{输入} \rightarrow \text{Tokenizer} \rightarrow \text{Embedding} \rightarrow \text{Transformer} \rightarrow \text{Logits} \rightarrow \text{Softmax} \rightarrow P(\text{next token})
 $$
 
-## 0.2 章节地图与学习顺序
+## 0.2 课程分层：哪些必须先学，哪些可以边学边补
+
+:::warning 重要：不要把 CS336 全部内容当成「前置」
+本课程按三层组织。**只有 Core Prerequisite 是真正的「开始前必备」**；其余可以在学习/使用过程中逐步补齐。
+:::
+
+| 层 | 内容 | 定位 |
+| --- | --- | --- |
+| 🟢 **Core Prerequisite** | 1-10 章（数学/深度学习/Transformer/GPT/Tokenizer）+ 11-13 章（PyTorch + 从零搭 Small LM） | **真正的前置**：学完即可进入 CS336 级别的课程 |
+| 🔵 **CS336 Bridge** | 14 Scaling Laws · 15 GPU · 16 Distributed · 17 显存 · 18 Data Pipeline · 19 FlashAttention/Triton · 23 Evaluation | 让 CS336 学起来更顺：这些话题会在课程中反复用到 |
+| 🟣 **Systems Extension** | 20 Inference Systems（以及未来的 vLLM/SGLang/profiling 深入） | 走向工程/系统方向：**不是开始 CS336 的必要条件** |
+
+**阅读建议**：
+- 目标是「看懂训练与原理」→ 优先 1-17 章 + 18 章；
+- 目标是「做推理服务」→ 再加 20 章；
+- 目标是「做模型评测」→ 重点 3、21、23 章。
+
+## 0.3 章节地图
 
 | 阶段 | 章节 | 核心产出 |
 | --- | --- | --- |
-| **准备** | 0 知识地图 | 全局路线 |
-| **① 理解** | 1-4 基础 · 5-6 序列/NLP · 7-10 架构 | 能推导 Attention、说清新旧架构演化 |
-| **② 构建** | 11 PyTorch · 12 组件篇 · 13 训练篇 | **亲手训练出一个小 LLM** |
-| **③ 扩展** | 14 Scaling Laws · 15 GPU · 16 分布式 · 17 显存 | 能配置训练、判断瓶颈、选择并行方案 |
-| **④ 服务** | （推理系统，下一批上线） | 理解 prefill/decode、KV Cache、批处理 |
-| **⑤ 对齐** | 18 Pretrain/SFT · 19 Post-training | 走完 Pretrain → SFT → DPO/GRPO |
+| 准备 | 0 知识地图 | 全局路线 + 分层 |
+| ① 理解 | 1-4 基础 · 5-6 序列/NLP · 7-10 架构 | 能推导 Attention、说清新旧架构演化 |
+| ② 构建 | 11 PyTorch · 12-13 Build Small LLM | **亲手训练出一个小 LLM** |
+| ③ 扩展 | 14 Scaling · 15 GPU · 16 分布式 · 17 显存 · 18 数据管线 · 19 FlashAttention | 能配置训练、判断瓶颈、写出数据管线、理解 IO 优化 |
+| ④ 服务 | 20 推理系统 | 解释 prefill/decode、PagedAttention、continuous batching |
+| ⑤ 对齐 | 21 Pretrain/SFT · 22 PPO/GRPO | 走完 Pretrain → SFT → DPO/GRPO |
+| ⑥ 评估 | 23 LLM Evaluation | 读懂 benchmark 分数、做失败分析、跑评测 Lab |
 
-## 0.3 五段式的「学完能做什么」
+## 0.4 学完能回答的问题（验收清单）
 
 :::key 能力里程碑
-| 学完 | 你应该能够 |
+| 学完 | 你应该能够回答 |
 | --- | --- |
-| ① 理解（0-10 章） | 白板推导 Attention(Q,K,V)；解释 RoPE/GQA/RMSNorm/SwiGLU 解决什么问题 |
-| ② 构建（11-13 章） | 从零写 RMSNorm/RoPE/Attention/Block/LM；跑通预训练 + SFT + DPO 小实验 |
-| ③ 扩展（14-17 章） | 用 6ND 估算算力与时间；判断算子是 memory/compute bound；为显存瓶颈选并行方案 |
-| ④ 服务 | 解释 TTFT/TPOT；说清 PagedAttention 为什么能提高吞吐 |
-| ⑤ 对齐 | 画出 Pretrain → SFT → RM → PPO/GRPO 全景图；实现 DPO loss |
+| ① 理解 | 「白板推导 Attention(Q,K,V)」「RoPE/GQA/RMSNorm/SwiGLU 各解决什么问题」 |
+| ② 构建 | 「从零写出 RMSNorm/RoPE/Attention/Block/LM 并跑通训练」 |
+| ③ 扩展 | 「用 6ND 估算算力」「判断算子瓶颈」「为显存瓶颈选并行方案」「一篇网页怎么变成 training batch」「FlashAttention 为什么没改变数学结果却更快」 |
+| ④ 服务 | 「为什么 prefill/decode 是两个阶段」「为什么 vLLM 要 PagedAttention 和 Continuous Batching」 |
+| ⑤ 对齐 | 「画出 Pretrain → SFT → RM → PPO/GRPO 全景」「实现 DPO loss」 |
+| ⑥ 评估 | 「为什么 benchmark 不能只看 accuracy」「contamination / prompt / parser 如何影响分数」 |
 :::
 
-## 0.4 每个知识点的组织方式（图文并茂）
+## 0.5 每个知识点的组织方式（图文并茂）
 
 重要知识点按统一模板展开，并尽量配图：
 
 ```
-问题 → 直觉 → 例子 → 定义 → 公式（逐项拆解）→ Shape
+问题 → 直觉 → 例子 → 定义 → 公式（逐项拆解）→ Shape / 时间线 / 存储
 → 数值算例 → 结构图/曲线 → 代码 → 工程意义
 → Trade-off → 误区 → 面试题 → Quiz
 ```
 
 | 组件 | 形态 | 示例 |
 | --- | --- | --- |
-| 直觉/数学/工程 | 可折叠三级块 | 每节开头 |
-| Shape 流 | 图形化张量维度 | `[B,S,d] × [d,d'] → [B,S,d']` |
-| 交互演示 | 可拖拽/点击的实时计算 | 51+ 个（见各章 🎮） |
-| 结构图 | HTML/CSS 静态图 | GPU 存储层次、并行布局 |
-| 曲线图 | Canvas 绘制 | isoFLOP 曲线、Roofline |
+| 交互演示 | 可拖拽/点击的实时计算与动画 | 79 个（数据管线 / MinHash / 打包 / online softmax / serving 模拟器…） |
+| 结构图 | HTML/CSS 静态图 | GPU 存储层次、并行布局、分页 KV |
+| 曲线图 | Canvas 绘制 | isoFLOP、Roofline、置信区间、GPU 时间线 |
 | 面试题 | 折叠答案 | 第 7 章 39 题速查 |
 | 测验 | 点击判定 + 解析 | 每章 4~9 题 |
 
-## 0.5 主线优先级（对照 CS336）
+## 0.6 Systems 正确性守则（全站纪律）
+
+:::warning 五类性能结论必须分开表达
+1. **Compute Complexity**（如 $O(S^2 d)$）
+2. **Memory Capacity**（如 KV Cache GB）
+3. **Memory / HBM I/O**（搬了多少数据）
+4. **Communication**（GPU 间传了多少）
+5. **Wall-clock Performance**（实测 ms / tokens/s）
+
+**禁止**：把「FLOPs 更少」直接等同「跑得更快」；把「显存更少」等同「IO 更少」；
+把 attention 的复杂度当成整个 Transformer 的复杂度；把教学模拟值写成真实 benchmark。
+:::
+
+| 数字类型 | 标记方式 |
+| --- | --- |
+| A. 数学结果 | 可推导验证（如 6ND、Ring AllReduce 通信量） |
+| B. 公开硬件/论文事实 | 注明型号与条件（如 A100 BF16 312 TFLOPS dense） |
+| C. 教学模拟假设 | 页面显式标注「教学模拟」 |
+
+## 0.7 主线优先级
 
 | 优先级 | 内容 | 状态 |
 | --- | --- | --- |
-| P0（最高） | Transformer fundamentals、手写实现、Scaling Laws、GPU、分布式、推理系统、评测 | 大部分已上线 |
-| P1 | MoE、长上下文、推理模型、量化 | 规划中 |
-| P2（选修专题，不抢主线） | RAG、Agent、MCP、多模态、安全、Prompt 工程 | 暂不展开 |
-
-:::warning 学习路线的常见错误
-- **跳着只看「热点名词」**（RAG/Agent）——它们建立在本课程主线之上；
-- **只看不写**——② 构建阶段的 14 个 Lab 必须亲手跑；
-- **背公式不理解瓶颈**——③ 扩展阶段的核心是「用系统视角看模型」，Roofline 和显存账是硬功夫。
-:::
-
-## 0.6 建议的学习节奏
-
-| 周 | 内容 | 检查点 |
-| --- | --- | --- |
-| 第 1 周 | 0-4 章（基础） | 能白板推导反向传播与 Softmax 梯度 |
-| 第 2 周 | 5-7 章（序列 + Transformer） | 完成第 7 章 39 题自测 |
-| 第 3 周 | 8-10 章（BERT/GPT/现代架构） | 说清 5 组架构演化 |
-| 第 4-5 周 | 11-13 章（构建） | **跑出自己训练的 TinyLM 生成文本** |
-| 第 6 周 | 14-16 章（扩展） | 用计算器估算一次训练预算；画出并行方案 |
-| 第 7 周 | 17-19 章（显存/对齐） | 完成 DPO 小实验 |
+| P0 | Transformer、手写实现、Scaling Laws、GPU、分布式、数据管线、FlashAttention、推理系统、评测 | ✅ 已上线 |
+| P1 | MoE、长上下文、推理模型（Reasoning）、系统化量化 | 规划中 |
+| P2（选修专题） | RAG、Agent、MCP、多模态、安全、Prompt 工程 | 暂不展开 |
 
 :::quiz
-本课程的五段式主线是？
+本课程的分层中，下面哪一项**不是**开始 CS336 前的必要前置？
 
-A. 理解 → 构建 → 扩展 → 服务 → 对齐
-B. 入门 → 进阶 → 精通 → 实战 → 面试
-C. 数学 → 代码 → 论文 → 复现 → 部署
-D. 模型 → 数据 → 训练 → 评测 → 上线
+A. 从零搭 Small LM（第 12-13 章）
+B. Transformer 原理（第 7 章）
+C. 推理服务系统（第 20 章）
+D. PyTorch 基础（第 11 章）
 
-答案: A
-解析: 课程按 Understand → Build → Scale → Serve → Align 组织，每段都有明确的能力里程碑。
+答案: C
+解析: 课程分三层：Core Prerequisite（1-13 章）是真正前置；CS336 Bridge（14-19、23 章）可边学边补；Systems Extension（20 章推理系统）是走向系统方向的后续内容，不是开始 CS336 的必要条件。
 :::
 
 :::related

@@ -2,7 +2,7 @@
 >
 > 说明：偏好数据、Reward Model 与 **DPO 的最小可运行实现**见第 13 章 Lab 14（Build 训练篇）；本章聚焦 PPO / GRPO 的算法核心。
 
-## 19.1 为什么 SFT 后还要 RL
+## 22.1 为什么 SFT 后还要 RL
 
 :::unfold 先懂直觉
 SFT 教模型「照着示范做」，但没有告诉它「哪个回答更好」。同一个问题可以有很多正确回答，人类偏好的是其中更有帮助、更安全、更准确的那些。RL 就是用奖励信号去优化这个「更好」。
@@ -22,7 +22,7 @@ RLHF → PPO → GRPO
 
 > 一句话：**SFT 是模仿，RL 是优化偏好。**
 
-## 19.2 PPO 和 GRPO 的结构差异 ★
+## 22.2 PPO 和 GRPO 的结构差异 ★
 
 :::unfold 先懂直觉
 PPO 需要额外训练一个「价值模型」来估计每个状态值多少钱（baseline），显存和工程复杂度都高。GRPO 发现：同一道题采样多个回答，互相比较就能得到 baseline——不需要价值模型。
@@ -64,7 +64,7 @@ PPO 需要 Value Model 来估计基线（baseline）以降低方差；GRPO 用�
 :::
 :::
 
-## 19.3 Group Relative Advantage ★
+## 22.3 Group Relative Advantage ★
 
 :::unfold 先懂直觉
 把同一道题的所有回答当成一个班，考得比班平均分高的加分，低于平均分的减分。奖励的绝对值不重要，重要的是在组内的相对位置。
@@ -129,7 +129,7 @@ GAE 用 Value Model 估计的 V(s) 做基线，逐 token 计算优势（考虑�
 :::
 :::
 
-## 19.4 Policy Ratio ★
+## 22.4 Policy Ratio ★
 
 :::unfold 先懂直觉
 更新时不能盲目乐观：要用「新策略给这个回答的概率 ÷ 旧策略给的概率」来衡量这次更新让模型改变了多少。这个比值就是 ratio。
@@ -162,7 +162,7 @@ $$
 拖动 π_old、π_new、advantage 和 ε，实时看 ratio 的计算、clip 区间的位置，以及目标函数曲线在 clip 边界变平的过程。
 :::
 
-## 19.5 为什么需要 Clip ★
+## 22.5 为什么需要 Clip ★
 
 :::unfold 先懂直觉
 如果某个回答 reward 特别高，模型可能一次把它的概率从 0.01 拉到 0.9——步子太大，训练崩掉。Clip 就是把单次更新的幅度限制在 ±20% 以内。
@@ -209,7 +209,7 @@ $$
 :::
 :::
 
-## 19.6 KL Divergence ★
+## 22.6 KL Divergence ★
 
 :::unfold 先懂直觉
 KL 衡量两个概率分布「差多远」。RL 训练时用它约束模型别为了拿奖励而跑得太偏——跑太偏会语言退化、钻奖励空子（reward hacking）。
@@ -288,7 +288,7 @@ kl = torch.exp(log_ratio) - log_ratio - 1
 :::
 :::
 
-## 19.7 GRPO 的目标函数 ★
+## 22.7 GRPO 的目标函数 ★
 
 :::unfold 先懂直觉
 GRPO 的目标可以读成一句话：**在「不跑偏」的前提下，提高好回答的概率、降低坏回答的概率，且每次别改太多。**
@@ -329,7 +329,7 @@ $$
 - **长度归一化容易被忽略**：不同回答长度不同，除以 $|o_i|$ 避免长回答主导。
 :::
 
-## 19.8 On-policy 与 Off-policy
+## 22.8 On-policy 与 Off-policy
 
 **On-policy**：数据就是当前 policy 刚生成的。
 
@@ -345,7 +345,7 @@ current policy → rollout → reward → update current policy
 每轮用当前 policy 采样 group，更新后这批数据就作废（或只做少量 epoch），需要重新采样。这也是 GRPO 训练成本高的原因之一：采样（推理）和训练交替进行。
 :::
 
-## 19.9 Reward Model 从哪里来
+## 22.9 Reward Model 从哪里来
 
 | 来源 | 例子 | 适用 |
 | --- | --- | --- |
@@ -357,7 +357,7 @@ current policy → rollout → reward → update current policy
 
 GRPO 本身**不强制** reward 一定是哪一种。这也是它流行的重要原因：在数学、代码等**可验证任务**上，可以直接用规则 reward，省掉 Reward Model。
 
-## 19.10 本章总结
+## 22.10 本章总结
 
 :::key 本节必须记住
 | 概念 | 一句话 |

@@ -72,62 +72,95 @@ $$
 ## 17.3 Mixed Precision：混合精度训练 ★
 
 :::unfold 先懂直觉
-前向反向用低精度（省显存、用 Tensor Core 加速），但参数更新必须用高精度（否则微小更新会被舍入成 0）。所以维护一份 FP32 的「主权重」，更新后再转回低精度使用。
+前向反向用低精度（省显存、用 Tensor Core 加速），但**参数更新**可能需要更高精度的累加，否则学习率很小时更新会被舍入成 0。具体怎么存参数，取决于框架与精度策略——本节把「经典模型」和「现代实践」分开讲。
 :::
 
-### 配置
+### 经典 mixed precision 模型（FP16 时代）
+
+这是理解 mixed precision 的**经典教学模型**（以早期 FP16 训练为代表）：
 
 ```
-Forward            → FP16 / BF16
-Backward           → FP16 / BF16
-Master weights     → FP32
+Forward            → FP16
+Backward           → FP16（梯度也是 FP16）
+Master weights     → FP32（额外保存一份高精度参数）
 Optimizer states   → FP32
+Loss scaling       → GradScaler 放大 loss，防止 FP16 梯度下溢
 ```
 
-### 逐项拆解（为什么需要 master weights）
-
-假设学习率 $\eta = 10^{-5}$，某参数 $w = 0.5$。更新量：
+**为什么需要 master weights？** 假设学习率 $\eta = 10^{-5}$，某参数 $w = 0.5$，更新量：
 
 $$
 \Delta w = \eta \cdot g \approx 10^{-5}
 $$
 
-FP16 在 0.5 附近的精度（最小间隔）约为 $2^{-11} \approx 4.9 \times 10^{-4}$——**比更新量大一个数量级**。如果直接在 FP16 上更新，$w + \Delta w$ 会被舍入回 $w$，模型「学不动」。
+FP16 在 0.5 附近的精度（最小间隔）约为 $2^{-11} \approx 4.9 \times 10^{-4}$——**比更新量大一个数量级**。如果直接在 FP16 上原地更新，$w + \Delta w$ 会被舍入回 $w$，模型「学不动」。所以在 FP32 副本上累加更新，再转成 FP16 供前向使用。
 
-### 数字算例
+### 数字算例小结
 
 | 场景 | 精度 | 能否表示 10⁻⁵ 的更新 |
 | --- | --- | --- |
 | FP16 直接更新（w=0.5） | 约 5×10⁻⁴ | ❌ 被舍入为 0 |
 | FP32 主权重（w=0.5） | 约 6×10⁻⁸ | ✅ 精确累加 |
-| BF16 直接更新（w=0.5） | 约 4×10⁻³ | ❌ 更糟 |
 
-:::fold 工程里怎么用（PyTorch AMP）
+**16 / 18 bytes per parameter 都只是「明确假设下的估算」**——见 17.4 节的口径说明框。
+
+:::fold 工程里怎么用（FP16 训练：需要 GradScaler）
 ```python
-scaler = torch.cuda.amp.GradScaler()   # FP16 需要，BF16 通常不需要
+# 类型：【Skeleton】需要 GPU
+scaler = torch.amp.GradScaler("cuda")      # FP16 必须：放大 loss，防止梯度下溢
 
 for x, y in loader:
-    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+    with torch.autocast(device_type="cuda", dtype=torch.float16):
         logits = model(x)
         loss = loss_fn(logits, y)
-    scaler.scale(loss).backward()      # 放大 loss 防止梯度下溢
-    scaler.step(optimizer)
+    scaler.scale(loss).backward()          # 放大梯度
+    scaler.step(optimizer)                 # 先 unscale，再 step（内部处理 inf/nan）
     scaler.update()
     optimizer.zero_grad()
 ```
 :::
 
-:::warning 常见误区
-- **混合精度不是「全部用低精度」**：主权重和优化器状态保持 FP32。
-- **BF16 通常不需要 GradScaler**（范围够大）；FP16 必须用，否则梯度容易下溢成 0。
-- **低精度计算 + 高精度更新**才是完整方案，缺一不可。
+### 现代实践：BF16 / torch.amp
+
+BF16 的指数范围与 FP32 相同，**通常不需要 GradScaler**：
+
+:::fold 工程里怎么用（BF16 训练：常见写法）
+```python
+# 类型：【Skeleton】需要 GPU
+for x, y in loader:
+    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        logits = model(x)
+        loss = loss_fn(logits, y)
+    loss.backward()                        # 直接 backward，无需 scaler
+    optimizer.step()
+    optimizer.zero_grad()
+```
+:::
+
+:::warning 不要把一个「简化结构」当成所有框架的事实
+「一份 BF16 参数 + 一份额外 FP32 参数」是**经典 FP16 时代教学模型**的简化。实际存储取决于：
+
+| 因素 | 影响 |
+| --- | --- |
+| 优化器 | AdamW 可能内部维护 fp32 状态；有的优化器有 bf16 变体 |
+| AMP 实现 | `autocast` 只影响**计算**精度，不改变参数的存储位置 |
+| FSDP / DeepSpeed | 参数分片、可能有独立的 master/optimizer 分片 |
+| 混合精度策略 | 纯 bf16、fp16+master、fp8 等不同方案 |
+
+所以：**「参数是否有一份独立的 FP32 master」取决于实现**，不要默认所有混合精度训练都严格等于某个固定字节数。
 :::
 
 :::interview 面试常问
-**Q：混合精度训练为什么需要 FP32 master weights？**
+**Q1：混合精度训练为什么需要 FP32 master weights？**
 
 :::answer
-低精度格式在参数附近的表示精度有限，小学习率下更新量（如 1e-5）可能小于该格式的最小间隔，导致更新被舍入为 0、模型学不动。用 FP32 保存主权重做累加更新，再转成 BF16/FP16 供前向使用，兼顾显存效率与数值精度。
+在**经典 FP16 训练**里，FP16 在参数附近的表示精度有限，小学习率下的更新量（如 1e-5）可能小于其最小间隔，更新被舍入为 0、模型学不动；用 FP32 副本累加更新再转 FP16 供前向，兼顾显存效率与数值精度。注意：这是 FP16 时代的典型方案；现代 BF16 训练与不同框架的具体存储方式可能不同（BF16 范围大，通常不需要 loss scaling；master weights 取决于 optimizer/FSDP/DeepSpeed 的实现）。
+:::
+
+**Q2：BF16 为什么通常不需要 GradScaler？**
+
+:::answer
+GradScaler 是为 FP16 设计的：FP16 指数位少（5 位），小梯度容易下溢成 0，所以放大 loss 让梯度进入可表示范围。BF16 指数位与 FP32 相同（8 位），动态范围足够，梯度不易下溢，因此通常直接 backward 即可。
 :::
 :::
 
@@ -232,23 +265,41 @@ for micro_step, (x, y) in enumerate(loader):
 
 ### 开关二：激活检查点（Activation Checkpointing / 梯度检查点）
 
-反向传播需要前向的中间激活，而这些激活是显存大头。做法：**前向只保存少数「检查点」激活，反向时从检查点重算需要的中间值**。
+:::unfold 先懂直觉
+**正常训练**：前向时把每层的中间激活（activation）都存下来，反向传播时直接拿来用——省计算，但激活非常吃显存。
+**激活检查点**：前向只保存**少量边界激活**，其余中间结果用完即弃；反向传播时，对每个检查点区间**重新执行一次前向**，把需要的中间值算回来。
+:::
 
-$$
-\text{激活显存} \approx O(\sqrt{L}) \sim O(1) \text{ （取决于策略）}, \qquad \text{额外计算} \approx +30\% \text{ 前向}
-$$
+```
+正常：      Forward → 保存全部 activation → Backward 直接使用
+Checkpoint：Forward → 只保存边界 activation → 丢弃中间结果
+           Backward → 重新执行对应区间的 forward → 得到中间值 → 继续反传
+```
+
+**核心 trade-off**：**更少的激活显存 ↔ 更多的重计算（时间）**。粒度越粗（检查点区间的层数越多），保存得越少、重算得越多。
+
+:::warning 不要把它写成固定的复杂度或固定百分比
+你可能会看到「激活显存 $\approx O(\sqrt{L})$」「重算开销约 +30%」这类说法——它们成立需要非常具体的假设（如均匀层、只检查每 $\sqrt{L}$ 层、反向只重算一次前向等），**不能当作普遍事实**。实际表现取决于：
+
+- checkpoint 策略与粒度（每层？每几层？只对 attention 还是整个 block？）
+- 模型结构与深度、序列长度
+- GPU（计算余量 vs 显存余量）
+- 框架实现（`torch.utils.checkpoint` / FSDP 内建支持 / Megatron 的方案）
+
+所以本节只给出**定性结论**：它用「重算时间」换「激活显存」；收益与代价都需要在具体配置下实测。
+:::
 
 ```python
-# PyTorch 一行开关
+# 类型：【Skeleton】需要模型与输入
 from torch.utils.checkpoint import checkpoint
-h = checkpoint(block, x, use_reentrant=False)   # 用重算换显存
+h = checkpoint(block, x, use_reentrant=False)   # 该 block 的中间激活不再全部保存
 ```
 
 | | 梯度累积 | 激活检查点 |
 | --- | --- | --- |
-| 省的显存 | 激活（按 micro-batch 计） | 激活（按层计） |
-| 代价 | 时间几乎不变，**等效 batch 变小** | **多约 30% 计算**（HFU ↑） |
-| 常用场景 | batch 太大装不下 | 序列长 / 层数深 |
+| 省的显存 | 激活（按 micro-batch 计） | 激活（按被检查的区间计） |
+| 代价 | 时间几乎不变，**等效 batch 变小** | **重算带来的时间开销**（随粒度变化，需实测） |
+| 常用场景 | batch 太大装不下 | 序列长 / 层数深 / 显存紧 |
 
 > **FP8 简报**：H100 起支持 FP8（E4M3/E5M2）训练，进一步减半显存与带宽需求，但需要缩放与兼容的 kernel 支持。它属于「前沿选项」——本节不展开，知道它存在即可。
 

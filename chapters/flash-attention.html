@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlashAttention 与 Triton：为什么 Attention 还能更快 · 大模型知识体系</title>
+<meta name="description" content="HBM vs SRAM、Tiling、Online Softmax、IO-aware 优化、FA1/FA2 演进、Triton 入门与 fused softmax。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/flash-attention.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 19 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/flash-attention">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="data-pipeline.html">← Pretraining Data Engineering：从网页到 Training Batch</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="inference.html">LLM Inference Systems：从 Prefill 到 vLLM / SGLang →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/flash-attention">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 19 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">FlashAttention 与 Triton：为什么 Attention 还能更快</h1><p class="chapter-desc">HBM vs SRAM、Tiling、Online Softmax、IO-aware 优化、FA1/FA2 演进、Triton 入门与 fused softmax。</p><p class="chapter-source">对应课件：LLM Systems（第二批新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：第二批第二模块（Kernel Bridge）。第 15 章建立了 Roofline 心智模型，本章是它的<strong>第一个真实案例</strong>：为什么 Attention 的数学没变、FLOPs 没少，却可以显著更快？</p>
+<p>前置：第 7 章（Attention 数学）、第 15 章（GPU 存储层次 / Roofline）。本章不重讲 Attention 数学，只回答「数据在哪、怎么搬」。</p>
+</blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测；CPU 可跑的部分均已实测）</li>
+<li>【Runnable on CUDA】需要 GPU（当前验证环境无 CUDA，已标注 NOT EXECUTED）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备环境</li>
+<li>【Pseudo-code】算法示意</li>
+</ul>
+</div></div>
+<h2>19.1 换一个视角：从「数学」到「数据在哪」</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>第 7 章我们问「Attention 的数学是什么」；本章问一个系统问题：<strong>这些矩阵算出来之后放在哪、从哪里读、往哪里写？</strong> 你会发现：标准实现的瓶颈不是乘加次数，而是<strong>HBM 的读写量</strong>。</p>
+</div></details>
+<p>回顾 Attention 三步（数学完全不变）：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>S</mi><mo>=</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi mathvariant="normal">⊤</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mi>P</mi><mo>=</mo><mtext>softmax</mtext><mo stretchy="false">(</mo><mi>S</mi><mo stretchy="false">)</mo><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mi>O</mi><mo>=</mo><mi>P</mi><mi>V</mi></mrow><annotation encoding="application/x-tex">S = \frac{QK^\top}{\sqrt{d_k}} \quad\Rightarrow\quad P = \text{softmax}(S) \quad\Rightarrow\quad O = PV</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4561em;vertical-align:-0.93em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5261em;"><span style="top:-2.2528em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8572em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-2.8172em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1828em;"><span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">⊤</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.93em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">softmax</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mclose">)</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span></span></span></span></span></div>
+<p><strong>新增的问题</strong>：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 是 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>S</mi><mrow><mi>l</mi><mi>e</mi><mi>n</mi></mrow></msub><mo>×</mo><msub><mi>S</mi><mrow><mi>l</mi><mi>e</mi><mi>n</mi></mrow></msub></mrow><annotation encoding="application/x-tex">S_{len} \times S_{len}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0576em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0576em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">n</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span> 的矩阵。在标准实现里，它被<strong>物化</strong>（materialize）到 HBM，然后 softmax 再读回来、写回去，再和 V 相乘……数据在 HBM 与计算单元之间来回搬运。</p>
+<div class="box box-math"><div class="box-title">🧮 先估算一下这个搬运量（教学量级估算）</div><div class="box-body"><p>设序列长度 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span>、head 维度 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi></mrow><annotation encoding="application/x-tex">d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span></span>，FP16（2 字节）：</p>
+<ul>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 矩阵大小：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>S</mi><mn>2</mn></msup><mo>×</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">S^2 \times 2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8974em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2</span></span></span></span></span> 字节；</li>
+<li>标准实现里它至少被「写一次 + 读多次」（softmax 读、PV 再读）→ 量级 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span> 的 HBM 流量（仅这一个中间矩阵）。</li>
+</ul>
+<p>对比：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Q</mi><mi mathvariant="normal">/</mi><mi>K</mi><mi mathvariant="normal">/</mi><mi>V</mi></mrow><annotation encoding="application/x-tex">Q/K/V</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">Q</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span></span></span></span></span> 的体量是 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>S</mi><mo>⋅</mo><mi>d</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S \cdot d)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span></span></span>。当 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi><mo>≫</mo><mi>d</mi></mrow><annotation encoding="application/x-tex">S \gg d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≫</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span></span>（长上下文常见），<strong><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>S</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">S^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span> 项完全主导</strong>——这就是问题所在。</p>
+</div></div>
+<h2>19.2 标准 Attention 的真实问题：HBM I/O</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>把标准 attention 的每个操作拆开看，你会看到「计算—写 HBM—读 HBM—计算—写 HBM」的反复横跳。</p>
+</div></details>
+<pre><code class="lang-">① S = QKᵀ          → 写出 S（S² 个元素）到 HBM
+② softmax(S)       → 从 HBM 读 S → 计算 → 把 P 写回 HBM
+③ O = P·V          → 从 HBM 读 P（和 V）→ 计算 → 写出 O</code></pre>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>S×S 中间矩阵物化</td>
+<td>显存占用 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>（长上下文直接爆）</td>
+</tr>
+<tr>
+<td>反复读写</td>
+<td>每一步都要把大矩阵搬进搬出 HBM</td>
+</tr>
+<tr>
+<td>算力闲置</td>
+<td>计算单元等数据——典型的 memory-bound（第 15 章）</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：数据搬运对比<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>对比「标准实现」与「分块融合」两条数据路径，看中间矩阵是否被写入 HBM、搬运量差多少（教学示意量级）。</p>
+<p><a class="static-link" href="../index.html#/flash-attention">在交互版中打开这个演示 →</a></p></div></div>
+<h2>19.3 HBM vs SRAM：第 15 章的 Roofline 终于用上了</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>GPU 的片上 SRAM（shared memory / register）带宽比 HBM 高一个数量级、容量小两个数量级。<strong>如果能让中间结果待在片上完成全部计算，就省掉了绝大部分 HBM 流量。</strong> 这正是 FlashAttention 的思路。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>存储</th>
+<th>容量（量级）</th>
+<th>带宽（量级）</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Register</td>
+<td>KB / SM</td>
+<td>最高</td>
+<td>计算直接使用</td>
+</tr>
+<tr>
+<td>Shared Memory / SRAM</td>
+<td>~百 KB / SM</td>
+<td>~10+ TB/s</td>
+<td>分块暂存</td>
+</tr>
+<tr>
+<td>HBM</td>
+<td>几十 GB</td>
+<td>~2 TB/s（A100）</td>
+<td>大矩阵的家</td>
+</tr>
+</tbody></table>
+<p><strong>Roofline 联系</strong>：朴素 Attention 的算术强度低（第 15 章表中「数 ~ 数十」），落在带宽墙上；分块融合把算术强度抬高，性能向上移动。</p>
+<h2>19.4 Tiling：分块计算</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>不一次算完整的 S×S。把 Q 切成行块（tile），K/V 切成列块，每次把小小的 block 载入 SRAM，算一小块结果并「累积」到输出里。中间结果<strong>从不写入 HBM</strong>。</p>
+</div></details>
+<pre><code class="lang-">for each Q_tile (在 SRAM 中):
+    for each K_tile, V_tile:
+        载入 SRAM → 算局部 scores → 更新 running 统计 → 累积到输出
+    输出 O_tile 写出 HBM（只写一次）</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：一块一块算 Attention<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点「下一步」观察 Q tile 如何逐个与 K/V tile 相乘、累积；高亮当前在 SRAM 中的块与被复用/丢弃的块。</p>
+<p><a class="static-link" href="../index.html#/flash-attention">在交互版中打开这个演示 →</a></p></div></div>
+<h2>19.5 Online Softmax：本章最难但必须讲懂的地方</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Softmax 需要<strong>全局</strong>最大值和<strong>全局</strong>指数和——但分块计算时我们只有一部分分数。Online softmax 的做法：<strong>边看边修</strong>——维护 running max 和 running sum，每来一个新块就更新它们，并<strong>按新 max 修正之前累积的结果</strong>。</p>
+</div></details>
+<h3>普通 softmax（一次看全）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>softmax</mtext><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false">)</mo><mo>=</mo><mfrac><msup><mi>e</mi><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><mi>m</mi></mrow></msup><mrow><munder><mo>∑</mo><mi>j</mi></munder><msup><mi>e</mi><mrow><msub><mi>x</mi><mi>j</mi></msub><mo>−</mo><mi>m</mi></mrow></msup></mrow></mfrac><mo separator="true">,</mo><mspace width="2em"/><mi>m</mi><mo>=</mo><munder><mrow><mi>max</mi><mo>⁡</mo></mrow><mi>j</mi></munder><msub><mi>x</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\text{softmax}(x_i) = \frac{e^{x_i - m}}{\sum_j e^{x_j - m}}, \qquad m = \max_j x_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">softmax</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.5701em;vertical-align:-1.1218em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4483em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.162em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4358em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7134em;"><span style="top:-3.0051em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3281em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2819em;"><span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">m</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3281em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">m</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.1218em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">m</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.2943em;vertical-align:-0.8638em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.4306em;"><span style="top:-2.3723em;margin-left:0em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span><span class="mop">max</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8638em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span></div>
+<h3>Online 版本（分块看）</h3>
+<p>维护三个量：running max <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi></mrow><annotation encoding="application/x-tex">m</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">m</span></span></span></span></span>、running denominator <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">ℓ</mi></mrow><annotation encoding="application/x-tex">\ell</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord">ℓ</span></span></span></span></span>、partial output <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>o</mi></mrow><annotation encoding="application/x-tex">o</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">o</span></span></span></span></span>。新块到来时：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub><mo>=</mo><mi>max</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>m</mi><mo separator="true">,</mo><mi>max</mi><mo>⁡</mo><mo stretchy="false">(</mo><mtext>block</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo><mo separator="true">,</mo><mspace width="2em"/><msub><mi mathvariant="normal">ℓ</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub><mo>=</mo><mi mathvariant="normal">ℓ</mi><mo>⋅</mo><msup><mi>e</mi><mrow><mi>m</mi><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup><mo>+</mo><munder><mo>∑</mo><mtext>block</mtext></munder><msup><mi>e</mi><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup></mrow><annotation encoding="application/x-tex">m_{new} = \max(m, \max(\text{block})), \qquad
+\ell_{new} = \ell \cdot e^{m - m_{new}} + \sum_{\text{block}} e^{x_i - m_{new}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">max</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">max</span><span class="mopen">(</span><span class="mord text"><span class="mord">block</span></span><span class="mclose">))</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord">ℓ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord">ℓ</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.9047em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8213em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.3521em;vertical-align:-1.3021em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8479em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">block</span></span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3021em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8213em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3281em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>o</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub><mo>=</mo><mi>o</mi><mo>⋅</mo><msup><mi>e</mi><mrow><mi>m</mi><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup><mo>+</mo><munder><mo>∑</mo><mtext>block</mtext></munder><msup><mi>e</mi><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup><msub><mi>v</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">o_{new} = o \cdot e^{m - m_{new}} + \sum_{\text{block}} e^{x_i - m_{new}} v_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">o</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.4445em;"></span><span class="mord mathnormal">o</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.9047em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8213em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.3521em;vertical-align:-1.3021em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8479em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">block</span></span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3021em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8213em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3281em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">v</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></div>
+<p><strong>关键</strong>：旧结果乘上修正因子 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mi>m</mi><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup></mrow><annotation encoding="application/x-tex">e^{m - m_{new}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7713em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>，等价于「用新 max 重新归一化」。</p>
+<h3>超小数值例子：scores = [1, 2] 与 [3, 4]</h3>
+<p><strong>标准 softmax（一次算）</strong>：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msup><mi>e</mi><mrow><mo stretchy="false">[</mo><mn>1</mn><mo separator="true">,</mo><mn>2</mn><mo separator="true">,</mo><mn>3</mn><mo separator="true">,</mo><mn>4</mn><mo stretchy="false">]</mo></mrow></msup><mo>=</mo><mo stretchy="false">[</mo><mn>2.718</mn><mo separator="true">,</mo><mtext> </mtext><mn>7.389</mn><mo separator="true">,</mo><mtext> </mtext><mn>20.09</mn><mo separator="true">,</mo><mtext> </mtext><mn>54.60</mn><mo stretchy="false">]</mo><mo separator="true">,</mo><mspace width="1em"/><mtext>sum</mtext><mo>=</mo><mn>84.79</mn></mrow><annotation encoding="application/x-tex">e^{[1,2,3,4]} = [2.718,\ 7.389,\ 20.09,\ 54.60], \quad \text{sum} = 84.79</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.938em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.938em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mopen mtight">[</span><span class="mord mtight">1</span><span class="mpunct mtight">,</span><span class="mord mtight">2</span><span class="mpunct mtight">,</span><span class="mord mtight">3</span><span class="mpunct mtight">,</span><span class="mord mtight">4</span><span class="mclose mtight">]</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">2.718</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">7.389</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">20.09</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">54.60</span><span class="mclose">]</span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord">sum</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">84.79</span></span></span></span></span></div>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>weights</mtext><mo>=</mo><mo stretchy="false">[</mo><mn>0.0321</mn><mo separator="true">,</mo><mtext> </mtext><mn>0.0871</mn><mo separator="true">,</mo><mtext> </mtext><mn>0.2369</mn><mo separator="true">,</mo><mtext> </mtext><mn>0.6439</mn><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">\text{weights} = [0.0321,\ 0.0871,\ 0.2369,\ 0.6439]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">weights</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">0.0321</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0.0871</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0.2369</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0.6439</span><span class="mclose">]</span></span></span></span></span></div>
+<p><strong>Online 分两块算</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>m</mi></mrow><annotation encoding="application/x-tex">m</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">m</span></span></span></span></span></th>
+<th><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">ℓ</mi></mrow><annotation encoding="application/x-tex">\ell</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord">ℓ</span></span></span></span></span></th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>看到块 1 = [1,2]</td>
+<td>2</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mn>1</mn><mo>−</mo><mn>2</mn></mrow></msup><mo>+</mo><msup><mi>e</mi><mrow><mn>2</mn><mo>−</mo><mn>2</mn></mrow></msup><mo>=</mo><mn>0.3679</mn><mo>+</mo><mn>1</mn><mo>=</mo><mn>1.3679</mn></mrow><annotation encoding="application/x-tex">e^{1-2} + e^{2-2} = 0.3679 + 1 = 1.3679</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8974em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mbin mtight">−</span><span class="mord mtight">2</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mbin mtight">−</span><span class="mord mtight">2</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.3679</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1.3679</span></span></span></span></span></td>
+<td>局部 max/sum</td>
+</tr>
+<tr>
+<td>看到块 2 = [3,4]</td>
+<td>4（更新）</td>
+<td>旧 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">ℓ</mi></mrow><annotation encoding="application/x-tex">\ell</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord">ℓ</span></span></span></span></span> 修正：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1.3679</mn><mo>×</mo><msup><mi>e</mi><mrow><mn>2</mn><mo>−</mo><mn>4</mn></mrow></msup><mo>=</mo><mn>0.1851</mn></mrow><annotation encoding="application/x-tex">1.3679 \times e^{2-4} = 0.1851</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1.3679</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mbin mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.1851</span></span></span></span></span>；加新块：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.1851</mn><mo>+</mo><mo stretchy="false">(</mo><mn>0.3679</mn><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo><mo>=</mo><mn>1.5530</mn></mrow><annotation encoding="application/x-tex">0.1851 + (0.3679 + 1) = 1.5530</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.1851</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">0.3679</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1.5530</span></span></span></span></span></td>
+<td>旧结果按新 max 修正</td>
+</tr>
+<tr>
+<td>最终权重</td>
+<td>—</td>
+<td>块 1：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mn>1</mn><mo>−</mo><mn>4</mn></mrow></msup><mi mathvariant="normal">/</mi><mi mathvariant="normal">ℓ</mi><mo>=</mo><mn>0.0321</mn></mrow><annotation encoding="application/x-tex">e^{1-4}/\ell = 0.0321</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mbin mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord">ℓ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.0321</span></span></span></span></span>、<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mn>2</mn><mo>−</mo><mn>4</mn></mrow></msup><mi mathvariant="normal">/</mi><mi mathvariant="normal">ℓ</mi><mo>=</mo><mn>0.0871</mn></mrow><annotation encoding="application/x-tex">e^{2-4}/\ell = 0.0871</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mbin mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord">ℓ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.0871</span></span></span></span></span>；块 2：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mn>3</mn><mo>−</mo><mn>4</mn></mrow></msup><mi mathvariant="normal">/</mi><mi mathvariant="normal">ℓ</mi><mo>=</mo><mn>0.2369</mn></mrow><annotation encoding="application/x-tex">e^{3-4}/\ell = 0.2369</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">3</span><span class="mbin mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord">ℓ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.2369</span></span></span></span></span>、<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mn>4</mn><mo>−</mo><mn>4</mn></mrow></msup><mi mathvariant="normal">/</mi><mi mathvariant="normal">ℓ</mi><mo>=</mo><mn>0.6439</mn></mrow><annotation encoding="application/x-tex">e^{4-4}/\ell = 0.6439</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">4</span><span class="mbin mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord">ℓ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.6439</span></span></span></span></span></td>
+<td><strong>与标准结果一致</strong> ✅</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：分块算 softmax，逐步验证<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点「下一步」看 running max / denominator / partial output 如何更新；每一步都可以和上面的手算表核对。最后与「一次算」的结果对比，验证<strong>完全相等</strong>。</p>
+<p><a class="static-link" href="../index.html#/flash-attention">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-key"><div class="box-title">🔑 online softmax 的意义</div><div class="box-body"><p><strong>不需要保存完整 score matrix</strong>——任意时刻只需要当前块的分数、running 统计和 partial output。这就是 FlashAttention 能「不物化 S×S」的全部秘密。</p>
+</div></div>
+<h2>19.6 FlashAttention 的核心（正确表述）</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>FlashAttention 是<strong>精确注意力</strong>（exact attention）：数学结果与标准实现完全一致，不是近似算法。它优化的是<strong>数据搬运</strong>与<strong>显存占用</strong>。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>标准 Attention</th>
+<th>FlashAttention</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>数学结果</td>
+<td>精确</td>
+<td><strong>精确（相同）</strong></td>
+</tr>
+<tr>
+<td>计算复杂度</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mi>d</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2 d)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span></span></span></td>
+<td><strong>仍是 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mi>d</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2 d)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span></span></span>（没有变）</strong></td>
+</tr>
+<tr>
+<td>S×S 中间矩阵</td>
+<td>物化到 HBM</td>
+<td><strong>不物化</strong>（分块 + online softmax）</td>
+</tr>
+<tr>
+<td>显存占用</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>S</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mclose">)</span></span></span></span></span>（只存输出与统计量）</td>
+</tr>
+<tr>
+<td>HBM 流量</td>
+<td>高（反复读写大矩阵）</td>
+<td>显著降低（tile 载入/写出）</td>
+</tr>
+<tr>
+<td>Wall-clock</td>
+<td>基准</td>
+<td>实际更快（尤其长序列）</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ 三个不要写错的结论</div><div class="box-body"><ol>
+<li><strong>FLOPs 没有减少</strong>：乘加次数与标准 attention 同量级；</li>
+<li><strong>不是近似</strong>：没有抽样、没有稀疏化（那是别的技术）；</li>
+<li><strong>「更快」有条件</strong>：收益主要来自减少 HBM 流量，具体加速比取决于序列长度、head 维度、硬件与实现——<strong>不要给没有出处的固定倍数</strong>。</li>
+</ol>
+</div></div>
+<h2>19.7 FA1 → FA2：高层演进（不深入 kernel 细节）</h2>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>主要改进</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>FA1</strong>（2022）</td>
+<td>IO-aware：tiling + online softmax，不物化 S×S</td>
+<td>「把数据留在片上」</td>
+</tr>
+<tr>
+<td><strong>FA2</strong>（2023）</td>
+<td>更好的 work partitioning 与并行度；减少非 matmul 的 FLOPs；提高 occupancy</td>
+<td>「同样的思路，把 GPU 用得更满」</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>学习顺序建议：先把「tiling + online softmax + 不物化」讲清楚，再去看论文细节。kernel 级的调度优化属于工程深入，不影响对核心思想的理解。</p>
+</blockquote>
+<h2>19.8 什么时候收益最大</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>长序列（<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 大）</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>S</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">S^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span> 项主导，省下的 HBM 流量最多</td>
+</tr>
+<tr>
+<td>训练（需要存 attention 矩阵）</td>
+<td>显存从 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>S</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span> 降到 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>S</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(S)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mclose">)</span></span></span></span></span>，可训更长上下文</td>
+</tr>
+<tr>
+<td>大 batch 推理的 prefill</td>
+<td>prefill 是「长序列的一次性大计算」，与训练同构</td>
+</tr>
+</tbody></table>
+<p>在很短的序列上（<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 小），<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>S</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">S^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span> 本来就不大，收益有限——<strong>这不是「永远快 3 倍」的魔法</strong>。</p>
+<h2>19.9 Triton：定位</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>PyTorch 是「调用别人写好的 kernel」；Triton 是「用 Python 语法自己写 kernel」。它不要求你学 CUDA C++、线程索引、shared memory 手工管理——你只需要描述「每个 program 处理哪一块数据」。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>PyTorch</th>
+<th>CUDA</th>
+<th>Triton</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>你写什么</td>
+<td>组合算子</td>
+<td>线程级 kernel</td>
+<td><strong>块级（block-level）kernel</strong></td>
+</tr>
+<tr>
+<td>门槛</td>
+<td>低</td>
+<td>高</td>
+<td>中</td>
+</tr>
+<tr>
+<td>控制力</td>
+<td>低</td>
+<td>最高</td>
+<td>中高</td>
+</tr>
+<tr>
+<td>典型用途</td>
+<td>99% 的模型代码</td>
+<td>极致优化的库</td>
+<td>自定义 fused kernel</td>
+</tr>
+</tbody></table>
+<p><strong>为什么需要 Triton</strong>：像本章这种「多个算子融合成一个 kernel」的优化（softmax 的 max/sub/exp/sum/div 融合、attention 的 QKᵀ+softmax+PV 融合），PyTorch 组合写法会产生多次 HBM 往返；Triton 让你在一个 kernel 里完成。</p>
+<h2>19.10 第一个 Triton Kernel：Vector Add</h2>
+<pre><code class="lang-python"># 类型：【Runnable on CUDA】需要 GPU + pip install triton
+import torch, triton
+import triton.language as tl
+
+@triton.jit
+def add_kernel(x_ptr, y_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+    pid = tl.program_id(0)                     # 我是第几个 program（块）
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)   # 本块负责的元素下标
+    mask = offsets &lt; n_elements                # 边界掩码（最后一块可能不满）
+    x = tl.load(x_ptr + offsets, mask=mask)    # 从 HBM 载入本块
+    y = tl.load(y_ptr + offsets, mask=mask)
+    tl.store(out_ptr + offsets, x + y, mask=mask)   # 写回本块
+
+def add(x, y):
+    out = torch.empty_like(x)
+    n = x.numel()
+    grid = lambda meta: ((n + meta[&quot;BLOCK_SIZE&quot;] - 1) // meta[&quot;BLOCK_SIZE&quot;],)
+    add_kernel[grid](x, y, out, n, BLOCK_SIZE=1024)
+    return out
+
+x = torch.randn(1_000_000, device=&quot;cuda&quot;)
+y = torch.randn(1_000_000, device=&quot;cuda&quot;)
+assert torch.allclose(add(x, y), x + y)</code></pre>
+<p><strong>视觉对应</strong>：</p>
+<pre><code class="lang-">N = 10,000,000，BLOCK_SIZE = 1024
+→ grid = 9766 个 program，每个 program 处理 1024 个连续元素
+program 0: offsets [0..1023]
+program 1: offsets [1024..2047]
+...
+最后一个 program: mask 掉越界元素</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：program / block / mask 视图<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动 N 与 BLOCK_SIZE，看 grid 如何切分、最后一个 program 的 mask 如何工作。</p>
+<p><a class="static-link" href="../index.html#/flash-attention">在交互版中打开这个演示 →</a></p></div></div>
+<h2>19.11 Triton Softmax：融合的意义</h2>
+<pre><code class="lang-python"># 类型：【Runnable on CUDA】row-wise softmax 的 fused kernel（教学简化版）
+@triton.jit
+def softmax_kernel(out_ptr, in_ptr, row_stride, n_cols, BLOCK_SIZE: tl.constexpr):
+    row = tl.program_id(0)                     # 每个 program 处理一行
+    cols = tl.arange(0, BLOCK_SIZE)
+    mask = cols &lt; n_cols
+    x = tl.load(in_ptr + row * row_stride + cols, mask=mask, other=-float(&quot;inf&quot;))
+    x = x - tl.max(x, axis=0)                  # 稳定 softmax：减最大值
+    num = tl.exp(x)
+    denom = tl.sum(num, axis=0)
+    tl.store(out_ptr + row * row_stride + cols, num / denom, mask=mask)</code></pre>
+<p><strong>对比 PyTorch 组合写法</strong>：</p>
+<pre><code class="lang-python"># PyTorch：5 个算子 → 可能 5 次以上的 kernel 启动与 HBM 往返
+x = x - x.max(dim=-1, keepdim=True).values
+e = torch.exp(x)
+out = e / e.sum(dim=-1, keepdim=True)</code></pre>
+<p>在算子是小算子、带宽受限时（第 15 章：softmax 是 memory-bound），<strong>融合成一个 kernel</strong> 意味着中间结果留在片上、读写 HBM 的次数从多次降到一次左右。</p>
+<h2>19.12 Mini Lab：Attention Tiling Simulator</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>用<strong>纯 CPU 的 NumPy</strong> 模拟分块注意力：验证「分块 + online softmax」的结果与标准 attention <strong>数值一致</strong>。这是不依赖 GPU 也能亲手验证 FlashAttention 核心思想的方式。<strong>本节代码已实际运行验证。</strong></p>
+</div></details>
+<pre><code class="lang-python"># 类型：【Runnable】依赖：numpy
+# tiled_attention.py —— 分块注意力模拟器（CPU）
+import numpy as np
+
+def standard_attention(Q, K, V):
+    S = Q @ K.T / np.sqrt(Q.shape[-1])
+    P = np.exp(S - S.max(-1, keepdims=True))
+    P = P / P.sum(-1, keepdims=True)
+    return P @ V
+
+def tiled_attention(Q, K, V, q_tile=4, k_tile=4):
+    &quot;&quot;&quot;分块 + online softmax：不物化完整 S×S 矩阵&quot;&quot;&quot;
+    n, d = Q.shape
+    out = np.zeros((n, d))
+    for qi in range(0, n, q_tile):
+        q = Q[qi:qi + q_tile]                 # [tq, d]
+        m = np.full((q.shape[0], 1), -np.inf) # running max
+        l = np.zeros((q.shape[0], 1))         # running denominator
+        acc = np.zeros((q.shape[0], d))       # partial output
+        for ki in range(0, n, k_tile):
+            k = K[ki:ki + k_tile]             # [tk, d]
+            v = V[ki:ki + k_tile]
+            s = q @ k.T / np.sqrt(d)          # 局部 scores [tq, tk]
+            m_new = np.maximum(m, s.max(-1, keepdims=True))
+            alpha = np.exp(m - m_new)         # 旧结果修正因子
+            # 更新统计与输出（全部在&quot;片上&quot;完成，s 不写回&quot;HBM&quot;）
+            p = np.exp(s - m_new)
+            l = l * alpha + p.sum(-1, keepdims=True)
+            acc = acc * alpha + p @ v
+            m = m_new
+        out[qi:qi + q_tile] = acc / l         # 最后才归一化并写出
+    return out
+
+# 验证
+rng = np.random.default_rng(0)
+Q, K, V = rng.normal(size=(16, 8)), rng.normal(size=(16, 8)), rng.normal(size=(16, 8))
+ref = standard_attention(Q, K, V)
+sim = tiled_attention(Q, K, V, q_tile=4, k_tile=4)
+print(&quot;max diff =&quot;, np.abs(ref - sim).max())    # &lt; 1e-12
+assert np.allclose(ref, sim, atol=1e-10)
+print(&quot;Tiled attention 与标准 attention 数值一致 ✅&quot;)</code></pre>
+<div class="box box-note"><div class="box-title">📘 这个 Lab 说明什么</div><div class="box-body"><ul>
+<li><strong>分块 + online softmax 是精确的</strong>：结果与标准 attention 一致（上面的断言）；</li>
+<li><strong>中间量从不物化</strong>：<code>s</code> 只活在局部变量里，循环结束即回收——这正是 FlashAttention 的显存/IO 优势来源；</li>
+<li><strong>CPU 也能验证数学正确性</strong>（虽然 CPU 上不会更快——加速来自 GPU 的 HBM/SRAM 层次）。</li>
+</ul>
+</div></div>
+<h2>19.13 Benchmark 规范（写进任何 kernel 对比）</h2>
+<pre><code class="lang-python"># 类型：【Runnable on CUDA】
+import torch, time
+
+def bench(fn, warmup=10, rep=50):
+    for _ in range(warmup):                      # ① warmup
+        fn()
+    torch.cuda.synchronize()                     # ② 同步（CUDA 异步！）
+    t0 = time.perf_counter()
+    for _ in range(rep):
+        fn()
+    torch.cuda.synchronize()
+    return (time.perf_counter() - t0) / rep      # ③ 平均（更稳可用 median / min）</code></pre>
+<div class="box box-warning"><div class="box-title">⚠️ 没有 CUDA 就不要编数据</div><div class="box-body"><p>本课程验证环境<strong>没有 CUDA</strong>，因此：</p>
+<ul>
+<li>本章所有 Triton 代码标记【Runnable on CUDA】，<strong>未在本课程环境执行</strong>；</li>
+<li>第 19.12 节的 tiled attention 是 <strong>CPU 实测</strong>（数学正确性）；</li>
+<li><strong>任何「FlashAttention 快 N 倍」的具体数字都不应来自本课程</strong>——需要你自己在目标硬件上用规范 benchmark（warmup + sync + 多次测量）得出。</li>
+</ul>
+</div></div>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>标准 attention 的瓶颈</td>
+<td>S×S 中间矩阵的 HBM 反复读写（memory-bound）</td>
+</tr>
+<tr>
+<td>Tiling</td>
+<td>把 Q/K/V 切块进 SRAM，中间结果不落 HBM</td>
+</tr>
+<tr>
+<td>Online softmax</td>
+<td>running max/denom + 修正因子，分块也能精确 softmax</td>
+</tr>
+<tr>
+<td>FlashAttention 本质</td>
+<td>精确注意力 + IO 优化；<strong>计算复杂度仍是 O(S²)</strong></td>
+</tr>
+<tr>
+<td>显存收益</td>
+<td>不再物化 S×S → 从 O(S²) 到 O(S)</td>
+</tr>
+<tr>
+<td>FA1/FA2</td>
+<td>IO-aware → 更好的并行与 occupancy</td>
+</tr>
+<tr>
+<td>Triton</td>
+<td>Python-like 块级 kernel 语言；用于融合自定义 kernel</td>
+</tr>
+<tr>
+<td>Benchmark 纪律</td>
+<td>warmup + synchronize + 多次测量；无 GPU 不编数据</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">FlashAttention 为什么能加速，但计算复杂度没有从 O(S²) 降低？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>因为它用了近似采样</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>它保持精确计算，减少的是 S×S 中间矩阵在 HBM 的读写与显存占用</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>因为它降低了 head 维度</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>因为它跳过了 softmax</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>FlashAttention 是 exact attention：乘加次数与标准实现同量级（O(S²d)），但通过 tiling + online softmax 不物化 S×S 矩阵，把瓶颈从 HBM 流量与显存容量上解除。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Online softmax 为什么需要「修正因子」<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mi>m</mi><mo>−</mo><msub><mi>m</mi><mrow><mi>n</mi><mi>e</mi><mi>w</mi></mrow></msub></mrow></msup></mrow><annotation encoding="application/x-tex">e^{m - m_{new}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7713em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span>？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>为了加速计算</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>因为新块带来了更大的 max，之前累积的 sum/output 需要用新 max 重新归一化</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>为了减少显存</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>为了处理负数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>softmax 依赖全局最大值做数值稳定；分块时 max 会被后续块更新，旧结果必须按新 max 修正后继续累积。修正后的最终结果与一次算的 softmax 完全一致。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 Triton 与 PyTorch 的关系，说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>Triton 是 PyTorch 的替代品</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>Triton 用于写块级自定义 kernel（如算子融合），PyTorch 用于组合现成算子</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>Triton 只能写矩阵乘法</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>Triton 不需要 GPU</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PyTorch 调用现成 kernel；Triton 让你用 Python 语法写块级 kernel，典型用途是把多个小算子融合（减少 HBM 往返）。两者互补，不是替代关系。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 7 章 Attention</span><span class="tag">第 15 章 GPU 基础与 Roofline</span><span class="tag">第 18 章 packed 序列</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 20 章 Inference（prefill 加速）</span><span class="tag">长上下文训练</span></div></div>
+</div>
+<div class="static-nav"><a href="data-pipeline.html">← Pretraining Data Engineering：从网页到 Training Batch</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="inference.html">LLM Inference Systems：从 Prefill 到 vLLM / SGLang →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/19-flash-attention.md">content/19-flash-attention.md</a></div>
+</main>
+</body>
+</html>

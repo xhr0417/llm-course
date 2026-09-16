@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PyTorch for LLM：动手之前的必备工具箱 · 大模型知识体系</title>
-<meta name="description" content="shape 操作、广播、matmul/einsum、nn.Module、autograd、DataLoader、训练循环、checkpoint——能读懂并写出 small LLM 代码。">
+<meta name="description" content="shape 操作、广播、matmul/einsum、nn.Module、autograd、DataLoader、训练循环、checkpoint。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/pytorch.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="modern-llm.html">← 现代 LLM 架构：技术演化视角</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="build-llm-1.html">Build Your Own Small LLM（上）：组件篇 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/pytorch">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 11 章 · 第二部分 · 构建 (Build)</div><h1 class="chapter-title">PyTorch for LLM：动手之前的必备工具箱</h1><p class="chapter-desc">shape 操作、广播、matmul/einsum、nn.Module、autograd、DataLoader、训练循环、checkpoint——能读懂并写出 small LLM 代码。</p><p class="chapter-source">对应课件：工程前置（新增）</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 11 章 · 第二部分 · 构建 (Build)</div><h1 class="chapter-title">PyTorch for LLM：动手之前的必备工具箱</h1><p class="chapter-desc">shape 操作、广播、matmul/einsum、nn.Module、autograd、DataLoader、训练循环、checkpoint。</p><p class="chapter-source">对应课件：工程前置（新增）</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章定位</strong>：第二部分「构建 (Build)」的起点。前面 10 章解决了「懂原理」，从本章开始解决「写得出来」。目标：读完本章，你能读懂并自己写出 small LLM 的全部代码。本章不引入新模型概念，只补齐动手所需的 PyTorch 工具箱。</p>
