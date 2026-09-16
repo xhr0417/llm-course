@@ -46,40 +46,48 @@
      ============================================================ */
   LC.demos["prefill-decode"] = function (root) {
     var promptLen = 512, mode = 0; // 0 prefill 1 decode
+    var gen = 0;                    // 已生成的 token 数（0 = 尚未开始 decode）
     var view = h("div"), out = LC.readout();
-    var gen = 0;
-    function render() {
+
+    function render() {             // ← 纯渲染：不修改任何 state
       view.innerHTML = "";
       if (mode === 0) {
         view.appendChild(LC.panel("Prefill（一次处理整个 prompt）", [
           h("div", { class: "stat-line", html: "输入形状：<b>[1, " + promptLen + ", d]</b> → 大矩阵乘：<b>[" + promptLen + ", d] × [d, ·]</b>" }),
           h("div", { class: "stat-line", html: "并行度：<b>高</b>（" + promptLen + " 个位置同时计算）" }),
-          h("div", { class: "stat-line", html: "瓶颈：通常 <b>compute-bound</b>（大 GEMM）" }),
-          h("div", { class: "stat-line", html: "产出：第一个 token 的 logits + 全部 KV（" + promptLen + " 个位置）" }),
-          h("div", { class: "stat-line", html: "对应指标：<b>TTFT</b>" })
+          h("div", { class: "stat-line", html: "瓶颈：对长 prompt 通常更接近 <b>compute-bound</b>（取决于 shape/batch/kernel/硬件）" }),
+          h("div", { class: "stat-line", html: "产出：<b>最后一个 prompt 位置的 logits</b>（直接用于采样【第一个生成 token】）+ 全部 " + promptLen + " 个位置的 KV" }),
+          h("div", { class: "stat-line", html: "对应指标：<b>TTFT</b>（不需要额外跑一次 decode 才拿到第一个 token）" })
         ]));
       } else {
-        gen++;
-        view.appendChild(LC.panel("Decode（每步生成 1 个 token）", [
-          h("div", { class: "stat-line", html: "输入形状：<b>[1, 1, d]</b>（新 token）+ 历史 KV <b>[1, " + (promptLen + gen) + ", d]</b>" }),
-          h("div", { class: "stat-line", html: "计算：Q_new 与全部 " + (promptLen + gen) + " 个历史 K 做注意力 → 瘦长矩阵" }),
+        view.appendChild(LC.panel("Decode（每次生成 1 个 token；这里共已生成 " + gen + " 个）", [
+          h("div", { class: "stat-line", html: "本次输入：<b>上一个 token</b>（第 1 次 decode 的输入 = prefill 采样出的第一个 token）" }),
+          h("div", { class: "stat-line", html: "注意力：新 token 的 Q 与全部 " + (promptLen + gen) + " 个历史 K 计算（KV 从缓存读取）" }),
           h("div", { class: "stat-line", html: "并行度：<b>低</b>（同一序列必须串行；只有 batch 维能并行）" }),
-          h("div", { class: "stat-line", html: "瓶颈：通常 <b>memory-bandwidth-bound</b>（读 KV）" }),
+          h("div", { class: "stat-line", html: "瓶颈：常见 LLM decode <b>往往受</b>权重/KV 读取与内存带宽影响显著（随 batch/并行/kernel 变化）" }),
           h("div", { class: "stat-line", html: "对应指标：<b>ITL / TPOT</b>" })
         ]));
       }
       out.textContent = mode === 0
-        ? "Prefill：序列长、矩阵大、一次算完。长 prompt 的 TTFT 近似随长度增长。"
-        : "Decode 第 " + gen + " 步：注意「算 1 个 token」不等于「只算一次」——要读完全部历史 KV。这就是 decode 吃带宽的原因。";
+        ? "Prefill：序列长、矩阵大、一次算完；产出第一个生成 token 的 logits 与全部 KV。"
+        : "Decode 已生成 " + gen + " 个 token。注意：「生成一个 token」= 1 次前向（输入上一个 token），且要读取全部历史 KV——这就是 decode 常受带宽影响的原因。\n\n自检：重置 → 点两次「Decode 下一步」→ 这里应显示 1 → 2（不会跳号）。";
     }
+
     var toggle = button("切换到 Decode →", function () {
       mode = 1 - mode;
-      gen = 0;
+      gen = 0;                                     // state 只在 handler 里改
       toggle.textContent = mode === 0 ? "切换到 Decode →" : "← 切回 Prefill";
       render();
     });
+    var nextBtn = button("Decode 下一步", function () {
+      mode = 1;
+      toggle.textContent = "← 切回 Prefill";
+      gen += 1;                                    // state 只在 handler 里改
+      render();
+    });
+    var resetBtn = button("重置", function () { mode = 0; gen = 0; toggle.textContent = "切换到 Decode →"; render(); });
     var pS = LC.slider("prompt 长度", 64, 4096, 64, promptLen, function (v) { promptLen = Math.round(v); render(); });
-    root.appendChild(h("div", { class: "demo-controls" }, [toggle, pS.el, button("Decode 下一步", function () { mode = 1; toggle.textContent = "← 切回 Prefill"; gen++; render(); })]));
+    root.appendChild(h("div", { class: "demo-controls" }, [toggle, nextBtn, resetBtn, pS.el]));
     root.appendChild(view);
     root.appendChild(out);
     render();
@@ -302,34 +310,46 @@
 
     function render() {
       // —— 教学模型（简化假设，非真实 benchmark）——
-      var queueWaves = Math.ceil(N / batch);
-      var prefillMs = promptLen * 0.25;                    // 教学系数
-      var decodeStepMs = 8 + 2.0 * batch;                  // 批越大每步越慢（带宽共享）
-      var totalWaveMs = prefillMs + outputLen * decodeStepMs;
-      var totalMs = queueWaves * totalWaveMs;
-      var ttftMs = prefillMs + decodeStepMs;               // 第一波请求的 TTFT
-      var itlMs = decodeStepMs;
+      // TTFT = queue + tokenize + prefill + sample（不含"额外一次 decode"）
+      var tokenizeMs = promptLen * 0.02;
+      var prefillMs = promptLen * 0.25;
+      var samplingMs = 5;
+      var decodeStepMs = 8 + 2.0 * batch;                  // 批越大每步越慢（带宽被分摊）
+      var firstWaveTTFT = tokenizeMs + prefillMs + samplingMs;
+      var waves = Math.ceil(N / batch);
+      var perWaveMs = firstWaveTTFT + outputLen * decodeStepMs;   // 每波的总处理时间（简化）
+      // 第 k 波的请求要等前 k-1 波处理完
+      var lastWaveTTFT = (waves - 1) * perWaveMs + firstWaveTTFT;
+      var sumTTFT = 0;
+      for (var k = 0; k < waves; k++) sumTTFT += k * perWaveMs + firstWaveTTFT;
+      var avgTTFT = sumTTFT / waves;
+      var totalMs = waves * perWaveMs;
       var tokensPerSec = (N * outputLen) / (totalMs / 1000);
       var kvBytesPerToken = 2 * 32 * 8 * 128 * 2;          // 2·L·Hkv·d·fp16（L=32,H=8,d=128）
       var kvGB = N * (promptLen + outputLen) * kvBytesPerToken / 1e9;
 
       view.innerHTML = "";
+      view.appendChild(LC.panel("TTFT 的三个口径（教学模型）", [
+        h("div", { class: "stat-line", html: "① <b>首波请求</b> TTFT = tokenize " + tokenizeMs.toFixed(0) + " + prefill " + prefillMs.toFixed(0) + " + sample " + samplingMs + " = <b>" + firstWaveTTFT.toFixed(0) + " ms</b>" }),
+        h("div", { class: "stat-line", html: "② <b>最后一波请求</b> TTFT = 前 " + (waves - 1) + " 波处理时间 + 首波 TTFT = <b>" + lastWaveTTFT.toFixed(0) + " ms</b>" }),
+        h("div", { class: "stat-line", html: "③ <b>平均 TTFT</b>（全部 " + N + " 个请求）= <b>" + avgTTFT.toFixed(0) + " ms</b>（并发越高，排队项越大）" })
+      ]));
       view.appendChild(LC.bars([
-        { label: "TTFT（ms）", value: ttftMs, max: 2000, text: ttftMs.toFixed(0) + " ms", color: ttftMs > 800 ? "red" : "green" },
-        { label: "ITL（ms）", value: itlMs, max: 200, text: itlMs.toFixed(1) + " ms", color: itlMs > 60 ? "amber" : "green" },
-        { label: "吞吐（tok/s）", value: tokensPerSec, max: 20000, text: tokensPerSec.toFixed(0), color: "green" },
-        { label: "KV 显存（GB）", value: kvGB, max: 200, text: kvGB.toFixed(1) + " GB", color: kvGB > 80 ? "red" : "green" }
-      ], { max: 100 }));
+        { label: "首波 TTFT", value: firstWaveTTFT, max: Math.max(lastWaveTTFT, 100), text: firstWaveTTFT.toFixed(0) + " ms", color: "green" },
+        { label: "平均 TTFT", value: avgTTFT, max: Math.max(lastWaveTTFT, 100), text: avgTTFT.toFixed(0) + " ms", color: "amber" },
+        { label: "末波 TTFT", value: lastWaveTTFT, max: Math.max(lastWaveTTFT, 100), text: lastWaveTTFT.toFixed(0) + " ms", color: lastWaveTTFT > 2000 ? "red" : "amber" },
+        { label: "ITL（一步 decode）", value: decodeStepMs, max: Math.max(lastWaveTTFT, 100), text: decodeStepMs.toFixed(1) + " ms", color: "green" },
+        { label: "吞吐（tok/s）", value: tokensPerSec, max: Math.max(lastWaveTTFT, 100), text: tokensPerSec.toFixed(0), color: "green" },
+        { label: "KV 显存（GB）", value: kvGB, max: Math.max(lastWaveTTFT, 100), text: kvGB.toFixed(1) + " GB", color: kvGB > 80 ? "red" : "green" }
+      ], { max: Math.max(lastWaveTTFT, 100) }));
       out.textContent =
-        "教学模型输出（简化假设，非真实硬件 benchmark）：\n" +
-        "· 波数 = ⌈N / batch⌉ = " + queueWaves + "，每波 ≈ prefill " + prefillMs.toFixed(0) + "ms + decode " + outputLen + "×" + decodeStepMs.toFixed(1) + "ms\n" +
-        "· TTFT ≈ prefill + 一步 decode = " + ttftMs.toFixed(0) + " ms\n" +
-        "· ITL ≈ 一步 decode = " + itlMs.toFixed(1) + " ms（随 batch 增大而上升：带宽被分摊）\n" +
+        "⚙️ 教学模型（简化假设，非真实硬件 benchmark）：\n" +
+        "· TTFT = queue + tokenize + prefill + sample（prefill 直接产出第一个 token 的 logits，不含额外 decode）\n" +
+        "· 波数 = ⌈N / batch⌉ = " + waves + "；每波 ≈ 首波 TTFT + " + outputLen + "×" + decodeStepMs.toFixed(1) + "ms（decode）\n" +
         "· 吞吐 = 总输出 token ÷ 总耗时 = " + tokensPerSec.toFixed(0) + " tok/s\n" +
-        "· KV 显存 = N × (prompt+output) × 每 token KV 字节 = " + kvGB.toFixed(1) + " GB\n\n" +
+        "· KV 显存 = Σ(每个请求的 prompt+output) × 每 token KV 字节 = " + kvGB.toFixed(1) + " GB（变长口径，见正文 20.8）\n\n" +
         (kvGB > 80 ? "⚠️ KV 显存已超过 80GB：真实系统会在这里 OOM——需要分页管理、限制并发或量化。\n" : "") +
-        "试试：把 batch 拉大看吞吐与 ITL 的 trade-off；把请求数和长度拉大看 KV 如何成为瓶颈。\n" +
-        "⚠️ 系数是教学设计值：目的是建立「参数 → 指标」的直觉，不是硬件性能预测。";
+        "试试：把 batch 拉大看吞吐与 ITL 的 trade-off；把请求数和长度拉大看 KV 与排队如何推高平均 TTFT。";
     }
     var nS = LC.slider("请求数 N", 1, 256, 1, N, function (v) { N = Math.round(v); render(); });
     var pS = LC.slider("prompt 长度", 64, 4096, 64, promptLen, function (v) { promptLen = Math.round(v); render(); });

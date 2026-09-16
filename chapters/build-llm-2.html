@@ -108,7 +108,7 @@ class TokenDataset(torch.utils.data.Dataset):
         x = torch.from_numpy(self.data[i:i+self.seq_len].astype(&quot;int64&quot;))
         y = torch.from_numpy(self.data[i+1:i+1+self.seq_len].astype(&quot;int64&quot;))
         return x, y</code></pre>
-<div class="box box-warning"><div class="box-title">⚠️ 文档边界问题</div><div class="box-body"><p>直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 <code>&lt;|endoftext|&gt;</code> 分隔并在 loss 上跳过边界，要么按文档 packing（第 21 章）。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 文档边界问题</div><div class="box-body"><p>直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 <code>&lt;|endoftext|&gt;</code> 分隔并在 loss 上跳过边界，要么按文档 packing（第 18 章）。</p>
 </div></div>
 <h2>Lab 9：预训练</h2>
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>把第 11 章的五步循环 + 第 21 章将学的 warmup/decay 组合成一个<strong>完整的、可断点续训的</strong>训练脚本。</p>

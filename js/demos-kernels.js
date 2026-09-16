@@ -8,7 +8,7 @@
   var h = LC.h, button = LC.button;
 
   /* ============================================================
-     1. 数据搬运对比：标准 vs 分块融合
+     1. 数据搬运对比：naive 分解 vs 分块融合
      ============================================================ */
   LC.demos["attention-io"] = function (root) {
     var S = 512;   // 序列长度
@@ -20,19 +20,19 @@
       var sMatrixMB = S * S * bytes / 1e6;
       var qkvMB = 3 * S * d * bytes / 1e6;
       // 教学量级估算（不追求精确系数）：
-      // 标准：S 写1次+softmax读1写1+PV读1 → 约 4 次 S×S 搬运
+      // naive 分解：S 写1次 + softmax 读1写1 + PV 读1 → 约 4 次 S×S 搬运
       var stdTraffic = 4 * sMatrixMB;
       // 分块：中间不落 HBM；只算 Q/K/V 读 + 输出写（按 tile 载入，K/V 被复用次数忽略）
       var flashTraffic = qkvMB + S * d * bytes / 1e6;
       view.innerHTML = "";
       view.appendChild(LC.bars([
-        { label: "标准：S×S 往返搬运", value: stdTraffic, max: Math.max(stdTraffic, flashTraffic), text: stdTraffic.toFixed(0) + " MB", color: "red" },
+        { label: "naive 分解：S×S 往返搬运", value: stdTraffic, max: Math.max(stdTraffic, flashTraffic), text: stdTraffic.toFixed(0) + " MB", color: "red" },
         { label: "分块：只搬 Q/K/V+输出", value: flashTraffic, max: Math.max(stdTraffic, flashTraffic), text: flashTraffic.toFixed(1) + " MB", color: "green" }
       ], { max: Math.max(stdTraffic, flashTraffic) }));
       out.textContent =
         "S = " + S + "，d = " + d + "，FP16\n\n" +
         "S×S 中间矩阵大小 = " + S + "² × 2B = " + sMatrixMB.toFixed(1) + " MB\n" +
-        "标准实现把它在 HBM 中写/读约 4 趟 → ≈ " + stdTraffic.toFixed(0) + " MB 搬运\n" +
+        "naive 分解实现把它在 HBM 中写/读约 4 趟 → ≈ " + stdTraffic.toFixed(0) + " MB 搬运\n" +
         "分块融合：中间结果留在 SRAM，只搬 Q/K/V 与输出 → ≈ " + flashTraffic.toFixed(1) + " MB（量级）\n\n" +
         "⚠️ 教学量级估算（忽略了 K/V tile 的重复载入、attention 内部细节与硬件差异），用于说明「瓶颈在搬运量」；不是精确 benchmark。\n" +
         "把 S 调大：S×S 项按平方增长，差距急剧拉大——这就是长上下文下 FlashAttention 收益变大的原因。";
@@ -144,17 +144,17 @@
       if (step >= 3) {
         var w = scores.map(function (v) { return Math.exp(v - 4) / 1.5530; });
         body.appendChild(h("div", { class: "stat-line", html: "分块结果权重 = <b>" + fmtArr(w, 4) + "</b>" }));
-        body.appendChild(h("div", { class: "stat-line", html: "标准 softmax   = <b>" + fmtArr(std.w, 4) + "</b>" }));
+        body.appendChild(h("div", { class: "stat-line", html: "一次性 softmax   = <b>" + fmtArr(std.w, 4) + "</b>" }));
         var ok = w.every(function (v, i) { return Math.abs(v - std.w[i]) < 1e-4; });
         body.appendChild(h("div", { class: "stat-line", html: ok ? "✅ 两者一致（分块是精确的，不是近似）" : "存在差异" }));
       }
       view.appendChild(LC.panel("running 统计（scores = [1,2,3,4]，两块各 2 个）", [body]));
 
       out.textContent =
-        step === 0 ? "从这里开始：先看标准 softmax 一次算的结果。点「下一步」进入分块计算。"
+        step === 0 ? "从这里开始：先看一次性 softmax 计算的结果。点「下一步」进入分块计算。"
         : step === 1 ? "只看块 1 时：m=2、ℓ=1.3679——但还不知道后面有更大的分数。"
         : step === 2 ? "看到块 2 后：新 max=4。旧的 ℓ 要乘修正因子 e^(2−4)=0.1353 再累加新块的贡献——这一步是 online softmax 的核心。"
-        : "最终权重与标准 softmax 逐位一致 ✅\n\n结论：分块 + running max/denom 可以在【不保存完整分数矩阵】的前提下，得到精确的 softmax 结果。";
+        : "最终权重与一次性 softmax 一致 ✅\n\n结论：分块 + running max/denom 可以在【不保存完整分数矩阵】的前提下，得到算法上等价的 softmax 结果（浮点实现可能有微小数值差）。";
     }
     root.appendChild(h("div", { class: "demo-controls" }, [
       button("下一步 ▶", function () { step = (step + 1) % 4; render(); }, "primary"),

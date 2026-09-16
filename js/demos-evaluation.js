@@ -108,10 +108,12 @@
       return s;
     }
     function passAtK(n, c, k) {
+      k = Math.min(k, n);                     // 硬性约束：k ≤ n（非法配置不允许计算）
       if (n - c < k) return 1;
       return 1 - Math.exp(logC(n - c, k) - logC(n, k));
     }
     function render() {
+      if (k > n) { k = n; kS.set(k); }        // 防御式 clamp（slider 联动由 handler 负责）
       var p1 = c / n;
       var pk = passAtK(n, c, k);
       view.innerHTML = "";
@@ -120,16 +122,22 @@
         { label: "pass@" + k, value: pk, max: 1, text: (pk * 100).toFixed(1) + "%", color: "green" }
       ], { max: 1 }));
       out.textContent =
-        "n = " + n + " 个样本，其中 c = " + c + " 个通过\n" +
+        "n = " + n + " 个样本，其中 c = " + c + " 个通过（约束：k ≤ n）\n" +
         "pass@1 = " + (p1 * 100).toFixed(1) + "%\n" +
         "pass@" + k + " = 1 − C(n−c, k)/C(n, k) = " + (pk * 100).toFixed(1) + "%\n\n" +
-        "直觉：k 越大，只要 n 个样本里有一个对的就算通过 → 分数越乐观。\n" +
-        "所以引用 pass@k 数字时必须写明 k、n 与采样温度。\n\n" +
-        (n - c < k ? "当前 n−c < k：数学上 pass@" + k + " 必然为 100%（存在通过样本时）。" : "");
+        "直觉：从 n 个样本里【随机抽 k 个】，至少有一个通过的概率。\n" +
+        "k 增大时该概率上升；但只有 k = n 且 c > 0 时 pass@n 才等于 100%——" +
+        "不是「样本里有对的，所有 pass@k 就都是 100%」。\n\n" +
+        (n - c < k ? "当前 n−c < k：只要 c > 0，pass@" + k + " 在数学上就是 100%（存在通过样本的组合必然被抽中）。" : "");
     }
-    var nS = LC.slider("采样数 n", 1, 100, 1, n, function (v) { n = Math.round(v); c = Math.min(c, n); cS.set(c); render(); });
+    var nS = LC.slider("采样数 n", 1, 100, 1, n, function (v) {
+      n = Math.round(v);
+      c = Math.min(c, n); cS.set(c);
+      if (k > n) { k = n; kS.set(k); }        // n 变小时同步收缩 k
+      render();
+    });
     var cS = LC.slider("通过数 c", 0, 100, 1, c, function (v) { c = Math.round(Math.min(v, n)); cS.set(c); render(); });
-    var kS = LC.slider("k", 1, 20, 1, k, function (v) { k = Math.round(v); render(); });
+    var kS = LC.slider("k", 1, 20, 1, k, function (v) { k = Math.round(Math.min(v, n)); kS.set(k); render(); });
     root.appendChild(h("div", { class: "demo-controls" }, [nS.el, cS.el, kS.el]));
     root.appendChild(view);
     root.appendChild(out);
@@ -142,30 +150,41 @@
   LC.demos["judge-bias"] = function (root) {
     var order = 0; // 0: A在前 1: B在前
     var view = h("div"), out = LC.readout();
-    var ANS_A = "光合作用把光能转化为化学能，储存在葡萄糖中。";
-    var ANS_B = "光合作用就是植物把阳光变成能量的过程，它是植物生长的关键，也是地球上几乎所有生命能量的源头，非常重要。";
+    // 质量是「人为设定」的教学参数：A 短但更准确；B 长但有冗余
+    var ANS_A = { text: "光合作用把光能转化为化学能，储存在葡萄糖中。", quality: 0.80 };
+    var ANS_B = { text: "光合作用就是植物把阳光变成能量的过程，它是植物生长的关键，也是地球上几乎所有生命能量的源头，非常重要。", quality: 0.60 };
+    var POS_BONUS = 0.15;   // 教学模拟：位置 1 的加成
+    var LEN_BONUS = 0.25;   // 教学模拟：更长回答的加成
+
     function render() {
-      var first = order === 0 ? { name: "回答 A", text: ANS_A } : { name: "回答 B", text: ANS_B };
-      var second = order === 0 ? { name: "回答 B", text: ANS_B } : { name: "回答 A", text: ANS_A };
+      var first = order === 0 ? ANS_A : ANS_B;
+      var second = order === 0 ? ANS_B : ANS_A;
+      var longer = first.text.length >= second.text.length ? "pos1" : "pos2";
+      var s1 = first.quality + POS_BONUS + (longer === "pos1" ? LEN_BONUS : 0);
+      var s2 = second.quality + 0 + (longer === "pos2" ? LEN_BONUS : 0);
+      var winner = s1 > s2 ? "位置 1" : "位置 2";
+      var winnerAns = s1 > s2 ? (order === 0 ? "A" : "B") : (order === 0 ? "B" : "A");
+      var byQuality = (s1 - POS_BONUS - (longer === "pos1" ? LEN_BONUS : 0)) >= (s2 - (longer === "pos2" ? LEN_BONUS : 0));
+      var fairWinner = first.quality >= second.quality ? (order === 0 ? "A" : "B") : (order === 0 ? "B" : "A");
+
       view.innerHTML = "";
       view.appendChild(LC.panel("裁判视角（只看得到两个回答与顺序）", [
         h("div", { class: "stat-line", html: "<b>位置 1：</b>" + first.text }),
         h("div", { class: "stat-line", html: "<b>位置 2：</b>" + second.text })
       ]));
-      // 教学模拟：judge 有「偏爱更长回答」+「偏爱位置1」的偏见
-      var len1 = first.text.length, len2 = second.text.length;
-      var posBonus = 0.15;
-      var score1 = posBonus + (len1 > len2 ? 0.25 : 0);
-      var winner = score1 >= 0.15 ? "位置 1" : "位置 2";
-      view.appendChild(LC.panel("裁判结论（教学模拟：带长度偏好 + 位置偏好）", [
-        h("div", { class: "stat-line", html: "胜者：<b>" + winner + "</b>（位置 1 分数加成 +0.15；更长回答再 +0.25）" }),
-        h("div", { class: "stat-line", text: order === 0 ? "→ B 在位置 2 时反而输了" : "→ 交换后 B 到了位置 1，结论可能翻转" })
+      view.appendChild(LC.panel("教学模拟打分（质量 + 位置加成 + 长度加成）", [
+        h("div", { class: "stat-line", html: "位置 1 得分 = 质量 " + first.quality.toFixed(2) + " + 位置加成 " + POS_BONUS + (longer === "pos1" ? " + 长度加成 " + LEN_BONUS : "") + " = <b>" + s1.toFixed(2) + "</b>" }),
+        h("div", { class: "stat-line", html: "位置 2 得分 = 质量 " + second.quality.toFixed(2) + " + 位置加成 0" + (longer === "pos2" ? " + 长度加成 " + LEN_BONUS : "") + " = <b>" + s2.toFixed(2) + "</b>" }),
+        h("div", { class: "stat-line", html: "裁判结论：<b>" + winner + "（回答 " + winnerAns + "）胜</b>" })
       ]));
       out.textContent =
-        (order === 0 ? "当前顺序：A 在前。" : "当前顺序：B 在前（已交换）。") + "\n\n" +
-        "同一对回答，交换顺序后裁判结论可能改变——这就是 position bias。\n" +
-        "缓解方法：两个顺序各评一次，取一致结论；或用 pairwise + 统计聚合。\n" +
-        "⚠️ 上面的打分是教学模拟，用于演示偏差机制，非真实裁判输出。";
+        (order === 0 ? "当前顺序：A 在前。" : "当前顺序：B 在前（已交换）。") + "\n" +
+        "只按质量（不看位置/长度）时，更准确的是回答 " + fairWinner + "。\n" +
+        "当前裁判结论选的是回答 " + winnerAns + " —— " +
+        (winnerAns === fairWinner ? "与质量一致（这次偏见没有翻转结论）。" : "**与质量不一致：位置+长度偏见翻转了结论。**") + "\n\n" +
+        "点「交换 A/B 顺序」再比较：同一对回答，仅交换位置，裁判结论发生了改变——这就是 position bias（叠加 verbosity bias）的机制。\n" +
+        "缓解方法：交换顺序各评一次、取一致结论；控制长度；固定 rubric。\n\n" +
+        "⚠️ 以上打分（质量 0.80/0.60、位置 +0.15、长度 +0.25）完全是教学模拟，不代表任何真实 judge 的偏差大小。";
     }
     var toggle = button("交换 A/B 顺序", function () { order = 1 - order; render(); }, "primary");
     root.appendChild(h("div", { class: "demo-controls" }, [toggle, button("重置顺序", function () { order = 0; render(); })]));
@@ -242,9 +261,10 @@
       ], { max: 100 }));
       out.textContent =
         "同一个分数（" + score + "%）在不同任务里的意义完全不同：\n" +
-        "· C3（4选1，基线 25%）：超出 " + (score - 25) + " pt → " + (score - 25 > 10 ? "有信号" : "信号较弱") + "\n" +
-        "· XCOPA（2选1，基线 50%）：超出 " + (score - 50) + " pt → " + (score - 50 > 10 ? "有信号" : "接近随机") + "\n\n" +
-        "（本项目小模型真实结果：C3 40%（+15pt）、XCOPA 55%（+5pt）——后者说明因果推理基本没学会。）\n\n" +
+        "· C3（4选1，基线 25%）：高于基线 " + (score - 25) + " pt\n" +
+        "· XCOPA（2选1，基线 50%）：高于基线 " + (score - 50) + " pt\n\n" +
+        "（本项目小模型实测：C3 40%、XCOPA 55%——**描述性结果**：分别高于各自随机基线 15pt / 5pt。\n" +
+        "在没有样本量与置信区间的情况下，不能仅凭百分点差异判断提升是否统计显著——见 23.14。）\n\n" +
         "规则：**任何选择题分数都必须写在随机基线旁边**，否则不可解读。";
     }
     var sS = LC.slider("模型分数（%）", 10, 100, 1, score, function (v) { score = Math.round(v); render(); });

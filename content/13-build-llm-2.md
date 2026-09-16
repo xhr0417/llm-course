@@ -69,7 +69,7 @@ class TokenDataset(torch.utils.data.Dataset):
 ```
 
 :::warning 文档边界问题
-直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 `<|endoftext|>` 分隔并在 loss 上跳过边界，要么按文档 packing（第 21 章）。
+直接把多篇文档首尾相接会造出「假样本」（上文是 A 文章结尾，下文是 B 文章开头）。练手可忽略；正式训练要么用 `<|endoftext|>` 分隔并在 loss 上跳过边界，要么按文档 packing（第 18 章）。
 :::
 
 ## Lab 9：预训练

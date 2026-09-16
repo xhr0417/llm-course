@@ -1,6 +1,6 @@
 > **本章定位**：第二批第一优先级。回答一个工程问题：**一篇网页是怎么变成 GPU 上的 training batch 的？** 本章不是「爬虫教程」，而是数据工程管线的完整视图——每一站做什么、为什么做、做错的后果是什么。
 >
-> 前置：第 6 章（BPE/Tokenizer）、第 18 章（数据清洗基础概念）。本章在其上建立**完整的 pipeline 视角**。
+> 前置：第 6 章（BPE/Tokenizer）、第 21 章（数据清洗基础概念）。本章在其上建立**完整的 pipeline 视角**。
 
 :::note 代码类型约定（Build / Systems 章节统一）
 - 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
@@ -230,7 +230,7 @@ dups = lsh.query(minhash_of(new_doc))    # 找出与 new_doc 相似的已有文�
 | 影响 | 机制 | 说明 |
 | --- | --- | --- |
 | **A. 浪费算力** | 同一内容被反复训练 | 6ND 的算力预算被稀释（第 14 章） |
-| **B. 评测泄漏** | 重复导致训练集与 benchmark 重叠 | 分数虚高（见 20.9 去污染） |
+| **B. 评测泄漏** | 重复导致训练集与 benchmark 重叠 | 分数虚高（见 18.9 去污染） |
 | **C. 记忆化（memorization）** | 高频重复样本被逐字背下 | 复现风险 + 泛化下降 |
 
 :::warning 不要把「memorization = 一定坏」简单化
@@ -316,45 +316,111 @@ Raw Document → tokenizer → token ids（uint16/uint32 存储）
 3. **padding 不落盘**：打包阶段处理变长问题，数据文件里**不存储 padding token**。
 :::
 
-## 18.13 Document Boundary：文档边界
+## 18.13 文档边界：两个不同维度的问题
 
 :::unfold 先懂直觉
-如果把 A 文章结尾直接接上 B 文章开头，模型会学到**假的跨文档关联**（「上一篇的结语」预测「下一篇的标题」）。这不是语言的真实结构。
+初学者常把 EOS、document mask、packing 并列成「三种方案」——但它们**不是同一维度**：EOS/mask 回答的是「怎么表示文档边界」，packing 回答的是「怎么把变长文档装进定长序列」。两者正交、可以同时使用。
 :::
 
-```
-doc A 结束 ……
-doc B 开始 ……
-```
+### 问题 A：怎么表示 / 隔离文档边界？
 
-三种处理方案：
+如果把 A 文章结尾直接接上 B 文章开头，模型会学到**假的跨文档关联**（「上一篇的结语」预测「下一篇的标题」）。边界语义的处理方式：
 
 | 方案 | 做法 | 特点 |
 | --- | --- | --- |
-| **EOS token** | 每篇结尾插入 `<|endoftext|>` | 简单、主流；模型学到「文档结束」 |
-| **document mask** | 记录边界位置，loss/attention 上处理 | 更精确，实现复杂 |
-| **packing** | 定长打包 + 边界标记 | 高利用率（见 20.14） |
+| **EOS / EOD token** | 每篇结尾插入 `<|endoftext|>` | 简单、主流；给模型显式「文档结束」信号 |
+| **position reset** | 新文档从位置 0 重新计数（部分实现） | 位置语义上的隔离，实现依赖具体系统 |
+| **document-aware attention mask** | 用块对角 mask 禁止跨文档注意力 | 语义最严格，实现与开销更大 |
+| **loss mask** | 特定拼接场景下屏蔽边界的 loss | 按任务需要选用 |
 
-## 18.14 Sequence Packing：序列打包
+:::warning 一条重要的教材边界
+**插入 EOS 并不在数学上阻止跨文档 attention。** EOS 只是给模型一个显式的结束标记；如果没有 block-diagonal / document-aware attention mask，文档 B 的 token 仍然可以 attend 到文档 A 的 token。
+
+是否隔离跨文档注意力，取决于 **attention mask / packing 策略**，而不是 EOS 本身。EOS 提供的是**边界信号**，mask 提供的是**硬隔离**。
+:::
+
+### 问题 B：怎么把变长文档装进固定长度的训练序列？
+
+| 方案 | 做法 | 特点 |
+| --- | --- | --- |
+| **padding** | 补齐到 max_seq | 最简单；padding 位置浪费，需要 pad_id + loss/attention mask 处理 |
+| **concatenate + chunk** | 连续 token 流按 max_seq 切块 | 利用率高、实现简单；**本课程 Lab 采用**（见 18.14） |
+| **sequence packing** | 把多篇短文档贪心装进定长桶 | 利用率高；需要边界标记，工程上还常配 attention mask |
+
+> **两者的关系**：先把所有文档连成「Doc A + EOS + Doc B + EOS + …」的流（问题 A 的边界处理），再把流切成定长块（问题 B 的空间利用）。**EOS 与 chunk/packing 同时存在**——例如：
+
+```
+Doc A
+EOS
+Doc B
+EOS
+Doc C ← 同一块里可以包含多篇文档，EOS 标记分界
+```
+
+## 18.14 定长切块与 Packing：空间利用策略
 
 :::unfold 先懂直觉
-变长文档直接拼 batch 需要 padding 到最大长度——padding 是纯浪费。**Packing** 把多篇短文档塞进一个定长序列，几乎不产生 padding，GPU 利用率大幅提升。
+变长文档直接拼 batch 需要 padding 到最大长度——padding 是纯浪费。目标是把「有效 token」的比例尽可能提高。主流做法有两类：**连续流切块（本 Lab 采用）** 与 **sequence packing**。
 :::
 
-:::demo packing-demo 交互：Naive Padding vs Packing
+### 本课程 Lab 采用：continuous stream + EOS + fixed chunk
+
+```
+step 1：把文档连成 token 流：docA + EOS + docB + EOS + docC + EOS ...
+step 2：按 max_seq 连续切定长块（block）
+step 3：最后不足一块的 remainder 直接丢弃（drop_last）
+```
+
+```python
+def build_token_stream(token_lists, eos_id):
+    """连续 token 流：每篇文档后跟一个真实 EOS"""
+    stream = []
+    for tokens in token_lists:
+        stream.extend(tokens)
+        stream.append(eos_id)
+    return stream
+
+def chunk_stream(stream, seq_len):
+    """按 seq_len 连续切块；remainder 由调用方处理（本 Lab drop_last）"""
+    return [stream[i:i + seq_len] for i in range(0, len(stream) - seq_len + 1, seq_len)]
+```
+
+:::warning EOS ≠ padding filler（一个常见的实现错误）
+不要用**重复 EOS 填充**块的剩余位置：
+
+```
+正文 + EOS + EOS + EOS + EOS + EOS     ❌
+```
+
+如果这些位置都参与 next-token loss，模型会被**人为训练**出「EOS → EOS → EOS」的伪分布——这是数据管线制造出来的，不是语言的真实结构。
+
+真实 EOS 与填充物是两类完全不同的 token：
+
+| | 真实 EOS | padding / filler |
+| --- | --- | --- |
+| 语义 | 「一个文档结束了」 | 无语义，只为 shape 对齐 |
+| 正确处置 | 参与 loss（它是真实序列的一部分） | **不参与 loss**（loss mask / ignore_index），或干脆不产生 |
+| 本 Lab 策略 | 每篇文档后恰好一个 | **不填充**：连续流切块，剩余不足一块直接 drop_last |
+
+**如果确实要保留 padding 方案**（正式系统也常用）：必须使用独立 `pad_id`、对 padding 位置设 loss mask（如 `labels[padding_positions] = -100`）、并且不要把 pad 当 EOS 用。
+:::
+
+:::demo packing-demo 交互：Naive Padding vs Packing（概念比较）
 文档长度 [5, 8, 3, 12]，max_seq = 16。切换两种策略，实时对比 token 利用率与 padding 浪费。
+> 注意：本演示是**空间利用策略的概念比较**；Mini Pipeline Lab 实际使用的落盘策略是「连续流 + EOS + 固定切块（drop_last）」——两者不是同一个实现。
 :::
 
-| | Naive padding | Packing |
+| | Naive padding | Packing / 连续切块 |
 | --- | --- | --- |
 | 利用率 | 低（padding 全浪费） | 高（接近 100%） |
 | 实现 | 简单 | 需要边界处理 |
-| 风险 | 无 | 跨文档 attention / loss 需 mask 或 EOS 标记 |
+| 风险 | 无 | 跨文档 attention / loss 需要 EOS 标记或 mask（见 18.13 的边界说明） |
 
 :::math 算一笔利用率
 文档 5 + 8 + 3 + 12 = 28 个 token，max_seq = 16：
 - **Naive**（每篇单独 + pad 到 16）：4 篇 × 16 = 64 个位置，有效 28 → 利用率 **43.75%**
 - **Packing**（贪心装箱）：[5+8+3=16（满）] + [12（余 4）] → 32 个位置，有效 28 → 利用率 **87.5%**
+- **连续切块（本 Lab）**：流总长 = 28 + 4（每篇一个 EOS）= 32 → 恰好 2 个完整块，利用率 **100%**（remainder 为 0 时）
 :::
 
 ## 18.15 Sharding：分片
@@ -466,28 +532,28 @@ def train_tiny_tokenizer(docs, vocab_size=512, path="mini_tokenizer.json"):
     tok.save(path)
     return tok
 
-# ============ ④ pack：定长打包（简单贪心） ============
-def pack_documents(token_lists, max_seq, eos_id):
-    """每个文档截断到 max_seq-1 后追加 EOS（保证边界标记一定存在）；
-    贪心装进定长桶；桶内剩余位置填 EOS"""
-    buckets, current = [], []
-    for toks in token_lists:
-        seq = toks[:max_seq - 1] + [eos_id]        # 超长截断，但保留 EOS
-        if len(current) + len(seq) > max_seq:
-            current += [eos_id] * (max_seq - len(current))   # 补齐
-            buckets.append(current); current = []
-        current += seq
-    if current:
-        current += [eos_id] * (max_seq - len(current))
-        buckets.append(current)
-    return buckets
+# ============ ④ 连续 token 流 + 定长切块（drop_last） ============
+def build_token_stream(token_lists, eos_id):
+    """连续流：每篇文档后跟【恰好一个】真实 EOS（不做任何填充）"""
+    stream = []
+    for tokens in token_lists:
+        stream.extend(tokens)
+        stream.append(eos_id)
+    return stream
+
+def chunk_stream(stream, seq_len):
+    """按 seq_len 连续切块；返回 (blocks, dropped) —— 不足一块的 remainder 丢弃"""
+    n_blocks = len(stream) // seq_len
+    blocks = [stream[i * seq_len:(i + 1) * seq_len] for i in range(n_blocks)]
+    dropped = len(stream) - n_blocks * seq_len
+    return blocks, dropped
 
 # ============ ⑤ shard + manifest ============
-def write_shards(buckets, out_dir, shard_size=8):
+def write_shards(blocks, out_dir, seq_len, shard_size=8, dropped=0):
     os.makedirs(out_dir, exist_ok=True)
     manifest = []
-    for s, i in enumerate(range(0, len(buckets), shard_size)):
-        chunk = buckets[i:i + shard_size]
+    for s, i in enumerate(range(0, len(blocks), shard_size)):
+        chunk = blocks[i:i + shard_size]
         arr = np.array(chunk, dtype=np.uint16)
         fname = f"shard-{s:05d}.bin"
         arr.tofile(os.path.join(out_dir, fname))
@@ -496,15 +562,16 @@ def write_shards(buckets, out_dir, shard_size=8):
             "tokens": int(arr.size), "dtype": "uint16",
         })
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
-        json.dump({"shards": manifest, "max_seq": buckets and len(buckets[0]) or 0}, f, indent=2)
+        json.dump({"shards": manifest, "seq_len": seq_len,
+                   "dropped_remainder_tokens": dropped}, f, indent=2)
     return manifest
 
 # ============ 端到端跑一遍 ============
 if __name__ == "__main__":
     raw_docs = [
-        "Hello world!\n\nThis is doc A.", "Hello world!\nThis is doc A.",   # 近似重复
+        "Hello world!\n\nThis is doc A.", "Hello world!\nThis is doc A.",   # 归一化后完全相同
         "doc B about 机器学习。", "doc C about transformers and attention.",
-        "doc D " * 40,   # 长文档（会被截断）
+        "doc D " * 40,   # 长文档
     ]
     docs = exact_dedup([normalize(d) for d in raw_docs])
     print(f"normalize + dedup: {len(raw_docs)} → {len(docs)} 篇")
@@ -512,10 +579,16 @@ if __name__ == "__main__":
     tok = train_tiny_tokenizer(docs, vocab_size=512)
     eos = tok.token_to_id("<|endoftext|>")
     token_lists = [tok.encode(d).ids for d in docs]
-    buckets = pack_documents(token_lists, max_seq=16, eos_id=eos)
-    manifest = write_shards(buckets, "mini_data")
+
+    seq_len = 16
+    stream = build_token_stream(token_lists, eos)
+    blocks, dropped = chunk_stream(stream, seq_len)
+    manifest = write_shards(blocks, "mini_data", seq_len, dropped=dropped)
+
     total = sum(s["tokens"] for s in manifest)
-    print(f"打包 {len(buckets)} 个定长序列，共 {total} token，{len(manifest)} 个 shard")
+    print(f"token 流总长 {len(stream)}；切成 {len(blocks)} 个定长块（每块 {seq_len}）")
+    print(f"Dropped final remainder: {dropped} tokens（drop_last：不足一块的部分主动丢弃）")
+    print(f"落盘 {total} token，{len(manifest)} 个 shard")
     print(json.dumps(manifest, indent=2))
 ```
 
@@ -523,8 +596,18 @@ if __name__ == "__main__":
 
 ```
 normalize + dedup: 5 → 4 篇
-打包 5 个定长序列，共 80 token，1 个 shard
+token 流总长 105；切成 6 个定长块（每块 16）
+Dropped final remainder: 9 tokens（drop_last：不足一块的部分主动丢弃）
+落盘 96 token，1 个 shard
 ```
+
+（可自检的语义不变量：流中 EOS 数 = 文档数 = 4；不存在相邻 EOS（说明没有用 EOS 做填充）；每块长度都是 16；丢弃量 = 流长 % 16 = 9。）
+
+:::note 为什么 drop_last 是可接受的（以及正式系统怎么做）
+- 本 Lab 为保持实现简单：丢弃的不是「数据」，而是一段**未被使用的尾部 token**（9 个 token，约占总量 8.6%）；
+- 正式大规模管线常见做法：连续流跨 shard 续切（remainder 与下一个 shard 的头部拼接）、或改用 packing / padding + loss mask——目标是不浪费，同时**不制造伪分布**；
+- 无论哪种方案，都要保证：**真实 EOS 恰好每篇一个；填充物（如果有）绝不参与 loss**。
+:::
 
 :::key 本章必须记住
 | 站点 | 核心结论 |
@@ -581,6 +664,6 @@ D. tokenizer 版本应记录在 manifest 中
 :::
 
 :::related
-依赖 | 第 6 章 BPE/Tokenizer, 第 18 章 数据清洗基础, 第 14 章 数据配比与算力
+依赖 | 第 6 章 BPE/Tokenizer, 第 21 章 数据清洗基础, 第 14 章 数据配比与算力
 用于 | 第 19 章 FlashAttention 的输入（packed 序列）, 第 20 章 Inference, 第 23 章 Evaluation 的 Contamination
 :::

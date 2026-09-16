@@ -12,7 +12,7 @@
 ## 19.1 换一个视角：从「数学」到「数据在哪」
 
 :::unfold 先懂直觉
-第 7 章我们问「Attention 的数学是什么」；本章问一个系统问题：**这些矩阵算出来之后放在哪、从哪里读、往哪里写？** 你会发现：标准实现的瓶颈不是乘加次数，而是**HBM 的读写量**。
+第 7 章我们问「Attention 的数学是什么」；本章问一个系统问题：**这些矩阵算出来之后放在哪、从哪里读、往哪里写？** 你会发现：**naive（eager 分解）实现**的瓶颈不是乘加次数，而是**HBM 的读写量**。
 :::
 
 回顾 Attention 三步（数学完全不变）：
@@ -21,21 +21,41 @@ $$
 S = \frac{QK^\top}{\sqrt{d_k}} \quad\Rightarrow\quad P = \text{softmax}(S) \quad\Rightarrow\quad O = PV
 $$
 
-**新增的问题**：$S$ 是 $S_{len} \times S_{len}$ 的矩阵。在标准实现里，它被**物化**（materialize）到 HBM，然后 softmax 再读回来、写回去，再和 V 相乘……数据在 HBM 与计算单元之间来回搬运。
+**新增的问题**：$S$ 是 $S_{len} \times S_{len}$ 的矩阵。在 **naive / eager 分解实现**（显式执行 `scores = QKᵀ → softmax → PV` 三个步骤）里，它被**物化**（materialize）到 HBM，然后 softmax 再读回来、写回去，再和 V 相乘……数据在 HBM 与计算单元之间来回搬运。
 
 :::math 先估算一下这个搬运量（教学量级估算）
 设序列长度 $S$、head 维度 $d$，FP16（2 字节）：
 
 - $S$ 矩阵大小：$S^2 \times 2$ 字节；
-- 标准实现里它至少被「写一次 + 读多次」（softmax 读、PV 再读）→ 量级 $O(S^2)$ 的 HBM 流量（仅这一个中间矩阵）。
+- naive 分解实现里它至少被「写一次 + 读多次」（softmax 读、PV 再读）→ 量级 $O(S^2)$ 的 HBM 流量（仅这一个中间矩阵）。
 
 对比：$Q/K/V$ 的体量是 $O(S \cdot d)$。当 $S \gg d$（长上下文常见），**$S^2$ 项完全主导**——这就是问题所在。
 :::
 
-## 19.2 标准 Attention 的真实问题：HBM I/O
+## 19.2 Naive（Eager 分解）Attention 的真实问题：HBM I/O
 
 :::unfold 先懂直觉
-把标准 attention 的每个操作拆开看，你会看到「计算—写 HBM—读 HBM—计算—写 HBM」的反复横跳。
+把 **naive 分解实现**的每个操作拆开看，你会看到「计算—写 HBM—读 HBM—计算—写 HBM」的反复横跳。
+:::
+
+:::note 术语说明：什么才是本章所说的「naive attention」
+本章所谓 **naive / eager decomposed attention**，专指为了讲解而**显式物化** score / probability matrix 的三段式实现：
+
+```
+scores = QKᵀ     → scores 写入 HBM
+P = softmax(scores)  → 读回 → 再写 HBM
+O = PV           → 再读回
+```
+
+⚠️ **不要把它等同于「PyTorch 里的所有 Attention 调用」**。当你调用高层接口：
+
+```python
+F.scaled_dot_product_attention(q, k, v)   # PyTorch SDPA
+```
+
+底层**并不一定**执行三个独立、物化中间矩阵的 kernel——PyTorch 会根据 GPU、dtype、shape、backend 可用性，dispatch 到 FlashAttention、memory-efficient（fused）backend 或 math backend 之一。
+
+本章要建立的核心心智是：**「数学表达式」与「实际 kernel backend」是两层不同的东西**。数学上等价的三段式，可以有完全不同的内存行为。
 :::
 
 ```
@@ -51,7 +71,7 @@ $$
 | 算力闲置 | 计算单元等数据——典型的 memory-bound（第 15 章） |
 
 :::demo attention-io 交互：数据搬运对比
-对比「标准实现」与「分块融合」两条数据路径，看中间矩阵是否被写入 HBM、搬运量差多少（教学示意量级）。
+对比「naive 分解（物化中间矩阵）」与「分块融合（不物化）」两条数据路径，看中间矩阵是否被写入 HBM、搬运量差多少（教学示意量级）。
 :::
 
 ## 19.3 HBM vs SRAM：第 15 章的 Roofline 终于用上了
@@ -114,7 +134,7 @@ $$
 
 ### 超小数值例子：scores = [1, 2] 与 [3, 4]
 
-**标准 softmax（一次算）**：
+**一次性计算的 softmax**：
 
 $$
 e^{[1,2,3,4]} = [2.718,\ 7.389,\ 20.09,\ 54.60], \quad \text{sum} = 84.79
@@ -130,7 +150,7 @@ $$
 | --- | --- | --- | --- |
 | 看到块 1 = [1,2] | 2 | $e^{1-2} + e^{2-2} = 0.3679 + 1 = 1.3679$ | 局部 max/sum |
 | 看到块 2 = [3,4] | 4（更新） | 旧 $\ell$ 修正：$1.3679 \times e^{2-4} = 0.1851$；加新块：$0.1851 + (0.3679 + 1) = 1.5530$ | 旧结果按新 max 修正 |
-| 最终权重 | — | 块 1：$e^{1-4}/\ell = 0.0321$、$e^{2-4}/\ell = 0.0871$；块 2：$e^{3-4}/\ell = 0.2369$、$e^{4-4}/\ell = 0.6439$ | **与标准结果一致** ✅ |
+| 最终权重 | — | 块 1：$e^{1-4}/\ell = 0.0321$、$e^{2-4}/\ell = 0.0871$；块 2：$e^{3-4}/\ell = 0.2369$、$e^{4-4}/\ell = 0.6439$ | **与一次性计算的 softmax 一致** ✅ |
 
 :::demo online-softmax 交互：分块算 softmax，逐步验证
 点「下一步」看 running max / denominator / partial output 如何更新；每一步都可以和上面的手算表核对。最后与「一次算」的结果对比，验证**完全相等**。
@@ -143,22 +163,24 @@ $$
 ## 19.6 FlashAttention 的核心（正确表述）
 
 :::unfold 先懂直觉
-FlashAttention 是**精确注意力**（exact attention）：数学结果与标准实现完全一致，不是近似算法。它优化的是**数据搬运**与**显存占用**。
+FlashAttention 是**数学意义上的精确注意力**（exact attention）：它不引入 sparse / low-rank 这类**算法近似**，计算结果与 naive 分解实现的数学表达式等价。它优化的是**数据搬运**与**显存占用**。
 :::
 
-| 维度 | 标准 Attention | FlashAttention |
+| 维度 | Naive（eager 分解）Attention | FlashAttention |
 | --- | --- | --- |
-| 数学结果 | 精确 | **精确（相同）** |
+| 数学结果 | 精确 | **精确（算法不引入近似）** |
+| 浮点结果 | 基准 | 因运算顺序/累加方式不同，可能有**微小数值差异**（非 bitwise identical） |
 | 计算复杂度 | $O(S^2 d)$ | **仍是 $O(S^2 d)$（没有变）** |
 | S×S 中间矩阵 | 物化到 HBM | **不物化**（分块 + online softmax） |
 | 显存占用 | $O(S^2)$ | $O(S)$（只存输出与统计量） |
 | HBM 流量 | 高（反复读写大矩阵） | 显著降低（tile 载入/写出） |
-| Wall-clock | 基准 | 实际更快（尤其长序列） |
+| Wall-clock | 基准 | 通常更快（尤其长序列），具体取决于 shape / 硬件 / kernel |
 
-:::warning 三个不要写错的结论
-1. **FLOPs 没有减少**：乘加次数与标准 attention 同量级；
+:::warning 四个不要写错的结论
+1. **FLOPs 没有减少**：乘加次数与 naive 分解同量级；
 2. **不是近似**：没有抽样、没有稀疏化（那是别的技术）；
-3. **「更快」有条件**：收益主要来自减少 HBM 流量，具体加速比取决于序列长度、head 维度、硬件与实现——**不要给没有出处的固定倍数**。
+3. **「exact」≠「bitwise 相同」**：数学算法等价，但浮点执行（reduction order、tiling、低精度累加）会产生正常的微小差异。**不要写「与 naive 实现每一位完全相同」**；
+4. **「更快」有条件**：收益主要来自减少 HBM 流量，具体加速比取决于序列长度、head 维度、硬件与实现——**不要给没有出处的固定倍数**。
 :::
 
 ## 19.7 FA1 → FA2：高层演进（不深入 kernel 细节）
@@ -268,7 +290,7 @@ out = e / e.sum(dim=-1, keepdim=True)
 ## 19.12 Mini Lab：Attention Tiling Simulator
 
 :::unfold 目标
-用**纯 CPU 的 NumPy** 模拟分块注意力：验证「分块 + online softmax」的结果与标准 attention **数值一致**。这是不依赖 GPU 也能亲手验证 FlashAttention 核心思想的方式。**本节代码已实际运行验证。**
+用**纯 CPU 的 NumPy** 模拟分块注意力：验证「分块 + online softmax」的结果与 naive 分解 attention **在算法上等价**。这是不依赖 GPU 也能亲手验证 FlashAttention 核心思想的方式。**本节代码已实际运行验证（FP64/CPU）。**
 :::
 
 ```python
@@ -312,13 +334,14 @@ ref = standard_attention(Q, K, V)
 sim = tiled_attention(Q, K, V, q_tile=4, k_tile=4)
 print("max diff =", np.abs(ref - sim).max())    # < 1e-12
 assert np.allclose(ref, sim, atol=1e-10)
-print("Tiled attention 与标准 attention 数值一致 ✅")
+print("Tiled attention 与 naive 分解 attention 数值一致 ✅")
 ```
 
-:::note 这个 Lab 说明什么
-- **分块 + online softmax 是精确的**：结果与标准 attention 一致（上面的断言）；
+:::note 这个 Lab 说明什么（以及不说明什么）
+- **算法等价**：分块 + online softmax 与 naive 分解的数学结果一致（FP64 下 diff ~1e-16，上面的断言）；
 - **中间量从不物化**：`s` 只活在局部变量里，循环结束即回收——这正是 FlashAttention 的显存/IO 优势来源；
-- **CPU 也能验证数学正确性**（虽然 CPU 上不会更快——加速来自 GPU 的 HBM/SRAM 层次）。
+- **CPU 也能验证算法正确性**（虽然 CPU 上不会更快——加速来自 GPU 的 HBM/SRAM 层次）；
+- ⚠️ **不要把这个 diff 外推到 GPU**：低精度（FP16/BF16）下，reduction order 与 tiling 的实现差异会带来正常的微小数值差。**「算法 exact」不等于「bitwise identical」。**
 :::
 
 ## 19.13 Benchmark 规范（写进任何 kernel 对比）
@@ -348,7 +371,7 @@ def bench(fn, warmup=10, rep=50):
 :::key 本章必须记住
 | 概念 | 一句话 |
 | --- | --- |
-| 标准 attention 的瓶颈 | S×S 中间矩阵的 HBM 反复读写（memory-bound） |
+| naive/eager attention 的瓶颈 | S×S 中间矩阵的 HBM 反复读写（memory-bound） |
 | Tiling | 把 Q/K/V 切块进 SRAM，中间结果不落 HBM |
 | Online softmax | running max/denom + 修正因子，分块也能精确 softmax |
 | FlashAttention 本质 | 精确注意力 + IO 优化；**计算复杂度仍是 O(S²)** |
@@ -367,7 +390,7 @@ C. 因为它降低了 head 维度
 D. 因为它跳过了 softmax
 
 答案: B
-解析: FlashAttention 是 exact attention：乘加次数与标准实现同量级（O(S²d)），但通过 tiling + online softmax 不物化 S×S 矩阵，把瓶颈从 HBM 流量与显存容量上解除。
+解析: FlashAttention 是 exact attention（算法不引入近似）：乘加次数与 naive 分解实现同量级（O(S²d)），但通过 tiling + online softmax 不物化 S×S 矩阵，把瓶颈从 HBM 流量与显存容量上解除。注意「exact」指算法等价，浮点实现仍可能有微小数值差异。
 :::
 
 :::quiz

@@ -22,7 +22,7 @@
       { name: "PII", in: "联系邮箱 a@b.com，电话 138-xxxx-xxxx", out: "邮箱/电话被移除或遮蔽", note: "正则 + 规则 + NER。" },
       { name: "Mixture", in: "（各领域 token 池）", out: "Web 60% / Code 15% / Books 10% / …", note: "配比决定最终能力分布。" },
       { name: "Tokenization", in: "深度学习是……", out: "[2481, 667, 102, …]（token ids）", note: "tokenizer 训一次、冻结、全局一致。" },
-      { name: "Boundary + Packing", in: "doc A（5 token）+ doc B（8 token）+ …", out: "定长序列 [doc A + EOS + doc B + EOS + pad]", note: "EOS 标记边界；打包提高利用率（43.75% → 87.5%）。" },
+      { name: "Boundary + Chunk", in: "doc A（5 token）+ doc B（8 token）+ …", out: "连续流：docA + EOS + docB + EOS + …，再按 max_seq 切定长块（drop_last）", note: "EOS 每篇【恰好一个】（真实边界标记，不做填充）；不足一块的 remainder 主动丢弃并在 manifest 中报告。" },
       { name: "Shard + Stream", in: "（全部 token 流）", out: "shard-00000.bin / shard-00001.bin + manifest.json → DataLoader 流式读取", note: "分片 + 校验 + 按需 prefetch 到 GPU。" }
     ];
     var step = 0;
@@ -333,7 +333,7 @@
         });
         var util2 = used / (buckets.length * MAX_SEQ) * 100;
         view.appendChild(h("div", { class: "stat-line", html: buckets.length + " 行 × 16 位置 = " + (buckets.length * MAX_SEQ) + " 个位置，有效 " + used + " → 利用率 <b>" + util2.toFixed(1) + "%</b>" }));
-        out.textContent = "Packing：贪心把多篇文档塞进定长序列，每篇后跟 EOS 标记边界。\n利用率从 43.75% 提升到 " + util2.toFixed(1) + "%，同样的 GPU 步数能训练更多有效 token。\n\n代价：需要 EOS 标记（或 attention mask）告诉模型「这是两篇不同文档」，否则模型会学到假的跨文档关联。";
+        out.textContent = "Packing：贪心把多篇文档塞进定长序列，每篇后跟 EOS 标记边界。\n利用率从 43.75% 提升到 " + util2.toFixed(1) + "%，同样的 GPU 步数能训练更多有效 token。\n\n代价：需要 EOS 标记（或 attention mask）告诉模型「这是两篇不同文档」，否则模型会学到假的跨文档关联。\n\n⚠️ 本演示是【空间利用策略的概念比较】；Mini Pipeline Lab 实际落盘策略是「连续流 + EOS + 固定切块（drop_last）」——两者不是同一个实现。另注意：EOS 提供边界信号，但不会在数学上阻止跨文档 attention（需要 document-aware mask 才能硬隔离）。";
       }
       if (mode === 1) { /* nothing */ }
     }

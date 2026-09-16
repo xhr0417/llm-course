@@ -51,6 +51,16 @@ fs.readdirSync(path.join(ROOT, "js")).filter(f => /^demos-.*\.js$/.test(f)).forE
 
 /* ---------- 逐文件检查 ---------- */
 const mdFiles = fs.readdirSync(CONTENT).filter(f => f.endsWith(".md"));
+
+/* ---------- 收集全部标题编号（用于「见 X.Y」引用检查） ---------- */
+const headingIndex = new Set();
+mdFiles.forEach(f => {
+  const md = fs.readFileSync(path.join(CONTENT, f), "utf8");
+  const re = /^##\s+(\d+\.\d+)/gm;
+  let m;
+  while ((m = re.exec(md))) headingIndex.add(m[1]);
+});
+
 mdFiles.forEach(f => {
   const md = fs.readFileSync(path.join(CONTENT, f), "utf8");
   const ch = manifest.chapters.find(c => c.file === f);
@@ -83,9 +93,8 @@ mdFiles.forEach(f => {
       seen.add(hm[1]);
     }
     seen.forEach(n => {
-      if (n !== chNum) fail(`${f}: 小节编号 ${n}.x 与 manifest 章节号 ${chNum} 不一致（见第 17 章/18 章/19 章历史问题）`);
+      if (n !== chNum) fail(`${f}: 小节编号 ${n}.x 与 manifest 章节号 ${chNum} 不一致`);
     });
-    // Lab 式标题（Build 章节）无编号，跳过
   }
 
   // 6. related 块格式
@@ -96,9 +105,35 @@ mdFiles.forEach(f => {
       if (!/^\s*\S+\s*[|｜]\s*.+$/.test(line)) fail(`${f}: related 行格式非法："${line.slice(0, 40)}"`);
     });
   }
+
+  // 7. 「见 X.Y」引用必须真实存在（不误报 整句里的版本号如 0.16.11 / 1.96；只匹配 见/参见 后的编号）
+  const seeRe = /(?:见|参见)\s*(\d+\.\d+)/g;
+  let sm;
+  while ((sm = seeRe.exec(md))) {
+    const target = sm[1];
+    // 排除小数（如 1.96、0.22）与版本号：仅当整数部分在 0..99 且小数部分存在时才算章节引用
+    const [a, b] = target.split(".").map(Number);
+    if (a >= 0 && a <= 24 && b >= 1 && !headingIndex.has(target)) {
+      fail(`${f}: 引用了不存在的章节小节「见 ${target}」`);
+    }
+  }
+
+  // 8. 「第 X 章」引用必须存在于 manifest
+  const chRe = /第\s*(\d+)\s*章/g;
+  let cm;
+  while ((cm = chRe.exec(md))) {
+    const n = cm[1];
+    if (!nums.has(n)) fail(`${f}: 引用了不存在的章节「第 ${n} 章」`);
+  }
 });
 
-/* ---------- 7. TOPIC_LINKS 目标合法性（build-static.js） ---------- */
+/* ---------- 9. index.html 必须加载全部 demos-*.js ---------- */
+const indexHtml = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+fs.readdirSync(path.join(ROOT, "js")).filter(f => /^demos-.*\.js$/.test(f)).forEach(f => {
+  if (!indexHtml.includes("js/" + f)) fail(`index.html: 未加载 js/${f}（文件存在但浏览器不会执行）`);
+});
+
+/* ---------- 10. TOPIC_LINKS 目标合法性（build-static.js） ---------- */
 const bs = fs.readFileSync(path.join(ROOT, "tools", "build-static.js"), "utf8");
 const topicBlock = /const TOPIC_LINKS = \{([\s\S]*?)\};/.exec(bs);
 if (topicBlock) {

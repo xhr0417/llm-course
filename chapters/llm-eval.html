@@ -139,7 +139,7 @@ F_1 = \frac{2PR}{P + R}</annotation></semantics></math></span><span class="katex
 <td>因果推理</td>
 </tr>
 </tbody></table>
-<div class="box box-note"><div class="box-title">📘 一个真实的小模型案例（本项目，非 SOTA）</div><div class="box-body"><p>用本课程路线训练的小模型在中文评测上的实测结果：</p>
+<div class="box box-note"><div class="box-title">📘 一个真实的小模型案例（本项目，描述性结果，非 SOTA）</div><div class="box-body"><p>用本课程路线训练的小模型在中文评测上的实测结果（<strong>描述性结果</strong>）：</p>
 <table>
 <thead>
 <tr>
@@ -153,16 +153,24 @@ F_1 = \frac{2PR}{P + R}</annotation></semantics></math></span><span class="katex
 <td>C3</td>
 <td>40%</td>
 <td>25%</td>
-<td>+15pt（有信号，但仍弱）</td>
+<td>+15pt</td>
 </tr>
 <tr>
 <td>XCOPA</td>
 <td>55%</td>
 <td>50%</td>
-<td>+5pt（接近随机，因果推理很弱）</td>
+<td>+5pt</td>
 </tr>
 </tbody></table>
-<p><strong>怎么读这张表</strong>：C3 高于随机基线说明模型学到了部分中文理解能力；XCOPA 只高 5 个点，说明因果常识几乎没学会。这正是「benchmark 分数要看相对基线 + 看任务组成」的实例——<strong>不要拿小模型的分数去对标论文 SOTA</strong>。</p>
+<p><strong>怎么读这张表（重要）</strong>：</p>
+<ul>
+<li>这两行是<strong>描述性结果</strong>：只说明「分数比随机基线高多少」；</li>
+<li><strong>不能仅凭百分点差异判断提升是否具有统计显著性</strong>——区间估计需要<strong>样本量</strong>与<strong>置信区间</strong>（见 23.14）。本课程当前<strong>没有</strong>给出这两个评测的样本量，因此不做「已学到某能力」或「几乎没学会」这类结论；</li>
+<li>这正是本章 Confidence Interval 一节的动机：<strong>分数必须和不确定性一起看</strong>。</li>
+</ul>
+<blockquote>
+<p>小模型的绝对分数通常低（非 SOTA），这是规模决定的正常现象；本案例用于演示「如何正确地报告分数」，不是能力结论。</p>
+</blockquote>
 </div></div>
 <div class="demo-block"><div class="demo-head">🎮 交互：分数 vs 随机基线<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动分数滑块，看它相对不同基线（25% / 50%）的位置——同样的 40%，在不同任务里的意义完全不同。</p>
 <p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
@@ -171,7 +179,7 @@ F_1 = \frac{2PR}{P + R}</annotation></semantics></math></span><span class="katex
 </div></details>
 <p>无偏估计（采 n 个样本、c 个通过）：</p>
 <div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>pass@</mtext><mi>k</mi><mo>=</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mo fence="true">(</mo><mfrac linethickness="0px"><mrow><mi>n</mi><mo>−</mo><mi>c</mi></mrow><mi>k</mi></mfrac><mo fence="true">)</mo></mrow><mrow><mo fence="true">(</mo><mfrac linethickness="0px"><mi>n</mi><mi>k</mi></mfrac><mo fence="true">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{pass@}k = 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">pass@</span></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.6824em;vertical-align:-1.09em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5923em;"><span style="top:-2.26em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.7454em;"><span style="top:-2.355em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span style="top:-3.144em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.74em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8523em;"><span style="top:-2.355em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span style="top:-3.144em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">n</span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">c</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.09em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
-<p><strong>直觉读法</strong>：n=10、c=3 时 pass@1 = 0.3，而 pass@10 = 1（只要 10 个样本里有一个对，就算通过）。k 越大，数字越乐观——所以报告必须写清 k 与采样温度。</p>
+<p><strong>直觉读法</strong>：从 n 个样本里<strong>随机抽 k 个</strong>，至少有一个通过测试的概率。k=1 时就是「单个样本的通过率」；k 增大时这个概率上升，但<strong>只有当 k = n 且 c &gt; 0 时，pass@n 才等于 1</strong>——不是「只要样本里有对的，所有 pass@k 都是 100%」。所以报告必须写清 k、n 与采样温度。</p>
 <div class="demo-block"><div class="demo-head">🎮 交互：n / c / k 计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动采样数 n、通过数 c、k，实时看 pass@k 的变化，理解「k 越大越乐观」。</p>
 <p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
 <h2>23.7 数学评测：GSM8K / MATH</h2>
@@ -361,6 +369,25 @@ h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span
 </div></div>
 <div class="demo-block"><div class="demo-head">🎮 交互：样本量与置信区间<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动样本量滑块，观察同一分数下 95% 置信区间如何收窄——小样本的「提升」可能只是噪声。</p>
 <p><a class="static-link" href="../index.html#/llm-eval">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 这个公式的边界（Wald 近似）</div><div class="box-body"><p><div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>p</mi><mo>±</mo><mn>1.96</mn><msqrt><mrow><mi>p</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mi>n</mi></mrow></msqrt></mrow><annotation encoding="application/x-tex">p \pm 1.96\sqrt{p(1-p)/n}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.24em;vertical-align:-0.2561em;"></span><span class="mord">1.96</span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9839em;"><span class="svg-align" style="top:-3.2em;"><span class="pstrut" style="height:3.2em;"></span><span class="mord" style="padding-left:1em;"><span class="mord mathnormal">p</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">p</span><span class="mclose">)</span><span class="mord">/</span><span class="mord mathnormal">n</span></span></span><span style="top:-2.9439em;"><span class="pstrut" style="height:3.2em;"></span><span class="hide-tail" style="min-width:1.02em;height:1.28em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.28em" viewBox="0 0 400000 1296" preserveAspectRatio="xMinYMin slice"><path d="M263,681c0.7,0,18,39.7,52,119
+c34,79.3,68.167,158.7,102.5,238c34.3,79.3,51.8,119.3,52.5,120
+c340,-704.7,510.7,-1060.3,512,-1067
+l0 -0
+c4.7,-7.3,11,-11,19,-11
+H40000v40H1012.3
+s-271.3,567,-271.3,567c-38.7,80.7,-84,175,-136,283c-52,108,-89.167,185.3,-111.5,232
+c-22.3,46.7,-33.8,70.3,-34.5,71c-4.7,4.7,-12.3,7,-23,7s-12,-1,-12,-1
+s-109,-253,-109,-253c-72.7,-168,-109.3,-252,-110,-252c-10.7,8,-22,16.7,-34,26
+c-22,17.3,-33.3,26,-34,26s-26,-26,-26,-26s76,-59,76,-59s76,-60,76,-60z
+M1001 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2561em;"><span></span></span></span></span></span></span></span></span></span></div>
+是 <strong>normal / Wald 近似</strong>，适合建立直觉，但在以下情况表现较差：<strong>n 很小、p 接近 0、p 接近 1</strong>。更严谨的二项比例区间可用：</p>
+<ul>
+<li><strong>Wilson interval</strong>（小样本更稳）；</li>
+<li><strong>exact binomial interval</strong>（Clopper-Pearson 等）；</li>
+<li>模型比较场景常用 <strong>paired bootstrap</strong> / <strong>paired tests</strong>（配对检验）。</li>
+</ul>
+<p>本章只需掌握：「<strong>分数必须和样本量、不确定性一起看</strong>」。统计检验的完整方法属于后续专题。</p>
+</div></div>
 <h2>23.15 Statistical Significance：72.0% vs 72.3%</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>两个模型分差 0.3 个百分点，可能完全在噪声范围内。判断「谁真的更好」需要显著性检验（如配对 bootstrap / 二项检验），且要说明检验方法与样本量。</p>
 </div></details>
@@ -535,7 +562,7 @@ if __name__ == &quot;__main__&quot;:
 </tr>
 </tbody></table>
 </div></div>
-<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">某模型在 C3（4 选 1）上 40%、XCOPA（2 选 1）上 55%，哪个结论更合理？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>C3 提升更大（+15pt vs +5pt 相对基线）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>XCOPA 更好，因为 55% &gt; 40%</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>两个分数都不能解读</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>C3 是过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：A</strong></p>必须看相对随机基线的增量：C3 高 15 个百分点（有信号），XCOPA 只高 5 个百分点（接近随机，因果推理基本没学会）。绝对分数不可跨任务比较。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">某模型在 C3（4 选 1）上 40%、XCOPA（2 选 1）上 55%。以下哪种读法最严谨？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>C3 相对基线高出 15pt、XCOPA 高出 5pt——这是描述性对比，是否显著还需样本量与置信区间</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>XCOPA 更好，因为 55% &gt; 40%</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>两个分数都不能解读</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>C3 是过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：A</strong></p>必须对照随机基线读（C3 +15pt、XCOPA +5pt），且这属于描述性结果——没有样本量与置信区间时不能下显著性结论。B 错在跨任务比较绝对分数；C、D 无依据。</div></details></div>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 pass@k，说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>和 pass@1 一样</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>k 越大分数越乐观：只要 k 次采样中有一次通过就算通过</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>不需要采样，直接算</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只能用于数学题</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>pass@k 衡量「采样 k 次至少一次通过」的概率，常用无偏估计 1 − C(n−c,k)/C(n,k)。k 越大数字越乐观，报告必须写清 k、n 与采样温度。</div></details></div>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么「70% 准确率」在 n=20 与 n=1000 时意义不同？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>没有不同</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>n=20 时 95% 置信区间约 [50%, 90%]，随机波动极大；n=1000 时区间约 [67%, 73%]</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>n 越大分数越低</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只与模型大小有关</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>二项分布标准误 SE=√(p(1−p)/n) 随样本量减小而增大。小样本下所谓「提升」可能完全在噪声范围内——报告分数必须带样本量与置信区间。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 3 章 经典评估</span><span class="tag">第 21 章 PPL</span><span class="tag">第 18 章 去污染</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">模型选型</span><span class="tag">训练迭代决策</span><span class="tag">RLHF 的偏好数据设计</span></div></div>

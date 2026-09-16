@@ -40,7 +40,7 @@ Response
 | 输入 | 完整 prompt（S 个 token） | 1 个新 token（+ 历史 KV） |
 | 主要矩阵形状 | $[S, d] \times [d, \cdot]$（大） | $[1, d] \times [d, \cdot]$（瘦长） |
 | 并行度 | 高（序列维并行） | 低（每步串行依赖） |
-| 瓶颈 | 常见为 **compute-bound** | 常见为 **memory-bandwidth-bound**（KV 读取） |
+| 瓶颈 | 对典型大模型、足够长 prompt 与合适 batch，**往往更接近** compute-bound；具体仍取决于 shape、kernel 与硬件 | 常见 LLM decode **往往受**权重/KV 读取与内存带宽影响显著；具体瓶颈随 batch、并行方式与 kernel 变化 |
 | 典型指标 | TTFT | ITL / TPOT |
 
 :::demo prefill-decode 交互：切换看两个阶段的计算形态
@@ -50,13 +50,30 @@ Response
 ## 20.3 TTFT：Time To First Token
 
 :::unfold 先懂直觉
-用户发出请求到看到**第一个字**的时间。它包含：排队时间 + prefill 计算 + 采样。长 prompt 的 TTFT 会显著变大——这是用户「感知卡顿」的主要来源。
+用户发出请求到看到**第一个字**的时间。长 prompt 的 TTFT 会显著变大——这是用户「感知卡顿」的主要来源。
 :::
 
+**关键事实**：prefill 处理完整个 prompt 后，**最后一个 prompt 位置的 logits 就直接用于采样第一个生成 token**——不需要额外执行一次 decode iteration。
+
 ```
-Request → [queue] → [prefill + first decode] → First Token
-         ↑ 调度决定     ↑ 与 prompt 长度近似成正比
+Request arrival
+  ↓  Queue                排队（并发高时的主要等待项）
+  ↓  Tokenization        文本 → ids（大 prompt 时不可忽略）
+  ↓  Prefill              一次算完整个 prompt；产出 logits[S-1] 与全部 KV
+  ↓  Sample first token   直接用 logits[S-1] 采样（不是"再跑一步 decode"）
+  ↓  Detokenize / stream  拼回文本、流式返回
+First Token（用户可见）
 ```
+
+$$
+TTFT \approx T_{queue} + T_{tokenize} + T_{prefill} + T_{sample} + T_{stream}
+$$
+
+之后才进入 decode 循环：把第一个生成 token append 进序列（KV Cache 中已有 prompt），下一次 decode iteration 产出**第二个** token。
+
+:::warning 一个容易写错的模型
+不要写「TTFT = prefill + 一次 decode step」。prefill 本身已经产出了第一个 token 所需的 logits；decode 循环是从**第二个** token 开始的续写。
+:::
 
 ## 20.4 ITL / TPOT：逐 token 延迟
 
@@ -100,7 +117,7 @@ Request C: 30 tokens
 ## 20.7 Continuous Batching：批的「动态进出」★
 
 :::unfold 先懂直觉
-不等整批结束：**哪个请求生成完了，立刻把它移出、把等待队列里的新请求塞进来**。批的组成是流动的，GPU 槽位几乎不空转。
+不等整批结束：**哪个请求生成完了，立刻把它移出、把等待队列里的新请求塞进来**。批的组成是流动的，**提高动态请求下的 GPU 利用率**（相比 static batching 显著减少槽位空转，但并非「永远不浪费」）。
 :::
 
 这是 vLLM / SGLang 等现代 serving 系统最重要的调度思想之一：
@@ -114,9 +131,26 @@ Request C: 30 tokens
 第 10 章从模型角度讲了 KV Cache（缓存历史 K/V，避免前缀重算）。在 serving 里，KV Cache 升级成一个**资源管理问题**：同时服务 N 个请求，每个请求都要一块可持续增长的 KV 空间。
 :::
 
+:::math KV Cache 显存：三种口径（避免 batch 与序列长度重复计数）
+**注意**：$S$ 的含义要统一，否则会把 batch 维乘两次。
+
+**① 单个请求**（序列长度 $S$）：
 $$
-\text{KV 总量} \approx 2 \times L \times H_{kv} \times d_{head} \times \text{batch} \times S_{total} \times \text{bytes}
+M_{KV} = 2\,L\,H_{kv}\,d_{head}\,S\,b
 $$
+
+**② $B$ 个等长请求**（每个长度 $S$）：
+$$
+M_{KV} = 2\,L\,H_{kv}\,d_{head}\,B\,S\,b
+$$
+
+**③ 变长 serving batch**（第 $i$ 个请求长度 $S_i$，总 token 数 $\sum_i S_i$）：
+$$
+M_{KV} = 2\,L\,H_{kv}\,d_{head}\left(\sum_{i=1}^{B} S_i\right)b
+$$
+
+其中 $b$ = 每元素字节数（FP16 为 2）。口径 ③ 对理解 continuous batching 与分页 KV 最重要——**资源消耗正比于「所有活跃请求的 token 总数」**，而不是「请求数 × 某个固定长度」。
+:::
 
 | 特性 | 影响 |
 | --- | --- |
@@ -145,7 +179,7 @@ $$
 ```
 逻辑视图（请求看到的）：  block0 → block1 → block2 → …
 物理视图（显存里的）：    block 在池子里任意位置分配
-→ 按需分配：生成到哪、分配到哪；请求结束 → 整块回收
+→ 按块按需分配：生成到哪、分配到哪；请求结束 → 整块回收（显著降低预分配与变长序列带来的浪费）
 ```
 
 | 收益 | 说明 |
@@ -300,7 +334,7 @@ GPU
 :::key 本章必须记住
 | 概念 | 一句话 |
 | --- | --- |
-| Prefill | 一次算完 prompt：大 GEMM、compute-bound，决定 TTFT |
+| Prefill | 一次算完 prompt（大 GEMM），产出第一个生成 token 的 logits；决定 TTFT |
 | Decode | 每步 1 token：瘦矩阵 + 读 KV，带宽受限，决定 ITL |
 | Continuous batching | 批动态进出，消除 static batching 的空转 |
 | KV 碎片 | 变长 + 生命周期不同 → 连续分配必碎 |
@@ -321,7 +355,7 @@ C. decode 不需要 GPU
 D. decode 的 batch 更大
 
 答案: B
-解析: prefill 是大矩阵计算（compute-bound）；decode 每步输入只有 1 个 token，主要成本是 KV 的读取（memory-bandwidth-bound），GPU 计算单元利用率低。
+解析: prefill 通常是大矩阵计算（更接近 compute-bound）；decode 每步输入只有 1 个 token，主要成本往往是 KV/权重的读取（更受内存带宽影响），计算单元利用率低。具体瓶颈随 batch、并行方式与 kernel 变化。
 :::
 
 :::quiz
@@ -345,7 +379,7 @@ C. 不需要 KV Cache
 D. 不需要调度器
 
 答案: B
-解析: static batching 要等整批最慢的请求结束才释放资源；continuous batching 让批「流动」起来，每个 decode 步后检查完成/加入，显著提升吞吐。
+解析: static batching 要等整批最慢的请求结束才释放资源；continuous batching 让批「流动」起来，每个 decode 步后检查完成/加入，**提高动态请求下的 GPU 利用率**（显著减少空转，但不是「永远不浪费」）。
 :::
 
 :::related
