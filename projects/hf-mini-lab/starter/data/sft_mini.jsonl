@@ -1,0 +1,20 @@
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是过拟合。"}, {"role": "assistant", "content": "过拟合是模型把训练数据的噪声也记住了，导致在新数据上表现变差。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是学习率。"}, {"role": "assistant", "content": "学习率控制每次参数更新的步长：太大会震荡发散，太小会收敛过慢。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 batch size。"}, {"role": "assistant", "content": "batch size 是一次前向传播同时处理的样本数，影响显存占用与梯度噪声。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 LoRA。"}, {"role": "assistant", "content": "LoRA 冻结原模型权重，只训练一对低秩矩阵，用极少参数完成微调。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 KV Cache。"}, {"role": "assistant", "content": "KV Cache 缓存历史 token 的 Key/Value，避免生成时重复计算整个前缀。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是量化。"}, {"role": "assistant", "content": "量化是用更低比特表示权重或激活，以更小显存和更快速度换取少量精度损失。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 RLHF。"}, {"role": "assistant", "content": "RLHF 先用人类偏好训练奖励模型，再用强化学习让模型输出更符合人类偏好。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 Tokenizer。"}, {"role": "assistant", "content": "Tokenizer 把文本切分成子词并映射为整数 id，是模型与文本之间的接口。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 Attention。"}, {"role": "assistant", "content": "Attention 让每个位置根据相关性对其它位置加权求和，从而聚合上下文信息。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 Softmax。"}, {"role": "assistant", "content": "Softmax 把一组实数变成概率分布，指数放大大值、总和归一为 1。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是梯度裁剪。"}, {"role": "assistant", "content": "梯度裁剪限制梯度范数的上限，防止个别 batch 把参数更新推飞。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 warmup。"}, {"role": "assistant", "content": "warmup 让学习率从很小逐步升高，避免训练初期因参数随机而产生剧烈更新。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 Embedding。"}, {"role": "assistant", "content": "Embedding 把离散 id 映射为稠密向量，让语义相近的 token 有相近表示。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 temperature。"}, {"role": "assistant", "content": "temperature 调整采样分布的平滑程度：越低越确定，越高越随机。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是 top-p 采样。"}, {"role": "assistant", "content": "top-p 只从累计概率达到 p 的最小 token 集合中采样，动态控制输出多样性。"}]}
+{"split": "train", "messages": [{"role": "user", "content": "用一句话解释什么是模型评测中的 pass@k。"}, {"role": "assistant", "content": "pass@k 表示对每题采样 k 个答案至少有一个正确的比例，衡量模型的探索能力。"}]}
+{"split": "eval", "messages": [{"role": "user", "content": "用一句话解释什么是残差连接。"}, {"role": "assistant", "content": "残差连接把输入直接加到输出上，让梯度更容易回传、训练更深的网络。"}]}
+{"split": "eval", "messages": [{"role": "user", "content": "用一句话解释什么是 LayerNorm。"}, {"role": "assistant", "content": "LayerNorm 对单个样本的特征维度做归一化，稳定各层的数值分布。"}]}
+{"split": "eval", "messages": [{"role": "user", "content": "用一句话解释什么是数据去重。"}, {"role": "assistant", "content": "数据去重删除训练集中重复或高度相似的样本，减少记忆与评测分数虚高。"}]}
+{"split": "eval", "messages": [{"role": "user", "content": "用一句话解释什么是 SFT。"}, {"role": "assistant", "content": "SFT 用「指令 → 回答」示范数据继续训练模型，让它学会按指令作答的格式。"}]}

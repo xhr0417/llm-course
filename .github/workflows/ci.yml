@@ -21,6 +21,7 @@ jobs:
       - run: node tools/validate-batch2.js
       - run: node tools/validate-jobs.js
       - run: node tools/validate-portfolio.js
+      - run: node tools/validate-guided.js
 
   python-unit:
     name: Python unit tests (${{ matrix.project }})
@@ -42,6 +43,37 @@ jobs:
           RUN_MODEL_TESTS: "0"
           KMP_DUPLICATE_LIB_OK: "TRUE"
         run: pytest -q
+
+  guided-starters:
+    name: Guided starter must fail (${{ matrix.starter }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        starter: [log-analyzer, llm-eval]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r projects/${{ matrix.starter }}/starter/requirements.txt
+      - name: Starter 初始状态必须是「有意义的红」（全绿 = 教学设计失效）
+        working-directory: projects/${{ matrix.starter }}/starter
+        run: |
+          set +e
+          pytest -q > starter_output.txt 2>&1
+          code=$?
+          cat starter_output.txt
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::starter 初始状态不应全绿（学生还没有实现任何东西）"
+            exit 1
+          fi
+          if ! grep -qE "[0-9]+ (failed|error)" starter_output.txt; then
+            echo "::error::starter 失败输出中没有 failed/error 计数"
+            exit 1
+          fi
+          echo "✅ starter 初始状态符合设计：测试为红，等待学生逐步实现。"
 
   docker-build:
     name: Docker build (rag-service)

@@ -43,8 +43,9 @@
     localStorage.setItem("llm-course-theme", next);
   });
 
-  /* ================= Progress（三级：阅读 / Lab / 项目） ================= */
+  /* ================= Progress（阅读 / Lab / 项目 + Guided Build 分步） ================= */
   var PROGRESS_KEYS = ["read", "lab", "project"];
+  var STEP_STATES = ["todo", "doing", "done"];
   function migrateProgress(raw) {
     var out = {};
     Object.keys(raw || {}).forEach(function (id) {
@@ -53,9 +54,25 @@
       else if (v && typeof v === "object") {
         out[id] = {};
         PROGRESS_KEYS.forEach(function (k) { if (v[k]) out[id][k] = true; });
+        if (v.guided && typeof v.guided === "object") {
+          var g = { steps: {}, ran: !!v.guided.ran, explained: !!v.guided.explained };
+          if (v.guided.steps && typeof v.guided.steps === "object") {
+            Object.keys(v.guided.steps).forEach(function (sid) {
+              var st = v.guided.steps[sid];
+              if (st === "doing" || st === "done") g.steps[sid] = st;
+            });
+          }
+          out[id].guided = g;
+        }
       }
     });
     return out;
+  }
+  function guidedState(chId) {
+    var p = state.progress[chId] || (state.progress[chId] = {});
+    if (!p.guided || typeof p.guided !== "object") p.guided = {};
+    if (!p.guided.steps || typeof p.guided.steps !== "object") p.guided.steps = {};
+    return p.guided;
   }
   function loadProgress() {
     var raw = {};
@@ -108,8 +125,8 @@
             .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  function renderMarkdown(md) {
-    var ctx = { containers: [], protected: [] };
+  function renderMarkdown(md, chapterId) {
+    var ctx = { containers: [], protected: [], chapterId: chapterId || null, labCounter: 0 };
     var prepared = extractContainers(md, ctx);
     prepared = extractProtected(prepared, ctx);
     var html = marked.parse(prepared);
@@ -211,7 +228,20 @@
     interview: { icon: "🎯", title: "面试常问", cls: "box-interview" },
     example: { icon: "📌", title: "具体例子", cls: "box-example" },
     note: { icon: "📘", title: "提示", cls: "box-note" },
-    key: { icon: "🔑", title: "本节必须记住", cls: "box-key" }
+    key: { icon: "🔑", title: "本节必须记住", cls: "box-key" },
+    /* Guided Build 专用（G0） */
+    goal: { icon: "🎯", title: "本步目标", cls: "box-goal" },
+    why: { icon: "❓", title: "为什么需要它", cls: "box-why" },
+    files: { icon: "📁", title: "当前已有文件", cls: "box-files" },
+    predict: { icon: "🔮", title: "先预测，再运行", cls: "box-predict" },
+    write: { icon: "✍️", title: "现在你来做", cls: "box-write" },
+    run: { icon: "▶️", title: "运行", cls: "box-run" },
+    expect: { icon: "👀", title: "预期结果", cls: "box-expect" },
+    fail: { icon: "🚨", title: "如果失败，观察这些", cls: "box-fail" },
+    inspect: { icon: "🔍", title: "定位与修复", cls: "box-fail" },
+    bug: { icon: "🐛", title: "Bug 记录", cls: "box-bug" },
+    checkpoint: { icon: "✅", title: "本步验收（self-check）", cls: "box-checkpoint" },
+    explain: { icon: "🗣️", title: "你应该能解释什么", cls: "box-explain" }
   };
 
   function restoreContainers(html, ctx) {
@@ -242,9 +272,72 @@
     return html;
   }
 
+  /* ---------- Guided Build：lab 容器 / step 卡片 / Hint / Solution ---------- */
+  function renderLabNode(node, ctx) {
+    var lines = String(node.content).split("\n");
+    var meta = {};
+    var rest = [];
+    lines.forEach(function (line) {
+      var m = /^(goal|project|solution|effort|prereq|deliverable|checkpoint)\s*[:：]\s*(.+)$/.exec(line.trim());
+      if (m) meta[m[1].toLowerCase()] = m[2].trim();
+      else rest.push(line);
+    });
+    ctx.labCounter = (ctx.labCounter || 0) + 1;
+    var rows = [
+      ["目标", meta.goal], ["Starter", meta.project], ["预计", meta.effort],
+      ["前置", meta.prereq], ["交付", meta.deliverable], ["参考", meta.solution]
+    ].filter(function (r) { return r[1]; }).map(function (r) {
+      return '<div class="gl-meta-row"><span class="gl-meta-k">' + r[0] + '</span>' +
+        '<span class="gl-meta-v">' + escapeHtml(r[1]) + "</span></div>";
+    }).join("");
+    return '<section class="guided-lab" data-lab-id="lab' + ctx.labCounter + '"' +
+      (ctx.chapterId ? ' data-chapter="' + escapeHtml(ctx.chapterId) + '"' : "") + ">" +
+      '<div class="gl-head">' +
+        '<div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div>' +
+        '<div class="gl-title">' + escapeHtml(node.title || "Guided Build") + "</div>" +
+        (rows ? '<div class="gl-meta">' + rows + "</div>" : "") +
+      "</div>" +
+      '<div class="gl-progress"></div>' +
+      '<div class="gl-body">' + renderContent(rest.join("\n"), ctx) + "</div>" +
+      "</section>";
+  }
+
+  function renderStepNode(node, ctx) {
+    var m = /^(\d+)[.、]?\s*(.*)$/.exec(node.title || "");
+    var num = m ? m[1] : "";
+    var title = m ? m[2] : (node.title || "Step");
+    if (!num) {
+      ctx.stepCounter = (ctx.stepCounter || 0) + 1;
+      num = String(ctx.stepCounter);
+    }
+    var stepId = "s" + num;
+    return '<section class="guided-step" data-step-id="' + escapeHtml(stepId) + '" data-state="todo">' +
+      '<div class="gs-head">' +
+        '<span class="gs-num">' + escapeHtml(num) + "</span>" +
+        '<h3 class="gs-title">' + escapeHtml(title) + "</h3>" +
+        '<span class="gs-chip">○ 未开始</span>' +
+      "</div>" +
+      '<div class="gs-body">' + renderContent(node.content, ctx) + "</div>" +
+      '<div class="gs-foot">' +
+        '<span class="gs-hinttext">完成标准：在本地真实跑过本步测试（self-check，网站不验证）。</span>' +
+        '<button class="gs-btn primary" data-gs-action="toggle">▶ 开始这一步</button>' +
+      "</div></section>";
+  }
+
   function renderContainer(node, ctx) {
     if (!node) return "";
     var kind = node.kind, title = node.title, content = node.content;
+    if (kind === "lab") return renderLabNode(node, ctx);
+    if (kind === "step") return renderStepNode(node, ctx);
+    if (kind === "hint") {
+      return '<details class="hint"><summary>' + escapeHtml(title || "Hint") + "</summary>" +
+        '<div class="fold-body">' + renderContent(content, ctx) + "</div></details>";
+    }
+    if (kind === "solution") {
+      return '<details class="solution"><summary>' + escapeHtml(title || "查看参考实现（先自己做，再对照）") + "</summary>" +
+        '<div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p>' +
+        renderContent(content, ctx) + "</div></details>";
+    }
     if (kind === "demo") {
       var parts = title.split(/\s+/);
       var demoName = parts[0] || "";
@@ -501,7 +594,7 @@
         (ch.source ? '<span class="chapter-source">对应课件：' + escapeHtml(ch.source) + "</span>" : "") +
       "</div></div>";
 
-    var body = '<div class="md" id="mdBody">' + renderMarkdown(state.contentCache[ch.id]) + "</div>";
+    var body = '<div class="md" id="mdBody">' + renderMarkdown(state.contentCache[ch.id], ch.id) + "</div>";
 
     var footer = '<div class="chapter-footer">' +
       (prev ? '<a class="footer-link prev" href="#/' + prev.id + '"><span class="fl-label">← 上一章</span><span class="fl-title">' + escapeHtml(prev.title) + "</span></a>" : "<span></span>") +
@@ -547,6 +640,9 @@
       if (chosen) applyQuizAnswer(q, chosen);
     });
 
+    // guided labs：step 状态 + 进度面板（本地自检，不做自动判定）
+    initGuidedLabs(ch);
+
     // interactive demos
     if (window.LC && window.LC.init) window.LC.init(els.content);
 
@@ -585,6 +681,153 @@
       saveQuizState(st);
     }
   });
+
+  /* ================= Guided Labs（step 状态 / 进度面板 / self-check） ================= */
+  var STEP_UI = {
+    todo: { chip: "○ 未开始", btn: "▶ 开始这一步", btnCls: "gs-btn primary" },
+    doing: { chip: "◐ 进行中", btn: "✓ 我已在本地通过（self-check）", btnCls: "gs-btn" },
+    done: { chip: "● 完成", btn: "● 已完成（点击重置）", btnCls: "gs-btn done" }
+  };
+  function nextStepState(st) {
+    return st === "todo" ? "doing" : (st === "doing" ? "done" : "todo");
+  }
+  function applyStepUI(el, st) {
+    var ui = STEP_UI[st] || STEP_UI.todo;
+    el.setAttribute("data-state", st);
+    var chip = el.querySelector(".gs-chip");
+    if (chip) { chip.textContent = ui.chip; chip.className = "gs-chip " + st; }
+    var btn = el.querySelector(".gs-btn");
+    if (btn) { btn.textContent = ui.btn; btn.className = ui.btnCls; }
+  }
+  function setBadge(panel, name, label, state, icon) {
+    var el = panel.querySelector('[data-badge="' + name + '"]');
+    if (!el) return;
+    el.textContent = label + " " + icon;
+    el.className = "gl-badge " + state;
+  }
+  function initGuidedLabs(ch) {
+    var labs = els.content.querySelectorAll(".guided-lab");
+    if (!labs.length) return;
+    var g = guidedState(ch.id);
+    labs.forEach(function (lab) {
+      var steps = Array.prototype.slice.call(lab.querySelectorAll(".guided-step"));
+      var panel = lab.querySelector(".gl-progress");
+      if (panel) {
+        panel.innerHTML =
+          '<div class="gl-bar-row"><div class="gl-bar"><div class="gl-bar-fill"></div></div>' +
+          '<span class="gl-count"></span></div>' +
+          '<div class="gl-badges">' +
+            '<span class="gl-badge no" data-badge="learned"></span>' +
+            '<span class="gl-badge no" data-badge="implemented"></span>' +
+            '<button class="gl-badge no" data-guided="ran" title="手动自检：你在本地真实跑通过吗？"></button>' +
+            '<button class="gl-badge no" data-guided="explained" title="手动自检：能不看资料讲清楚吗？"></button>' +
+          "</div>" +
+          '<div class="gl-note">进度记录在本机浏览器（localStorage，不上传）。打开 Solution 不会自动算完成——' +
+          "只有你在本地真实跑过测试，才点「我已在本地通过」。</div>";
+      }
+      function refresh() {
+        var done = 0;
+        steps.forEach(function (s) {
+          var sid = s.getAttribute("data-step-id");
+          var st = g.steps[sid] || "todo";
+          applyStepUI(s, st);
+          if (st === "done") done++;
+        });
+        var total = steps.length;
+        var fill = panel && panel.querySelector(".gl-bar-fill");
+        if (fill) fill.style.width = total ? (done / total * 100) + "%" : "0%";
+        var count = panel && panel.querySelector(".gl-count");
+        if (count) count.textContent = "Guided Build Progress · " + done + " / " + total + " steps";
+        var learned = isRead(ch.id);
+        if (panel) {
+          setBadge(panel, "learned", "Learned", learned ? "ok" : "no", learned ? "✅" : "❌");
+          var impl = total === 0 ? "no" : (done === total ? "ok" : (done > 0 ? "partial" : "no"));
+          setBadge(panel, "implemented", "Implemented", impl,
+            impl === "ok" ? "✅" : (impl === "partial" ? "🟡" : "❌"));
+          var ranBtn = panel.querySelector('[data-guided="ran"]');
+          if (ranBtn) { ranBtn.textContent = "Ran " + (g.ran ? "✅" : "❌"); ranBtn.className = "gl-badge " + (g.ran ? "ok" : "no"); }
+          var expBtn = panel.querySelector('[data-guided="explained"]');
+          if (expBtn) { expBtn.textContent = "Explained " + (g.explained ? "✅" : "❌"); expBtn.className = "gl-badge " + (g.explained ? "ok" : "no"); }
+        }
+      }
+      steps.forEach(function (s) {
+        var btn = s.querySelector(".gs-btn");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          var sid = s.getAttribute("data-step-id");
+          var cur = g.steps[sid] || "todo";
+          var next = nextStepState(cur);
+          if (next === "todo") delete g.steps[sid];
+          else g.steps[sid] = next;
+          saveProgress();
+          refresh();
+        });
+      });
+      if (panel) {
+        panel.querySelectorAll("[data-guided]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var key = btn.getAttribute("data-guided");
+            if (key === "ran") g.ran = !g.ran;
+            else if (key === "explained") g.explained = !g.explained;
+            saveProgress();
+            refresh();
+          });
+        });
+      }
+      refresh();
+    });
+  }
+
+  /* ================= 首页：Guided Build 项目卡片 ================= */
+  var REPO_URL = "https://github.com/xhr0417/llm-course/tree/main/";
+  var GUIDED_PROJECTS = [
+    { name: "log-analyzer", track: "Python 工程", chapter: "python-engineering", startChapter: "python-engineering", starter: "projects/log-analyzer/starter", reference: "projects/log-analyzer", steps: 10 },
+    { name: "hf-mini-lab", track: "HuggingFace", chapter: "huggingface", startChapter: "huggingface", starter: "projects/hf-mini-lab/starter", reference: "projects/hf-mini-lab", steps: 13 },
+    { name: "llm-eval", track: "Capstone 1 · Eval Harness", chapter: "capstone-eval", startChapter: "capstone-eval", starter: "projects/llm-eval/starter", reference: "projects/llm-eval", steps: 15 },
+    { name: "rag-service", track: "Capstone 2 · RAG Service", chapter: "capstone-rag", startChapter: "rag-engineering", starter: null, reference: "projects/rag-service", steps: 0 },
+    { name: "sft-lora", track: "Capstone 3 · SFT/LoRA", chapter: "capstone-sft", startChapter: "capstone-sft", starter: null, reference: "projects/sft-lora", steps: 0 },
+    { name: "inference-benchmark", track: "Capstone 4 · Profiling Lab", chapter: "capstone-infra", startChapter: "capstone-infra", starter: null, reference: "projects/inference-benchmark", steps: 0 }
+  ];
+  function renderGuidedProjects() {
+    var host = document.getElementById("guidedProjectsCard");
+    if (!host) return;
+    host.innerHTML = GUIDED_PROJECTS.map(function (p) {
+      var total = p.steps;
+      var done = 0;
+      if (total) {
+        var ch = state.chapters.filter(function (c) { return c.id === p.chapter; })[0];
+        var md = ch && state.contentCache[ch.id];
+        if (md) {
+          var matches = md.match(/^:::step\s+\d+/gm);
+          if (matches) total = matches.length;
+        }
+        var g = state.progress[p.chapter] && state.progress[p.chapter].guided;
+        if (g && g.steps) {
+          Object.keys(g.steps).forEach(function (sid) { if (g.steps[sid] === "done") done++; });
+        }
+      }
+      var progress = total
+        ? '<div style="font-size:12.5px;color:var(--text-soft);margin-top:8px">Guided Build 进度：<strong style="color:' +
+          (done === total ? "var(--green)" : "var(--accent-text)") + '">' + done + " / " + total + "</strong> steps</div>"
+        : '<div style="font-size:12.5px;color:var(--text-faint);margin-top:8px">Guided Build 迁移中 · 先用现有 Lab + Reference 完成 Checkpoint</div>';
+      var guidedBtn = p.starter
+        ? '<a class="tag" href="#/' + p.startChapter + '">Guided Build ↗</a>'
+        : '<span class="tag" style="color:var(--text-faint)">Guided Build 迁移中</span>';
+      var chMeta = state.chapters.filter(function (c) { return c.id === p.chapter; })[0] || {};
+      return '<div style="border:1px solid var(--border);border-radius:12px;padding:13px 15px;background:var(--bg-panel)">' +
+        '<div style="font-weight:800;font-size:14.5px">' + escapeHtml(p.name) + "</div>" +
+        '<div style="font-size:12.5px;color:var(--text-soft);margin:3px 0 9px">' + escapeHtml(p.track) + "</div>" +
+        '<div style="display:flex;flex-wrap:wrap;gap:7px">' +
+        '<a class="tag" href="#/' + p.chapter + '">Learn（第 ' + escapeHtml(chMeta.num || "") + " 章）</a>" +
+        guidedBtn +
+        '<a class="tag" href="' + REPO_URL + p.reference + '" target="_blank" rel="noopener">Reference ↗</a>' +
+        (p.starter ? '<a class="tag" href="' + REPO_URL + p.starter + '" target="_blank" rel="noopener">starter ↗</a>' : "") +
+        "</div>" + progress + "</div>";
+    }).join("");
+    var anyGuided = GUIDED_PROJECTS.filter(function (p) { return p.starter; }).length;
+    var hint = document.getElementById("guidedProjectsHint");
+    if (hint) hint.textContent = anyGuided + " 个项目已开放 Guided Build，其余迁移中（诚实标注）";
+  }
 
   function showHome() {
     var total = state.chapters.length;
@@ -630,15 +873,33 @@
       '<p style="font-size:13px;color:var(--text-soft)">完整能力矩阵、Checkpoint 验收标准与四级学习标准见 ' +
       '<a class="tag" href="#/job-ready">第 24 章 · Job-Ready Track</a>。</p>';
 
-    var guideSection = '<h2>现在应该学什么</h2>' +
-      '<p style="font-size:13.5px">没有实习经历？按这条线走（约 8-10 周），完成后即可投递：</p>' +
-      '<div style="font-size:13.5px;line-height:2.1">' +
-      chLink("25 Python 工程", "python-engineering") + " → " + chLink("11 PyTorch", "pytorch") + " → " +
-      chLink("07 Transformer", "transformer") + " → " + chLink("26 HuggingFace", "huggingface") + " → " +
-      chLink("23 Evaluation", "llm-eval") + " → " + chLink("27 Capstone 1 · Eval Harness", "capstone-eval") + " → " + chLink("28 RAG 工程", "rag-engineering") + " → " + chLink("29 Capstone 2 · RAG Service", "capstone-rag") + " → <span style='color:var(--text-soft)'>开始投递</span>" +
-      "</div>" +
-      '<p style="font-size:13px;color:var(--text-soft)">之后按方向分叉：算法方向走 SFT/Data/后训练；Infra 方向走 GPU/FlashAttention/Distributed/Inference/Profiling。' +
-      "学习进度按「阅读 / Lab / 项目」三级分别记录——读完 Markdown 只点亮第一级。</p>";
+    var stage = function (title, learnId, guided, checkpoint, done) {
+      return '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:8px 0;background:var(--bg-panel)">' +
+        '<div style="font-weight:750;font-size:14px">' + title +
+        (done ? ' <span style="color:var(--green);font-size:12px">✓ 本页已标记完成</span>' : "") + "</div>" +
+        '<div style="font-size:13px;color:var(--text-soft);margin-top:4px;line-height:1.9">' +
+        '<a class="tag" href="#/' + learnId + '">Learn 章节</a> → ' +
+        (guided ? '<a class="tag" href="#/' + guided + '">Guided Lab（starter + 分步测试）</a>' : '<span class="tag">Guided Lab 迁移中</span>') +
+        " → <span style='color:var(--text-soft)'>" + checkpoint + "</span></div></div>";
+    };
+    var guideSection = '<h2>现在应该学什么（读课程 ≠ 做项目）</h2>' +
+      '<p style="font-size:13.5px">没有实习经历？按这条线走（约 8-10 周），完成后即可投递。' +
+      "每一段都分两个动作：<strong>Learn</strong>（读懂）和 <strong>Guided Lab</strong>（下载 starter，亲手把测试从红变绿）：</p>" +
+      stage("Python Engineering", "python-engineering", "python-engineering", "Checkpoint A · log-analyzer CLI", isRead("python-engineering")) +
+      stage("PyTorch + Transformer", "pytorch", null, "前置能力（Knowledge Track）", isRead("pytorch") && isRead("transformer")) +
+      stage("HuggingFace for LLM Engineering", "huggingface", "huggingface", "Checkpoint B · Qwen 全流程 + LoRA", isRead("huggingface")) +
+      stage("LLM Evaluation + Eval Harness", "capstone-eval", "capstone-eval", "Checkpoint C · Mini 评测框架", isRead("capstone-eval")) +
+      stage("Retrieval / RAG + RAG Service", "rag-engineering", null, "Checkpoint D · RAG 服务（Guided Lab 迁移中）", isRead("capstone-rag")) +
+      '<p style="font-size:13.5px;margin-top:10px"><strong>开始投递 →</strong> 之后按方向分叉：算法方向走 SFT/Data/后训练；Infra 方向走 GPU/FlashAttention/Distributed/Inference/Profiling。</p>' +
+      '<p style="font-size:13px;color:var(--text-soft)">Guided Build 章节（25/26/27）的页面里有独立的构建进度条（Step 完成数 + Learned / Implemented / Ran / Explained 四态）。' +
+      "「阅读 / Lab / 项目」与 Guided Build 进度都记录在本地浏览器。</p>";
+
+    var guidedSection = '<h2>Job-Ready 项目 · 三个入口</h2>' +
+      '<p style="font-size:13.5px">每个项目都有 <strong>Learn</strong>（建立理解）/ <strong>Guided Build</strong>（亲手做）/ <strong>Reference</strong>（对照完整工程）三层。' +
+      "先做 starter，全绿之后再打开 Reference——顺序反了，项目就不算你做的。</p>" +
+      '<div id="guidedProjectsCard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:10px 0">' +
+      '<span style="color:var(--text-soft);font-size:13px">加载中…</span></div>' +
+      '<p id="guidedProjectsHint" style="font-size:12.5px;color:var(--text-faint)"></p>';
 
     var html = '<div class="chapter-head">' +
       '<div class="chapter-eyebrow">LLM 学习路线 · 共 ' + total + " 章</div>" +
@@ -646,7 +907,7 @@
       '<p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目做出第一段 AI 实习的作品集。</p>' +
       "</div>" +
       '<div class="callout key"><div class="callout-title">主线一句话</div><p>输入数据 → Tokenizer → Embedding → Transformer → Logits → Softmax → P(next token)；训练 = 前向传播 → 算 Loss → 反向传播 → 算梯度 → Optimizer 更新参数。</p></div>' +
-      '<div class="md">' + jobSection + guideSection +
+      '<div class="md">' + jobSection + guideSection + guidedSection +
       '<h2>章节目录</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">' + cards + "</div>" +
       '<h2>怎么用这套课程</h2><ul>' +
       "<li>求职优先：先看上面「我要找什么实习」，按对应 Track 的顺序补能力。</li>" +
@@ -661,6 +922,7 @@
     els.content.innerHTML = html;
     els.tocNav.innerHTML = "";
     window.scrollTo({ top: 0 });
+    renderGuidedProjects();
 
     // 项目清单动态加载（数字来自 content/projects.json，构建时扫描 projects/ 生成）
     fetch("content/projects.json").then(function (r) { return r.json(); }).then(function (data) {
@@ -726,9 +988,13 @@
         var current = { title: ch.title, body: [] };
         lines.forEach(function (line) {
           var m = /^##\s+(.*)/.exec(line);
+          var step = /^:::step\s+(\d+)[.、]?\s+(.*)/.exec(line.trim());
           if (m) {
             if (current.body.length) sections.push(current);
             current = { title: m[1], body: [] };
+          } else if (step) {
+            if (current.body.length) sections.push(current);
+            current = { title: "Step " + step[1] + " · " + step[2], body: [] };
           } else if (!/^#{1,6}\s/.test(line)) {
             current.body.push(line);
           }
@@ -826,6 +1092,8 @@
     return buildSearchIndex();
   }).then(function () {
     window.addEventListener("hashchange", route);
+    // 搜索索引完成后，首页项目卡片的 Guided Build 进度可以按真实 step 数重算
+    renderGuidedProjects();
   }).catch(function (err) {
     els.content.innerHTML = '<div class="loading">初始化失败：' + escapeHtml(err.message) + "<br>请确认通过本地服务器访问（python3 -m http.server），而不是直接双击打开 HTML。</div>";
   });

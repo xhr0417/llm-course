@@ -33,8 +33,8 @@ function escapeHtml(s) {
 }
 
 /* ================= 渲染管线（与 js/app.js 保持一致，含嵌套容器修复） ================= */
-function renderMarkdown(md) {
-  const ctx = { containers: [], protected: [] };
+function renderMarkdown(md, chapterId) {
+  const ctx = { containers: [], protected: [], chapterId: chapterId || null, labCounter: 0 };
   let prepared = extractContainers(md, ctx);
   prepared = extractProtected(prepared, ctx);
   let html = marked.parse(prepared);
@@ -117,7 +117,20 @@ const BOX_META = {
   interview: { icon: "🎯", title: "面试常问", cls: "box-interview" },
   example: { icon: "📌", title: "具体例子", cls: "box-example" },
   note: { icon: "📘", title: "提示", cls: "box-note" },
-  key: { icon: "🔑", title: "本节必须记住", cls: "box-key" }
+  key: { icon: "🔑", title: "本节必须记住", cls: "box-key" },
+  /* Guided Build 专用（G0） */
+  goal: { icon: "🎯", title: "本步目标", cls: "box-goal" },
+  why: { icon: "❓", title: "为什么需要它", cls: "box-why" },
+  files: { icon: "📁", title: "当前已有文件", cls: "box-files" },
+  predict: { icon: "🔮", title: "先预测，再运行", cls: "box-predict" },
+  write: { icon: "✍️", title: "现在你来做", cls: "box-write" },
+  run: { icon: "▶️", title: "运行", cls: "box-run" },
+  expect: { icon: "👀", title: "预期结果", cls: "box-expect" },
+  fail: { icon: "🚨", title: "如果失败，观察这些", cls: "box-fail" },
+  inspect: { icon: "🔍", title: "定位与修复", cls: "box-fail" },
+  bug: { icon: "🐛", title: "Bug 记录", cls: "box-bug" },
+  checkpoint: { icon: "✅", title: "本步验收（self-check）", cls: "box-checkpoint" },
+  explain: { icon: "🗣️", title: "你应该能解释什么", cls: "box-explain" }
 };
 
 /* 知识关联标签 -> 静态页链接 */
@@ -181,9 +194,67 @@ function renderContent(content, ctx, chapterId) {
   return html;
 }
 
+function renderLabStatic(node, ctx, chapterId) {
+  const lines = String(node.content).split("\n");
+  const meta = {};
+  const rest = [];
+  lines.forEach(function (line) {
+    const m = /^(goal|project|solution|effort|prereq|deliverable|checkpoint)\s*[:：]\s*(.+)$/.exec(line.trim());
+    if (m) meta[m[1].toLowerCase()] = m[2].trim();
+    else rest.push(line);
+  });
+  ctx.labCounter = (ctx.labCounter || 0) + 1;
+  const rows = [
+    ["目标", meta.goal], ["Starter", meta.project], ["预计", meta.effort],
+    ["前置", meta.prereq], ["交付", meta.deliverable], ["参考", meta.solution]
+  ].filter(function (r) { return r[1]; }).map(function (r) {
+    return '<div class="gl-meta-row"><span class="gl-meta-k">' + r[0] + "</span>" +
+      '<span class="gl-meta-v">' + escapeHtml(r[1]) + "</span></div>";
+  }).join("");
+  return '<section class="guided-lab" data-lab-id="lab' + ctx.labCounter + '">' +
+    '<div class="gl-head">' +
+      '<div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div>' +
+      '<div class="gl-title">' + escapeHtml(node.title || "Guided Build") + "</div>" +
+      (rows ? '<div class="gl-meta">' + rows + "</div>" : "") +
+    "</div>" +
+    '<div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在' +
+    ' <a href="../index.html#/' + escapeHtml(chapterId) + '">交互版</a> 中记录（保存在你自己的浏览器里）。' +
+    "静态阅读版只展示完整的构建路线。</div></div>" +
+    '<div class="gl-body">' + renderContent(rest.join("\n"), ctx, chapterId) + "</div>" +
+    "</section>";
+}
+
+function renderStepStatic(node, ctx, chapterId) {
+  const m = /^(\d+)[.、]?\s*(.*)$/.exec(node.title || "");
+  const num = m ? m[1] : "";
+  const title = m ? m[2] : (node.title || "Step");
+  ctx.stepCounter = (ctx.stepCounter || 0) + 1;
+  const stepId = "s" + (num || String(ctx.stepCounter));
+  return '<section class="guided-step" data-step-id="' + escapeHtml(stepId) + '" data-state="todo">' +
+    '<div class="gs-head">' +
+      '<span class="gs-num">' + escapeHtml(num || "•") + "</span>" +
+      '<h3 class="gs-title">' + escapeHtml(title) + "</h3>" +
+      '<span class="gs-chip">步骤 ' + escapeHtml(num || "") + "</span>" +
+    "</div>" +
+    '<div class="gs-body">' + renderContent(node.content, ctx, chapterId) + "</div>" +
+    "</section>";
+}
+
 function renderContainer(node, ctx, chapterId) {
   if (!node) return "";
   const kind = node.kind, title = node.title, content = node.content;
+
+  if (kind === "lab") return renderLabStatic(node, ctx, chapterId);
+  if (kind === "step") return renderStepStatic(node, ctx, chapterId);
+  if (kind === "hint") {
+    return '<details class="hint"><summary>' + escapeHtml(title || "Hint") + "</summary>" +
+      '<div class="fold-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
+  }
+  if (kind === "solution") {
+    return '<details class="solution"><summary>' + escapeHtml(title || "查看参考实现（先自己做，再对照）") + "</summary>" +
+      '<div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p>' +
+      renderContent(content, ctx, chapterId) + "</div></details>";
+  }
 
   if (kind === "demo") {
     const parts = title.split(/\s+/);
@@ -368,6 +439,7 @@ function pageTemplate(chapter, idx, bodyHtml, toc) {
 }
 
 /* ================= 构建主流程 ================= */
+function main() {
 const outDir = path.join(ROOT, "chapters");
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
@@ -467,3 +539,16 @@ console.log("✅ 静态化完成");
 console.log("   章节页：" + built + " 个 → chapters/*.html");
 console.log("   KaTeX 渲染：" + totalMath + " 处");
 console.log("   额外产物：sitemap.xml / robots.txt / llms.txt / index.html 静态目录");
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  renderMarkdown: renderMarkdown,
+  renderContainer: renderContainer,
+  renderContent: renderContent,
+  extractContainers: extractContainers,
+  BOX_META: BOX_META
+};

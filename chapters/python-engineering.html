@@ -34,12 +34,643 @@
 <div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：用工业生态跑模型 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/python-engineering">交互版</a>。</div>
 <div class="chapter-head"><div class="chapter-eyebrow">第 25 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Python Engineering for AI：写出能跑的项目</h1><p class="chapter-desc">项目结构、argparse/dataclass、typing、pathlib 与 JSONL、logging、异常、HTTP/retry、asyncio、pytest——配可运行 CLI 项目 + pytest 全套。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
 <div class="md">
-<h1>第 25 章 · Python Engineering for AI：写出能跑的项目</h1>
-<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>第 11 章解决「怎么看懂模型代码」；这一章解决「<strong>怎么写出一个真正的工程项目</strong>」——从 <code>train.py</code> 一坨脚本，到别人能 clone、能跑、能测、能改的仓库。</p>
+<h1>第 25 章 · Python Engineering for AI：从 0 亲手构建第一个真实项目</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>第 11 章解决「怎么看懂模型代码」；这一章解决「<strong>怎么亲手写出一个真正的工程项目</strong>」——不是看一个做好的仓库，而是从一个不完整的 starter 出发，让 41 个测试从红变绿。</p>
 </div></div>
-<div class="box box-note"><div class="box-title">📘 这一章不教 Python 语法</div><div class="box-body"><p>假设你已经会写 for 循环和函数。我们只教 <strong>AI 实习里最常用的工程部分</strong>：项目结构、配置、日志、异常、HTTP、异步、测试。学完的目标是能独立交付 Checkpoint A。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 这一章的模式变了：三层结构</div><div class="box-body"><p>以前的章节是「解释概念 → 给完整代码 → 让你运行」。这一章开始，Job-Ready Track 升级为 <strong>Guided Build</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>你获得什么</th>
+<th>在哪里</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Level 1 · Learn</strong></td>
+<td>工程基础讲解（argparse / dataclass / logging / pytest…）</td>
+<td>本章 25.3 参考手册 + 各 Step 内嵌知识盒</td>
+</tr>
+<tr>
+<td><strong>Level 2 · Guided Build</strong></td>
+<td>一个不完整的 starter + 10 步任务 + 分步测试</td>
+<td><code>projects/log-analyzer/starter/</code>（25.2 的 Lab）</td>
+</tr>
+<tr>
+<td><strong>Level 3 · Reference Solution</strong></td>
+<td>完整工程实现（完成后才能对照）</td>
+<td><code>projects/log-analyzer/</code>（25.4）</td>
+</tr>
+</tbody></table>
+<p><strong>完成的定义</strong>：starter 的 41 个测试全部通过 + 你能不看资料回答 Step 9 的复盘问题。打开参考实现不算完成。</p>
 </div></div>
-<h2>25.1 项目结构：为什么不能只有一个 train.py</h2>
+<h2>25.1 这一章怎么学</h2>
+<p>本文档假设你已经会写 Python 函数和循环。我们只教 <strong>AI 实习里最常用的工程部分</strong>，而且是用「做项目」的方式教：</p>
+<pre><code class="lang-">你打开一章
+   ↓
+下载 starter
+   ↓
+运行 pytest：41 failed（这是设计好的，不是你的错）
+   ↓
+写第一段代码（Step 1）
+   ↓
+测试变绿一部分
+   ↓
+遇到脏数据、错位 bug（Step 3 / Step 5）
+   ↓
+定位 → 修复 → 测试全绿
+   ↓
+真实运行 CLI，产出你自己的报告
+   ↓
+最后对照 Reference Solution，回答复盘问题</code></pre>
+<p>每一步都遵循同一个循环：</p>
+<p><strong>目标 → 预测 → 你来写 → 运行 → （失败）→ 观察 → 修复 → 测试 → 解释</strong></p>
+<div class="box box-note"><div class="box-title">📘 为什么先给「失败的测试」</div><div class="box-body"><p>真实工程里，测试就是需求和验收标准。starter 的 41 个失败不是惩罚，而是任务清单：
+每写一个函数，就有一组测试从红变绿。你会同时得到「方向」和「反馈」——
+这正是工业界读一个陌生 repo、接手一个未完成 feature 的真实体验。</p>
+</div></div>
+<h2>25.2 项目：Training Log Analyzer</h2>
+<p><strong>要解决的问题</strong>：一次训练跑完（或崩掉）之后，你要从 <code>train.log</code> 里快速回答：</p>
+<ul>
+<li>final loss / best loss 是多少、出现在哪一步？</li>
+<li>平均吞吐（tokens/s）是多少？</li>
+<li>有没有 warning（grad norm 超阈值、val loss 上升）？</li>
+<li>有没有出现 NaN、训练是否发散？</li>
+</ul>
+<p><strong>最终交付物</strong>（就是你要亲手做的）：一个 CLI 项目 ——</p>
+<pre><code class="lang-bash">cd projects/log-analyzer/starter
+python -m log_analyzer.cli samples/train.log          # 人读报告
+python -m log_analyzer.cli samples/train.log --json    # 机读 JSON（字段契约）
+python -m log_analyzer.cli samples/train_nan.log --warnings
+pytest -q                                              # 41 passed（你的验收线）</code></pre>
+<p>参考实现的真实输出（本课程实测，你做完后应该得到同类结果）：</p>
+<pre><code class="lang-">== 训练日志分析 ==
+事件数            : 22（原始行 22）
+step 范围         : 10 → 1000
+final loss        : 2.2710
+best  loss        : 2.2710 (step 1000)
+平均吞吐          : 4936 tokens/s
+warning 数        : 3
+error   数        : 0
+NaN 事件          : 否</code></pre>
+<p><strong>starter 在哪里</strong>：<code>projects/log-analyzer/starter/</code>（你写代码的地方）。
+<strong>参考实现在哪里</strong>：<code>projects/log-analyzer/</code>（先不要打开——最后对照用）。</p>
+<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">log-analyzer · Guided Build</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零实现一个训练日志分析 CLI：parser / stats / CLI 三层，41 个测试全绿</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/log-analyzer/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">2–4 小时（每个 Step 约 10–30 分钟）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">会写 Python 函数 / 循环 / dict；装好 Python 3.9+ 与 pytest</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">通过全部测试的 src/log_analyzer/（parser + stats + cli）+ 真实运行输出 + 自己的 3 个边界测试</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/python-engineering">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">准备环境与第一次运行</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>把 starter 跑起来，亲眼看到初始的红色测试——并且理解：<strong>这是正常的</strong>。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>Guided Build 的第一步永远是「先让项目在你机器上跑起来」。连测试都不会跑，
+后面每一步的反馈都无从谈起。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>starter/
+├── README.md            # 先读它：Step → 测试 对应表
+├── requirements.txt     # 只需要 pytest
+├── samples/train.log    # 真实训练日志（22 行）
+├── samples/train_nan.log
+├── src/log_analyzer/    # ← 你要在这里写代码（现在全是 NotImplementedError）
+└── tests/               # 41 个测试，分 8 个步骤文件</p>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">cd projects/log-analyzer/starter
+pip install -r requirements.txt
+pytest -q</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">41 failed in 0.15s</code></pre>
+（真实记录：本课程在 Python 3.12 + pytest 9 下实测为 <code>41 failed in 0.15s</code>；pytest 版本不同时措辞可能略有差异，关键是 41 个失败。）</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果你看到的是：</p>
+<ul>
+<li><code>No module named pytest</code> → 依赖没装好，先 <code>pip install -r requirements.txt</code>；</li>
+<li><code>collected 0 items</code> → 你在错误的目录里运行 pytest，检查 <code>pytest.ini</code> 是否和 tests/ 同级；</li>
+<li><code>0 failed</code> 全绿 → 你打开的不是 starter，而是参考实现（检查路径里有没有 <code>starter/</code>）。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1 — 用哪个 Python</summary><div class="fold-body"><p>先 <code>python --version</code> 确认 3.9+。如果有多个环境（conda / pyenv / venv），
+记住你装 pytest 的那个环境和运行 pytest 的必须是同一个。</p>
+</div></details><details class="hint"><summary>Hint 2 — 只跑本步</summary><div class="fold-body"><p>一上来跑全量 41 个失败容易晕。课程每一步都给了单文件命令，例如
+<code>pytest -q tests/test_step1_load.py</code>——一次只看 5 个测试。</p>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p>你能画出这条链：<strong>starter（不完整）→ pytest 红 → 我实现 → pytest 绿</strong>。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>为什么 starter 一上来应该是红的？如果它全绿，问题出在哪？</li>
+<li>测试文件为什么按 step 拆成 8 个而不是一个大文件？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s1" data-state="todo"><div class="gs-head"><span class="gs-num">1</span><h3 class="gs-title">先读取日志文件（pathlib / encoding）</h3><span class="gs-chip">步骤 1</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>实现 <code>load_lines()</code>：按 UTF-8 读出文件的每一行；文件不存在时抛出 <code>FileNotFoundError</code>。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>所有数据管线都从「把文件读进内存」开始。用 <code>pathlib.Path</code> 而不是字符串拼路径，
+是所有 AI 项目的统一惯例（Windows/macOS/Linux 行为一致，还能直接用 <code>/</code> 拼路径）。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/parser.py</code>（函数 <code>load_lines</code>）</p>
+</div></div><div class="box box-note"><div class="box-title">📘 pathlib 与编码的两个硬规则</div><div class="box-body"><pre><code class="lang-python">from pathlib import Path
+
+path = Path(&quot;samples&quot;) / &quot;train.log&quot;          # 用 / 拼路径，不写 &quot;samples/train.log&quot;
+text = path.read_text(encoding=&quot;utf-8&quot;)       # 中文环境必须显式 utf-8
+lines = text.splitlines()                     # 不带换行符；空行保留（占总行数是有效信息）</code></pre>
+<ul>
+<li><code>encoding</code> 不写也能跑——直到某天遇到 GBK 日志在 CI 上炸掉。<strong>显式写</strong>。</li>
+<li><code>.splitlines()</code> 和 <code>.split(&quot;\n&quot;)</code> 的区别：前者处理 <code>\r\n</code>、<code>\r</code>，跨平台更稳。</li>
+</ul>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>：实现 <code>load_lines(path)</code>。</p>
+<ul>
+<li>TODO 1：用 <code>Path(path).read_text(encoding=&quot;utf-8&quot;)</code> 读文件；</li>
+<li>TODO 2：用 <code>.splitlines()</code> 拆行返回（返回 <code>list[str]</code>）；</li>
+<li>TODO 3：<strong>不要</strong> try/except 吞掉 <code>FileNotFoundError</code>——让它抛给调用方。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step1_load.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">5 passed</code></pre>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li><code>UnicodeDecodeError</code> → 检查是否真的写了 <code>encoding=&quot;utf-8&quot;</code>；</li>
+<li>测试报 <code>DID NOT RAISE FileNotFoundError</code> → 你把异常吞掉了（比如错误的 try/except）；</li>
+<li>行尾多了 <code>\n</code> → 你用了 <code>read().split(&quot;\n&quot;)</code> 而文本以换行结尾会多出一个空字符串，改用 <code>splitlines()</code>。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p>函数体可以只有两行：一行读取（显式 utf-8），一行 splitlines。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>如果你习惯性写了 <code>if not path.exists(): return []</code>——删掉它。
+「文件不存在」和「文件是空的」是两种完全不同的情况，第一步就要把它们分开。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def load_lines(path: &quot;Path | str&quot;) -&gt; list[str]:
+    &quot;&quot;&quot;按 UTF-8 读取文件的每一行（不含行尾换行符）。&quot;&quot;&quot;
+    return Path(path).read_text(encoding=&quot;utf-8&quot;).splitlines()</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step1_load.py</code> → 5 passed。并且你能说出缺文件时抛异常的理由。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>为什么「文件不存在」应该是异常，而「文件为空」是空列表？两者在 CLI 上的处理有何不同（退出码 2 vs 1，Step 7 会验收）？</li>
+<li>显式声明 <code>encoding=&quot;utf-8&quot;</code> 防的是什么类型的 bug？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s2" data-state="todo"><div class="gs-head"><span class="gs-num">2</span><h3 class="gs-title">解析第一条训练日志（dataclass / typing / 正则）</h3><span class="gs-chip">步骤 2</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>把一行文本变成结构化数据：定义 <code>LogEvent</code>，实现 <code>parse_line()</code> / <code>parse_lines()</code> / <code>parse_log_file()</code>。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>文本日志是一坨非结构化字符串；后面的所有统计（loss 曲线、吞吐、warning）都依赖
+「先把它变成有类型的数据」。这正是 AI 数据管线的通用第一步：<strong>解析成结构化记录</strong>。</p>
+</div></div><div class="box box-note"><div class="box-title">📘 dataclass：为什么不用 dict</div><div class="box-body"><pre><code class="lang-python">from dataclasses import dataclass, field
+
+@dataclass(frozen=True)
+class LogEvent:
+    timestamp: datetime
+    level: str
+    message: str
+    fields: dict[str, str] = field(default_factory=dict)</code></pre>
+<ol>
+<li>属性访问有补全、拼错属性名直接 <code>AttributeError</code>（<code>event.los</code> 这种错在 dict 里要跑到线上才发现）；</li>
+<li>默认值统一管理，<code>LogEvent(...)</code> 构造出来的对象一定合法；</li>
+<li>可变默认值必须用 <code>field(default_factory=...)</code>——顺便避开 Python 经典坑；</li>
+<li><code>frozen=True</code> 让事件不可变：日志是事实，不应被下游随手改。</li>
+</ol>
+</div></div><div class="box box-note"><div class="box-title">📘 类型注解只需要这些</div><div class="box-body"><p><pre><code class="lang-python">from typing import Optional
+
+def parse_line(line: str) -&gt; Optional[LogEvent]: ...   # 可能解析失败 → None
+@property
+def step(self) -&gt; Optional[int]: ...                    # 可能没有 step → None</code></pre>
+<code>Optional[X]</code> 不是装饰品：它告诉调用方「这里必须处理 None」。这是你能给协作者的最低成本的文档。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/parser.py</code></p>
+<ul>
+<li><code>LogEvent.step</code> / <code>LogEvent.loss</code> / <code>LogEvent.tokens_per_sec</code> 三个 property</li>
+<li><code>parse_line</code> / <code>parse_lines</code> / <code>parse_log_file</code></li>
+</ul>
+</div></div><div class="box box-predict"><div class="box-title">🔮 先预测，再运行</div><div class="box-body"><p>运行之前先预测（写在纸上）：</p>
+<ol>
+<li>对 <code>&quot;2025-01-10 09:00:02 INFO  step=10 loss=7.812 lr=3.0e-4 tokens/s=1180&quot;</code>，<code>fields</code> 字典会有几个键？</li>
+<li><code>samples/train.log</code> 一共 22 行，<code>parse_log_file</code> 应该返回几个事件？</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>：</p>
+<ul>
+<li>TODO 1：<code>step</code> property——<code>fields.get(&quot;step&quot;)</code>，是纯数字才转 <code>int</code>，否则 <code>None</code>；</li>
+<li>TODO 2：<code>loss</code> property——转 <code>float</code>，转换失败返回 <code>None</code>（不要抛异常）；</li>
+<li>TODO 3：<code>tokens_per_sec</code> property——<strong>注意键名是 <code>tokens/s</code></strong>（带斜杠）；</li>
+<li>TODO 4：<code>parse_line</code>——先过行级正则拿到「时间戳 + 级别 + 内容」，再把内容里的 <code>key=value</code> 全部切进 <code>fields</code>；</li>
+<li>TODO 5/6：<code>parse_lines</code>（跳过 None）、<code>parse_log_file</code>（组合 <code>load_lines</code> + <code>parse_lines</code>）。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step2_parse.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">8 passed</code></pre>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li><code>tokens_per_sec</code> 永远返回 None → 你的 KV 正则不允许键名里出现 <code>/</code>（这是本项目开发时<strong>真实踩过的坑</strong>，见下方 Bug 记录）；</li>
+<li>时间戳解析失败 → 格式是 <code>%Y-%m-%d %H:%M:%S</code>；</li>
+<li><code>parse_line(&quot;garbage&quot;)</code> 抛异常 → 正则用 <code>match</code> 时要先判 None 再继续。</li>
+</ul>
+</div></div><div class="box box-bug"><div class="box-title">🐛 真实踩坑 · 正则漏了斜杠（本项目开发记录）</div><div class="box-body"><p>早期版本的 KV 正则是 <code>[A-Za-z_][A-Za-z0-9_]*=</code>——不允许键名含 <code>/</code>。
+于是每一行里的 <code>tokens/s=1180</code> 都解析不出来，<code>tokens_per_sec</code> 永远 None，
+吞吐统计静默为空。<strong>pytest 抓出了它</strong>（而不是靠盯代码）。修复：<code>[A-Za-z_][A-Za-z0-9_/]*=</code>。
+教训：正则的字符集要按「真实日志里可能出现的键名」写，写完先打印一遍 <code>fields</code> 肉眼核对。</p>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p>行级正则的形状是：
+<code>^(时间戳)\s+(级别)\s+(内容)$</code>——时间戳用 <code>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}</code>，
+级别用 <code>DEBUG|INFO|WARNING|ERROR</code>，内容用 <code>.*</code>。用命名分组（<code>(?P&lt;name&gt;...)</code>）更可读。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>fields</code> 的构造可以一行完成：
+<code>{kv.group(&quot;key&quot;): kv.group(&quot;value&quot;) for kv in KV_RE.finditer(message)}</code>。
+KV 正则的 value 部分用 <code>[^\s]+</code>（直到空白为止），这样 <code>lr=3.0e-4</code> 会被完整拿到。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">LINE_RE = re.compile(
+    r&quot;^(?P&lt;ts&gt;\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+&quot;
+    r&quot;(?P&lt;level&gt;DEBUG|INFO|WARNING|ERROR)\s+&quot;
+    r&quot;(?P&lt;msg&gt;.*)$&quot;
+)
+KV_RE = re.compile(r&quot;(?P&lt;key&gt;[A-Za-z_][A-Za-z0-9_/]*)=(?P&lt;value&gt;[^\s]+)&quot;)
+
+
+def parse_line(line: str) -&gt; Optional[LogEvent]:
+    line = line.rstrip(&quot;\n&quot;)
+    if not line.strip():
+        return None
+    m = LINE_RE.match(line)
+    if not m:
+        return None
+    fields = {kv.group(&quot;key&quot;): kv.group(&quot;value&quot;) for kv in KV_RE.finditer(m.group(&quot;msg&quot;))}
+    return LogEvent(
+        timestamp=datetime.strptime(m.group(&quot;ts&quot;), TS_FORMAT),
+        level=m.group(&quot;level&quot;),
+        message=m.group(&quot;msg&quot;),
+        fields=fields,
+    )</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step2_parse.py</code> → 8 passed。你能口头解释 <code>fields</code> 为什么不拆成 <code>self.step</code> 这样的字段。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>dataclass 相比 dict 的 4 个收益里，哪个对你调试最有帮助？</li>
+<li>为什么 <code>step</code> / <code>loss</code> 用 property 从 <code>fields</code> 里「按需解析」，而不是在 <code>parse_line</code> 里立刻转好？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s3" data-state="todo"><div class="gs-head"><span class="gs-num">3</span><h3 class="gs-title">现实日志没有这么干净（脏行 / 未知字段 / 坏值）</h3><span class="gs-chip">步骤 3</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>让 parser 扛住真实世界的四类脏数据：WARNING/ERROR 行、NaN 描述行、未知新字段、坏 KV 值。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>教程里的日志永远是干净的；生产日志不是。处理边界输入的能力，
+是「玩具代码”和「工程代码」的分界线——也是面试官判断你写没写过真实项目的地方。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：还是 <code>src/log_analyzer/parser.py</code>（增强 <code>parse_line</code> 与属性解析）</p>
+</div></div><div class="box box-predict"><div class="box-title">🔮 先预测，再运行</div><div class="box-body"><p>先预测，再看答案：</p>
+<ol>
+<li><code>parse_line(&quot;2025-01-10 09:00:02 INFO  step=10 loss=abc tokens/s=1180&quot;)</code> —— <code>loss</code> 应该抛出 <code>ValueError</code>，还是返回 <code>None</code>？</li>
+<li>一行 <code>File &quot;train.py&quot;, line 42</code>（没有时间戳）应该被解析成事件吗？</li>
+<li><code>samples/train_nan.log</code> 的 <code>ERROR step=34 loss is NaN</code> —— 这一行有 <code>loss=</code> 键值对吗？NaN 该怎么被发现？</li>
+</ol>
+</div></div><div class="box box-note"><div class="box-title">📘 `except: pass` 为什么危险（三条纪律）</div><div class="box-body"><ol>
+<li><strong>只捕获你能处理的异常</strong>：坏 KV 值 → 返回 None 是可以处理的；文件不存在 → 不该在这里处理；</li>
+<li><strong>捕获后必须留下信息</strong>：要么转成有语义的返回值（None），要么日志记录，禁止静默吞掉；</li>
+<li><strong>不要捕获裸 <code>Exception</code></strong>：<code>except: pass</code> 会把 <code>KeyboardInterrupt</code>、拼写错误、逻辑 bug 一起吞掉，
+最后在离现场 3 小时的地方爆炸。</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>（都在 <code>parser.py</code>）：</p>
+<ul>
+<li>TODO 1：<code>loss</code> / <code>tokens_per_sec</code> 对坏值（<code>loss=abc</code>）返回 <code>None</code> 而不是崩溃；</li>
+<li>TODO 2：未知字段照单全收（<code>new_metric=0.42</code> 要出现在 <code>fields</code> 里）；</li>
+<li>TODO 3：确认 <code>parse_line</code> 对空行 / 续行（无时间戳）返回 <code>None</code>；</li>
+<li>TODO 4：不用改代码，但用一行 Python 验证 NaN 行如何进入统计——它的信号在 <code>message</code> 里（含 &quot;NaN&quot;），不在 <code>fields</code> 里。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step3_messy.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">6 passed</code></pre>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li><code>test_bad_value_does_not_crash</code> 失败 → 你在属性里让 <code>ValueError</code> 冒出来了；</li>
+<li><code>test_unknown_fields_are_kept</code> 失败 → 你的 KV 切分只认白名单键名；</li>
+<li>数一数 <code>pytest</code> 输出里的行数：WARNING 行有 step 但没有 loss——<strong>记住这个观察，Step 5 会用到</strong>。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>float(&quot;abc&quot;)</code> 抛 <code>ValueError</code>，所以 <code>loss</code> 里需要：
+<pre><code class="lang-python">try:
+    return float(raw)
+except ValueError:
+    return None</code></pre></p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>“跳过坏行”和“字段变 None”是两种不同处理：</p>
+<ul>
+<li>整行无结构（续行）→ <code>parse_line</code> 返回 None（跳过）；</li>
+<li>行有结构但某字段坏了 → 事件保留、该字段 None。
+问自己：为什么不能把坏字段的行整个丢掉？</li>
+</ul>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">@property
+def loss(self) -&gt; Optional[float]:
+    raw = self.fields.get(&quot;loss&quot;)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None</code></pre>
+<pre><code class="lang-python">@property
+def step(self) -&gt; Optional[int]:
+    raw = self.fields.get(&quot;step&quot;)
+    return int(raw) if raw is not None and raw.isdigit() else None</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step3_messy.py</code> → 6 passed。你能说出「跳过整行」与「字段为 None」的语义区别。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>如果 <code>parse_line</code> 遇到坏 KV 就 raise，CLI 的行为会怎样变化？这是你想要的行为吗？</li>
+<li>为什么 NaN 检测依赖 <code>message</code> 而不是某个 KV 字段？（提示：看 <code>samples/train_nan.log</code> 那一行的实际格式）</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s4" data-state="todo"><div class="gs-head"><span class="gs-num">4</span><h3 class="gs-title">统计训练结果（聚合指标）</h3><span class="gs-chip">步骤 4</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>实现 <code>analyze()</code>：从事件序列算出 final loss、best loss、平均吞吐、warning/error/NaN 统计，并提供 <code>to_dict()</code>。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>解析只是原料；面试官和论文看的是<strong>指标</strong>。聚合逻辑（哪些事件算样本、缺值怎么办）
+是数据正确性的核心——统计口径错了，后面所有结论都错。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/stats.py</code></p>
+<ul>
+<li>属性 <code>final_loss</code> / <code>best_loss</code> / <code>avg_tokens_per_sec</code> / <code>has_nan</code></li>
+<li>方法 <code>to_dict()</code> 与函数 <code>analyze()</code></li>
+</ul>
+</div></div><div class="box box-predict"><div class="box-title">🔮 先预测，再运行</div><div class="box-body"><p>运行之前先回答（这是本项目的第一个「数据直觉」题）：</p>
+<ol>
+<li><code>samples/train.log</code> 的 final loss 和 best loss，哪个应该更大？</li>
+<li>平均吞吐的量级大概是多少（几百 / 几千 / 几万 tokens/s）？</li>
+<li><code>samples/train_nan.log</code> 里 warning 数和 error 数分别是几？</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>（<code>stats.py</code>）：</p>
+<ul>
+<li>TODO 1：<code>final_loss</code>——<code>losses[-1]</code>，空列表返回 None；</li>
+<li>TODO 2：<code>best_loss</code>——<code>min(losses)</code>，空列表返回 None；</li>
+<li>TODO 3：<code>avg_tokens_per_sec</code>——吞吐样本的算术平均；</li>
+<li>TODO 4：<code>has_nan</code>——<code>nan_events</code> 非空即为 True；</li>
+<li>TODO 5：<code>to_dict()</code>——把结果整理成 JSON 友好的 dict（Step 6 的 <code>--json</code> 直接用它，<strong>字段名就是对外契约</strong>）；</li>
+<li>TODO 6：<code>analyze(events, total_lines)</code>——遍历事件：填 steps / losses / throughput / warnings / errors / nan_events / start_time / end_time。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step4_stats.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">6 passed</code></pre>
+（此时 final loss = 2.271，平均吞吐 ≈ 4936 tokens/s——你的预测对吗？）</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li>数字对不上 → 先打印你填充的 <code>losses</code> 列表和真实日志对比；</li>
+<li><code>test_nan_detected</code> 失败 → <code>&quot;nan&quot; in event.message.lower()</code>，注意大小写；</li>
+<li><code>test_to_dict_is_json_friendly</code> 失败 → 检查 <code>steps</code> 是不是 <code>{&quot;first&quot;: ..., &quot;last&quot;: ...}</code> 结构、<code>num_warnings</code> 等字段名是否完全一致——<strong>JSON 字段名是不能随便改的接口</strong>。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>analyze</code> 用一次 for 循环就能填完所有字段。start_time 只记第一个事件的、
+end_time 每次覆盖（这样最后一次覆盖就是最后一个事件的时间）。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>to_dict</code> 里 <code>steps</code> 字段是嵌套 dict（<code>{&quot;first&quot;:..., &quot;last&quot;:...}</code>）；
+<code>parsed_events</code> 用 <code>len(events)</code>，<code>total_lines</code> 从参数传入——这两个数字不一样大是正常的（有坏行时）。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">@property
+def final_loss(self) -&gt; Optional[float]:
+    return self.losses[-1] if self.losses else None
+
+@property
+def best_loss(self) -&gt; Optional[float]:
+    return min(self.losses) if self.losses else None
+
+@property
+def avg_tokens_per_sec(self) -&gt; Optional[float]:
+    if not self.throughput_samples:
+        return None
+    return sum(self.throughput_samples) / len(self.throughput_samples)
+
+@property
+def has_nan(self) -&gt; bool:
+    return len(self.nan_events) &gt; 0</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step4_stats.py</code> → 6 passed。你能解释 <code>final_loss</code> 与 <code>best_loss</code> 在本样例中为什么相等吗？</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>「平均吞吐」用算术平均合理吗？如果日志里前 100 步和后 900 步样本数不均，会出现什么问题？</li>
+<li><code>to_dict()</code> 的字段名为什么说「是对外契约」？（提示：想想 <code>--json</code> 输出被别的脚本消费的场景）</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s5" data-state="todo"><div class="gs-head"><span class="gs-num">5</span><h3 class="gs-title">制造并修复一个真实容易出现的错位 bug</h3><span class="gs-chip">步骤 5</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>先让你的实现得到一个<strong>自信的错误答案</strong>（best_step = 550），再定位并修复它（正确答案 1000）。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>这是本 Lab 最重要的一步，也是真实工程里最贵的一类 bug：
+<strong>数据错位（misalignment）</strong>。它不会报错、不会崩溃，只会给你一个看起来很正常、实际上是错的数字。
+如果你将来做 LLM 评测/数据管线，错位的形态会变（prompt 与 label 错位、样本与分数错位），但本质完全一样。</p>
+</div></div><div class="box box-bug"><div class="box-title">🐛 真实踩坑（本项目开发时 pytest 抓出）→ 在 starter 中被刻意复现为 Deliberate Exercise</div><div class="box-body"><p>日志里有 3 行 WARNING 是「有 step、没有 loss」的：
+<pre><code class="lang-">WARNING step=25  grad_norm=12.53 (&gt; clip 1.0)
+WARNING step=75  grad_norm=8.91 (&gt; clip 1.0)
+WARNING step=550 val_loss increased (2.41 -&gt; 2.46)</code></pre>
+如果实现把「所有 step」和「所有 loss」按下标对齐：
+<code>best_step = steps[losses.index(min(losses))]</code>，
+那么第 3 行 warning 之后，两个数组整体错位——best loss 明明发生在 step 1000，
+你却会得到 <strong>550</strong>（真实开发时就是 550 这个数字，由 pytest 抓出）。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/stats.py</code></p>
+</div></div><div class="box box-predict"><div class="box-title">🔮 先预测，再运行</div><div class="box-body"><p>先预测，再运行：</p>
+<ol>
+<li>现在的实现（steps 和 losses 按出现顺序各自收集）算出的 <code>best_step</code> 会是什么？</li>
+<li>正确答案应该是什么？为什么？</li>
+<li>把 <code>steps</code> 列表打印出来，数一数它有几个元素？<code>losses</code> 呢？</li>
+</ol>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step5_alignment.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">3 failed</code></pre>
+预期失败信息：<code>assert 550 == 1000</code>（或类似）。<strong>这个红色是设计好的</strong>——它模拟真实开发中测试抓出 bug 的那一刻。</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果 <code>best_step</code> 直接 AttributeError → 你的 <code>TrainRunStats</code> 还没有 <code>best_step</code> / <code>loss_steps</code>，这正是本步要添加的。</p>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>（<code>stats.py</code>）：</p>
+<ul>
+<li>TODO 1：给 <code>TrainRunStats</code> 新增字段 <code>loss_steps: list[int]</code>；</li>
+<li>TODO 2：在 <code>analyze()</code> 里，只有 <code>event.loss is not None</code> <strong>且</strong> <code>event.step is not None</code> 时才向 <code>loss_steps</code> 追加；</li>
+<li>TODO 3：实现 <code>best_step</code> property，用 <code>loss_steps</code>（而不是 <code>steps</code>）和 <code>losses</code> 对齐。</li>
+</ul>
+</div></div><div class="box box-fail"><div class="box-title">🔍 定位与修复</div><div class="box-body"><p>定位三连（不要猜，逐步验证）：</p>
+<ol>
+<li><code>print(len(stats.steps))</code> → 20；<code>print(len(stats.losses))</code> → 17。20 ≠ 17，<strong>错位的源头就在这里</strong>；</li>
+<li>在 <code>samples/train.log</code> 里找到那 3 行「有 step 没 loss」的 WARNING（step=25 / 75 / 550）；</li>
+<li>结论：<code>steps</code> 不能直接和 <code>losses</code> 配对。需要一个「只记录带 loss 的 step」的新列表。</li>
+</ol>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p>在 <code>TrainRunStats</code> 里新增字段 <code>loss_steps: list[int]</code>；
+在 <code>analyze()</code> 里，只有当 <code>event.loss is not None and event.step is not None</code> 时，才往 <code>loss_steps</code> 追加 <code>event.step</code>。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>best_step</code> 的实现应该用 <code>loss_steps</code> 与 <code>losses</code> 对齐：
+<pre><code class="lang-python">best_idx = self.losses.index(min(self.losses))
+return self.loss_steps[best_idx]</code></pre>
+并处理空列表（返回 None）。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">@dataclass
+class TrainRunStats:
+    ...
+    loss_steps: list[int] = field(default_factory=list)   # 新增：只含带 loss 的 step
+
+@property
+def best_step(self) -&gt; Optional[int]:
+    if not self.losses or not self.loss_steps:
+        return None
+    best_idx = self.losses.index(min(self.losses))
+    return self.loss_steps[best_idx]</code></pre>
+<pre><code class="lang-python"># analyze() 内：
+if event.loss is not None:
+    stats.losses.append(event.loss)
+    if event.step is not None:
+        stats.loss_steps.append(event.step)     # 对齐修复：两个列表同步追加</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step5_alignment.py</code> → 3 passed（best_step = 1000）。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>用一句话向面试官解释这个 bug 的成因和你的修复（提示：数据来源不同步的两个列表不能按位置配对）；</li>
+<li>为什么这个 bug 在 code review 时很难看出来，而一个 3 行的测试就能抓住它？</li>
+<li>如果把「warning 行」换成「多机训练时两台机器的日志合并」，同样的错位会以什么形式出现？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s6" data-state="todo"><div class="gs-head"><span class="gs-num">6</span><h3 class="gs-title">把脚本变成 CLI（argparse）</h3><span class="gs-chip">步骤 6</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>实现 <code>build_parser()</code> / <code>format_report()</code> / <code>main()</code>：支持 <code>--json</code> / <code>--warnings</code> / <code>--verbose</code>，用 <code>python -m</code> 运行。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>项目从「能跑」到「别人能用」，就差一个命令行入口。实习里 90% 的交付物最终都是
+一个可复用命令 + 一个配置文件——而不是一段要求别人改代码的脚本。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/cli.py</code></p>
+</div></div><div class="box box-note"><div class="box-title">📘 argparse 的五个要点</div><div class="box-body"><pre><code class="lang-python">import argparse
+
+def build_parser() -&gt; argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=&quot;log_analyzer&quot;, description=&quot;分析训练日志&quot;)
+    parser.add_argument(&quot;logfile&quot;, type=Path, help=&quot;日志文件路径&quot;)          # 位置参数
+    parser.add_argument(&quot;--json&quot;, action=&quot;store_true&quot;, help=&quot;JSON 输出&quot;)     # 开关
+    parser.add_argument(&quot;--warnings&quot;, action=&quot;store_true&quot;)
+    parser.add_argument(&quot;--verbose&quot;, action=&quot;store_true&quot;)
+    return parser</code></pre>
+<ol>
+<li><code>python -m log_analyzer.cli</code> 依赖 <code>if __name__ == &quot;__main__&quot;: raise SystemExit(main())</code>；</li>
+<li><code>main(argv=None)</code> 接收 argv 才能在测试里直接调用（不要写死 <code>sys.argv</code>）；</li>
+<li>默认值必须能跑通：<code>python -m log_analyzer.cli samples/train.log</code> 不带任何选项就出报告；</li>
+<li><code>--json</code> 的字段名是给脚本消费的接口；</li>
+<li><code>type=Path</code> 让 argparse 直接给你 Path 对象。</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>（<code>cli.py</code>）：</p>
+<ul>
+<li>TODO 1：<code>build_parser()</code>——四个参数如上；</li>
+<li>TODO 2：<code>format_report(stats)</code>——人读文本（至少包含 <code>final loss</code> / <code>best</code> / <code>平均吞吐</code> / <code>warning</code> / <code>NaN</code> 这些词）；</li>
+<li>TODO 3：<code>main(argv)</code>——解析参数 → 读文件 → 解析 → 统计 → 输出；<code>--json</code> 时 <code>print(json.dumps(stats.to_dict(), ensure_ascii=False, indent=2))</code>；</li>
+<li>TODO 4：文件末尾加 <code>if __name__ == &quot;__main__&quot;: raise SystemExit(main())</code>。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step6_cli.py
+python -m log_analyzer.cli samples/train.log</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">4 passed</code></pre>
+以及你在终端里第一次看到自己写的报告。</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li><code>SystemExit</code> 相关失败 → <code>main</code> 里千万<strong>不要</strong>自己调 <code>sys.exit()</code>，只 <code>return</code> 退出码，让 <code>__main__</code> 兜底；</li>
+<li><code>test_json_output_contract</code> 失败 → 对照 <code>to_dict()</code> 的字段名逐字核对；</li>
+<li>子进程测试失败（<code>test_module_entrypoint</code>）→ 确认 <code>src/</code> 通过 <code>PYTHONPATH</code> 或 <code>pip install -e .</code> 可见。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>main</code> 的骨架：
+<code>args = build_parser().parse_args(argv)</code> → <code>events = parse_log_file(args.logfile)</code>
+→ <code>stats = analyze(events, total_lines=...)</code> → 按 <code>args.json</code> 分支输出 → <code>return 0</code>。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>--warnings</code> 分支：遍历 <code>stats.warnings</code> 打印 <code>[timestamp] message</code>；
+<code>--verbose</code> 这一步只需要把参数定义加上（Step 7 才接 logging）。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def format_report(stats) -&gt; str:
+    lines = [
+        &quot;== 训练日志分析 ==&quot;,
+        f&quot;事件数            : {stats.parsed_events}（原始行 {stats.total_lines}）&quot;,
+        f&quot;step 范围         : {stats.steps[0] if stats.steps else &#39;-&#39;} → {stats.steps[-1] if stats.steps else &#39;-&#39;}&quot;,
+        f&quot;final loss        : {stats.final_loss:.4f}&quot; if stats.final_loss is not None else &quot;final loss        : -&quot;,
+        f&quot;best  loss        : {stats.best_loss:.4f} (step {stats.best_step})&quot; if stats.best_loss is not None else &quot;best  loss        : -&quot;,
+        f&quot;平均吞吐          : {stats.avg_tokens_per_sec:.0f} tokens/s&quot; if stats.avg_tokens_per_sec else &quot;平均吞吐          : -&quot;,
+        f&quot;warning 数        : {len(stats.warnings)}&quot;,
+        f&quot;error   数        : {len(stats.errors)}&quot;,
+        f&quot;NaN 事件          : {&#39;是（训练可能已发散！）&#39; if stats.has_nan else &#39;否&#39;}&quot;,
+    ]
+    return &quot;\n&quot;.join(lines)</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step6_cli.py</code> → 4 passed，并且 <code>python -m log_analyzer.cli samples/train.log</code> 在你终端里输出报告。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>为什么 <code>main</code> 只返回 int、不调用 <code>sys.exit()</code>？（提示：可测试性）</li>
+<li><code>--json</code> 输出为什么要保证字段稳定？字段改名会给谁带来麻烦？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s7" data-state="todo"><div class="gs-head"><span class="gs-num">7</span><h3 class="gs-title">logging 与退出码：可恢复 vs 致命</h3><span class="gs-chip">步骤 7</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>用 <code>logging</code> 取代 print 调试；区分「坏行跳过」（可恢复）与「文件缺失 / 空日志」（致命），并用退出码表达。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>脚本给别人用的那一刻起，<strong>退出码就是你和上游的接口</strong>：
+CI / Shell / Airflow 都靠它判断成败。而 logging 决定了线上出问题时你能否定位。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>src/log_analyzer/cli.py</code></p>
+</div></div><div class="box box-note"><div class="box-title">📘 logging 四个级别与三条纪律</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>级别</th>
+<th>用途</th>
+<th>生产环境</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>DEBUG</td>
+<td>每步调试细节（<code>--verbose</code> 时开启）</td>
+<td>关闭</td>
+</tr>
+<tr>
+<td>INFO</td>
+<td>关键里程碑（分析开始 / 完成）</td>
+<td>开启</td>
+</tr>
+<tr>
+<td>WARNING</td>
+<td>异常但可继续（跳过坏行）</td>
+<td>开启</td>
+</tr>
+<tr>
+<td>ERROR</td>
+<td>出错（文件不存在、无有效事件）</td>
+<td>开启 + 告警</td>
+</tr>
+</tbody></table>
+<ul>
+<li>用 <code>logging.getLogger(__name__)</code>，日志自带模块路径；</li>
+<li>用 <code>logger.info(&quot;%s&quot;, x)</code> 而不是 f-string（关闭日志级别时不浪费格式化开销）；</li>
+<li>退出码：<strong>0 成功 / 1 业务失败 / 2 参数或输入错误</strong>。</li>
+</ul>
+</div></div><div class="box box-predict"><div class="box-title">🔮 先预测，再运行</div><div class="box-body"><p>先分类再写代码——下面四种情况，哪些是「跳过继续」，哪些是「退出」？退出该用 0/1/2 哪个码？</p>
+<ol>
+<li>日志文件路径不存在；</li>
+<li>22 行里混了 1 行损坏数据；</li>
+<li>文件存在但一整行有效事件都没有；</li>
+<li><code>samples/train_nan.log</code> 里出现 NaN。</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>（<code>cli.py</code>）：</p>
+<ul>
+<li>TODO 1：<code>logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, ...)</code>；</li>
+<li>TODO 2：文件不存在 → <code>logger.error(...)</code> + <code>return 2</code>（<strong>不要</strong>让 <code>FileNotFoundError</code> 冒出去）；</li>
+<li>TODO 3：解析后没有任何事件 → <code>return 1</code>；</li>
+<li>TODO 4：坏行只记 <code>logger.warning</code> / 静默跳过，最终 <code>return 0</code>；</li>
+<li>TODO 5：NaN 事件打到 <code>stderr</code>（<code>print(..., file=sys.stderr)</code>）。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step7_logging.py
+python -m log_analyzer.cli samples/train_nan.log; echo &quot;exit=$?&quot;</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">6 passed</code></pre>
+<code>echo &quot;exit=$?&quot;</code> 对 NaN 日志应显示 <code>exit=0</code>（NaN 是业务结论，不是程序失败）。</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
+<li>看到 Python traceback → 你在 <code>main</code> 外抛了异常；</li>
+<li><code>test_missing_file_exit_2</code> 失败 → 检查是否在解析前就 <code>return 2</code>；</li>
+<li><code>test_bad_lines_are_skipped_not_fatal</code> 失败 → 检查 <code>parsed_events</code> 与 <code>total_lines</code> 有没有分别正确统计。</li>
+</ul>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>args.logfile.exists()</code> 判断必须在 <code>parse_log_file</code> 之前——
+否则 <code>FileNotFoundError</code> 会先炸在 parser 里。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>空日志与「全坏行」都是 <code>if not events: return 1</code>——它们对用户是同一种结论：
+「这个文件里没有你能用的数据」。</p>
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def main(argv: list[str] | None = None) -&gt; int:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format=&quot;%(levelname)s %(name)s: %(message)s&quot;,
+    )
+    if not args.logfile.exists():
+        logger.error(&quot;日志文件不存在：%s&quot;, args.logfile)
+        return 2
+    events = parse_log_file(args.logfile)
+    if not events:
+        logger.error(&quot;没有解析到任何合法日志行：%s&quot;, args.logfile)
+        return 1
+    stats = analyze(events, total_lines=len(load_lines(args.logfile)))
+    ...
+    return 0</code></pre>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p><code>pytest -q tests/test_step7_logging.py</code> → 6 passed。你能说出 0/1/2 三个退出码各自的含义。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>CI 里 <code>python -m log_analyzer.cli log.txt || echo &quot;failed&quot;</code> 会因为哪个退出码触发？</li>
+<li>为什么「文件不存在」用退出码 2，而不是 1？（提示：调用方要区分「我参数传错了」和「程序跑失败了」）</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s8" data-state="todo"><div class="gs-head"><span class="gs-num">8</span><h3 class="gs-title">写你自己的 3 个边界测试</h3><span class="gs-chip">步骤 8</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>为你的 parser / stats / CLI 增加 3 个课程没有覆盖的边界测试——并让它们通过。</p>
+</div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>这一步不是「再讲一遍 pytest 定义」。真实的测试能力体现在：
+<strong>你能不能想到课程作者没想到的输入</strong>。三个提示方向（空输入 / 极端数值 / CLI 边界）都来自真实项目的 bug 历史。</p>
+</div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>要改的文件：<code>tests/test_step8_edge_cases.py</code>（把 3 个 <code>pytest.fail</code> 占位测试改成你自己的用例）</p>
+</div></div><div class="box box-note"><div class="box-title">📘 好测试的三个习惯</div><div class="box-body"><ol>
+<li><strong>测异常路径</strong>：空输入、坏数据、边界数值——bug 都藏在那里；</li>
+<li><strong>测试要能失败</strong>：写完先故意改坏一行实现，确认测试变红，再改回来；</li>
+<li><strong>测试即文档</strong>：新人读 <code>tests/</code> 比读源码快——命名说清楚你在保护什么行为。</li>
+</ol>
+</div></div><div class="box box-write"><div class="box-title">✍️ 现在你来做</div><div class="box-body"><p><strong>你来写</strong>：</p>
+<ul>
+<li>TODO 1：空文件 / 只有空行的文件 → <code>analyze</code> 应返回「全 None」而不是崩溃；</li>
+<li>TODO 2：极端数值（<code>loss=0.0</code> / 超长行 / 重复 step）→ 你的统计口径是什么？用测试把它固化下来；</li>
+<li>TODO 3：CLI 边界（相对路径 / 临时目录里的中文文件名 / <code>--json</code> 同时 <code>--warnings</code>）→ 行为符合预期。</li>
+</ul>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step8_edge_cases.py</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">3 passed</code></pre>
+只有你自己写完才会变绿。</p>
+</div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果你的新测试抓出了实现里的 bug——恭喜，这就是测试的价值。
+先修实现（可能返回 Step 1-7 改代码），再让测试绿。</p>
+</div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p>把 <code>pytest.fail(...)</code> 换成真实断言。例如空文件：
+<code>stats = analyze([]); assert stats.final_loss is None and not stats.has_nan</code>。</p>
+</div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>写 CLI 边界用 <code>tmp_path</code> 夹具构造文件，再用 <code>main([str(f)])</code> 直接调用——
+不需要真的开子进程（Step 6 已经有一个子进程用例了）。</p>
+</div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p>3 个属于你自己的测试通过，并且你至少验证过一次「故意改坏 → 测试变红」。</p>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
+<li>你的 3 个测试分别保护了什么行为？如果未来有人重构 parser，它们能拦住什么回归？</li>
+</ul>
+</div></div></div></section><section class="guided-step" data-step-id="s9" data-state="todo"><div class="gs-head"><span class="gs-num">9</span><h3 class="gs-title">最终验收与复盘</h3><span class="gs-chip">步骤 9</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p><code>pytest -q</code> 全部通过；对两个真实样例运行 CLI；不看资料回答 5 个复盘问题。</p>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q
+python -m log_analyzer.cli samples/train.log
+python -m log_analyzer.cli samples/train_nan.log --warnings</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">41 passed</code></pre>
+CLI 输出（参考实现的真实记录；你的格式可以不同，但要包含同样的信息）：</p>
+<pre><code class="lang-">== 训练日志分析 ==
+事件数            : 22（原始行 22）
+step 范围         : 10 → 1000
+final loss        : 2.2710
+best  loss        : 2.2710 (step 1000)
+平均吞吐          : 4936 tokens/s
+warning 数        : 3
+error   数        : 0
+NaN 事件          : 否</code></pre>
+<p>对发散日志（<code>samples/train_nan.log</code>）：
+<pre><code class="lang-">NaN 事件          : 是（训练可能已发散！）
+warning 数        : 2
+error   数        : 2</code></pre></p>
+</div></div><div class="box box-note"><div class="box-title">📘 最终交付物（Portfolio Output）</div><div class="box-body"><p>完成本项目后，你的 GitHub 上应该有一个<strong>你可以亲手演示</strong>的仓库：</p>
+<pre><code class="lang-">log-analyzer/
+├── README.md          # Quick Start + 真实运行输出（你跑出来的，不是抄的）
+├── src/log_analyzer/  # parser / stats / cli 三层（你实现的版本）
+├── tests/             # 41 个通过用例 —— 其中 3 个是你自己写的边界测试
+└── samples/           # 真实日志样例</code></pre>
+<p><strong>如果你要把它写进简历</strong>，你必须能不看代码解释：
+分层原因（A）→ dataclass vs dict（B）→ 错位 bug 的定位与修复（C）→ 退出码语义（D）。
+解释不了就不要写——面试官只需要追问两层。</p>
+</div></div><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p>以下 5 题必须<strong>不看代码、不看资料</strong>回答：</p>
+<ol>
+<li>为什么 parser / stats / CLI 要分成三层？各层的输入输出是什么？</li>
+<li>为什么 <code>LogEvent</code> 用 dataclass 而不是 dict？可变默认值为什么必须用 <code>default_factory</code>？</li>
+<li>为什么 warning 行会导致 step/loss 错位？你的修复是怎么保证两个列表同步的？</li>
+<li>退出码 0 / 1 / 2 分别代表什么？为什么它是「接口」？</li>
+<li>JSONL 为什么适合 AI 数据？（提示：流式读取 / 一行一条记录）</li>
+</ol>
+</div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><p>这 5 题就是 Checkpoint A 的口试清单。任何一题卡住 → 回到对应 Step 的重读。</p>
+</div></div><details class="solution"><summary>Reference Solution（完成后对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><p>完整实现：<code>projects/log-analyzer/</code>（README + 14 个测试函数的独立实现）。
+把你的 starter 实现和它对照，重点看三个地方：</p>
+<ol>
+<li><code>parser.py</code> 的正则与 None 语义；</li>
+<li><code>stats.py</code> 的 <code>loss_steps</code> 对齐写法；</li>
+<li><code>cli.py</code> 的退出码与 logging 分支。
+如果你的实现通过了 41 个测试又和它在风格上不同——<strong>这是好事</strong>，说明你有自己的工程判断。
+但请确认你能解释它每一个设计选择的理由。</li>
+</ol>
+</div></details></div></section></div></section>
+<h2>25.3 Learn 参考手册：工程基础（做项目时回来查）</h2>
+<p>以下内容是本 Step 用到的一切工程基础。先做项目，卡住时回来查对应小节——
+比「先读完再动手」的学习效率高得多。</p>
+<h3>25.3.1 项目结构：为什么不能只有一个 train.py</h3>
 <p>单文件脚本在 200 行以内没问题。超过之后，第一个崩溃点一定是：</p>
 <pre><code class="lang-">train.py
   ├── 数据加载代码
@@ -74,7 +705,9 @@
 <li><strong>过度拆分</strong>：第一段实习项目不需要 AbstractFactory / 依赖注入框架 / 30 个 config 文件。<strong>清楚、可运行、可解释</strong>比「高级」重要。</li>
 </ol>
 </div></div>
-<h2>25.2 从硬编码到 argparse</h2>
+<p>你在 Lab 里做的 log-analyzer 就是这个结构的最小实例：
+<code>parser</code>（数据）→ <code>stats</code>（逻辑）→ <code>cli</code>（入口），三层互不 import 循环依赖。</p>
+<h3>25.3.2 从硬编码到 argparse</h3>
 <pre><code class="lang-python"># ❌ 改参数要改代码
 lr = 3e-4
 batch_size = 32</code></pre>
@@ -93,7 +726,7 @@ if __name__ == &quot;__main__&quot;:
     print(args.lr, args.batch_size)</code></pre>
 <pre><code class="lang-bash">python train.py --lr 3e-4 --batch-size 32 --max-steps 1000</code></pre>
 <p>协作时的关键点：<strong>默认值要能跑通</strong>（<code>python train.py</code> 直接可用），覆盖项才用命令行传。</p>
-<h2>25.3 dataclass：比 dict 更适合中型工程</h2>
+<h3>25.3.3 dataclass：比 dict 更适合中型工程</h3>
 <p>参数多起来之后，用 <code>dict</code> 传参会失控：<code>cfg[&quot;lr&quot;]</code> 打错字不报错、没有补全、没有默认值。</p>
 <pre><code class="lang-python">from dataclasses import dataclass, field
 
@@ -114,7 +747,7 @@ cfg.lr          # 有补全、拼错属性名直接 AttributeError</code></pre>
 <li>可变默认值必须用 <code>field(default_factory=...)</code>——顺便避免 Python 经典可变默认值坑。</li>
 </ol>
 <p>本章项目的 <code>projects/hf-mini-lab/src/hf_lab/config.py</code> 就是这个模式：dataclass 打底 + JSON 文件覆盖 + 命令行覆盖。</p>
-<h2>25.4 typing：只学实习真正用到的部分</h2>
+<h3>25.3.4 typing：只学实习真正用到的部分</h3>
 <p>不要做类型系统课程。AI 工程里 90% 的场景只需要这些：</p>
 <pre><code class="lang-python">from typing import Optional, Callable, Protocol
 
@@ -153,7 +786,7 @@ class DataSource(Protocol):                                # 只需要&quot;长�
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ Optional 不是装饰</div><div class="box-body"><p>函数可能返回 None 时<strong>必须</strong>标 <code>Optional</code>：调用方因此知道要处理 None。<code>stats.final_loss</code> 在空日志时返回 None——这是特性，不是 bug。</p>
 </div></div>
-<h2>25.5 pathlib 与 JSONL：AI 项目的数据 I/O</h2>
+<h3>25.3.5 pathlib 与 JSONL：AI 项目的数据 I/O</h3>
 <p>AI 项目每天处理四类文件：<strong>json / jsonl / csv / checkpoint</strong>。统一用 <code>pathlib</code>，不要字符串拼路径：</p>
 <pre><code class="lang-python">from pathlib import Path
 
@@ -169,11 +802,11 @@ path.write_text(&quot;{}&quot;, encoding=&quot;utf-8&quot;)</code></pre>
             if line:
                 rows.append(json.loads(line))
     return rows</code></pre>
-<p>指令微调数据（本章项目 <code>hf-mini-lab/data/sft_mini.jsonl</code>）长这样：</p>
+<p>指令微调数据（<code>projects/hf-mini-lab/data/sft_mini.jsonl</code>）长这样：</p>
 <pre><code class="lang-json">{&quot;split&quot;: &quot;train&quot;, &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;用一句话解释什么是过拟合。&quot;}, {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;过拟合是模型把训练数据的噪声也记住了，导致在新数据上表现变差。&quot;}]}</code></pre>
 <div class="box box-warning"><div class="box-title">⚠️ 别用 json.load 读 jsonl</div><div class="box-body"><p><code>json.load(f)</code> 读的是<strong>单个</strong> JSON 文档。JSONL 每行都是独立文档，必须逐行 <code>json.loads</code>。反过来，<code>json.loads</code> 一行包含多行的 pretty-printed JSON 也会失败——先看清格式再写读取代码。</p>
 </div></div>
-<h2>25.6 logging：从 print 到可检索的日志</h2>
+<h3>25.3.6 logging：从 print 到可检索的日志</h3>
 <pre><code class="lang-python"># ❌ print 的三个问题：无法分级、无法关闭、无法定位来源
 print(&quot;loss:&quot;, loss)
 
@@ -218,7 +851,7 @@ logger.error(&quot;checkpoint 写入失败：%s&quot;, path)</code></pre>
 <li><code>logger.info(&quot;%s&quot;, x)</code> 而不是 f-string——在 DEBUG 被关闭时不浪费格式化开销；</li>
 <li><code>logging.getLogger(__name__)</code>——日志自带模块路径，出问题能定位到文件。</li>
 </ol>
-<h2>25.7 异常处理：真实世界的四个崩溃点</h2>
+<h3>25.3.7 异常处理：真实世界的四个崩溃点</h3>
 <p>新手写 <code>except: pass</code> 等于把错误藏起来，最后在离现场 3 小时的地方爆炸。真实 AI 工程的四个高频异常：</p>
 <pre><code class="lang-python"># ① API timeout —— 网络永远不可信
 import requests
@@ -253,7 +886,7 @@ except torch.cuda.OutOfMemoryError:
 <li>退出码是接口：0 成功 / 1 业务失败 / 2 参数或输入错误——写脚本给别人用时尤其重要。</li>
 </ol>
 </div></div>
-<h2>25.8 requests / HTTP：模型服务的基本功</h2>
+<h3>25.3.8 requests / HTTP：模型服务的基本功</h3>
 <p>应用岗日常就是调 API。最少要理解五件事：</p>
 <pre><code class="lang-">GET   /v1/models                       # 读
 POST  /v1/chat/completions             # 写（带 JSON body）
@@ -274,7 +907,7 @@ retry：429/5xx 可重试；4xx 重试无意义</code></pre>
             wait = 2 ** attempt                     # 指数退避：2s, 4s, 8s
             logger.warning(&quot;第 %d 次失败，%ds 后重试&quot;, attempt, wait)
             time.sleep(wait)</code></pre>
-<h2>25.9 asyncio：AI 应用开发的分水岭</h2>
+<h3>25.3.9 asyncio：AI 应用开发的分水岭</h3>
 <p>调 10 次模型 API，每次等 2 秒：</p>
 <pre><code class="lang-">同步（串行）:  A → B → C → ... → J     总耗时 ≈ 10 × 2 = 20s
 异步（并发）:  A B C D E F G H I J      总耗时 ≈ 2s + 调度开销
@@ -302,7 +935,7 @@ results = asyncio.run(main(prompts))</code></pre>
 <li>用 <code>Semaphore</code> 控制并发度，配合重试是标准做法。评测系统里这叫「<strong>并发 + 限流 + 重试</strong>」三件套。</li>
 </ol>
 </div></div>
-<h2>25.10 pytest：模型工程也需要测试</h2>
+<h3>25.3.10 pytest：模型工程也需要测试</h3>
 <p>「模型训练不确定性太大，测不了」是误解。可测的东西非常多：数据解析、mask 构造、指标计算、配置加载、CLI 行为。</p>
 <pre><code class="lang-python">def test_parse_line_extracts_loss():
     event = parse_line(&quot;2025-01-10 09:00:02 INFO  step=10 loss=7.812 tokens/s=1180&quot;)
@@ -320,80 +953,77 @@ def test_missing_file_exit_code(tmp_path):
 <li><strong>测试要能失败</strong>：写下测试后，先故意改坏代码看它变红；</li>
 <li><strong>测试是最好的文档</strong>：新人读 <code>tests/</code> 比读源码快。</li>
 </ol>
-<details class="fold"><summary>练习：为什么这个测试第一次跑是红的？</summary><div class="fold-body"><p><pre><code class="lang-python">def test_best_step():
+<details class="fold"><summary>练习：Step 5 的 bug 为什么值得用测试钉死？</summary><div class="fold-body"><p><pre><code class="lang-python">def test_best_step():
     stats = analyze(parse_log_file(SAMPLE))
-    assert stats.best_step == 1000      # 第一次跑实际得到 550</code></pre>
-我们的日志里除了 loss 行，还有 <code>WARNING step=550 val_loss increased</code>——它有 step 但没有 loss。最初实现把「所有 step」和「所有 loss」存进两个列表按下标对齐，warning 行混进来后<strong>错位</strong>了。修复：新增 <code>loss_steps</code> 只记录「同时带 loss 的 step」。</p>
-<p>真实 bug 就是这样被测试逼出来的——不是靠盯代码。</p>
+    assert stats.best_step == 1000      # 未修复的实现会得到 550</code></pre>
+我们的日志里除了 loss 行，还有 <code>WARNING step=550 val_loss increased</code>——它有 step 但没有 loss。
+「所有 step」和「所有 loss」按下标对齐时，warning 行混进来就<strong>错位</strong>了。
+修复：新增 <code>loss_steps</code> 只记录「同时带 loss 的 step」。
+这就是你在 Step 5 亲手经历的修复。真实 bug 就是这样被测试逼出来的——不是靠盯代码。</p>
 </div></details>
-<h2>25.11 实战 Lab：log-analyzer（本课程已验证项目）</h2>
+<h2>25.4 Level 3 · Reference Solution（完整工程实现）</h2>
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>不复现「写个 CLI」的玩具，而是交付一个<strong>真实项目</strong>：训练日志分析器。跑完训练后（或训练崩了之后），它能回答：final loss、best loss、平均吞吐、warning 列表、是否出现 NaN。</p>
 </div></details>
-<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer"><code>projects/log-analyzer/</code></a></p>
+<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer"><code>projects/log-analyzer/</code></a>（Guided Build 完成后对照；也可以直接跑）</p>
 <pre><code class="lang-bash">cd projects/log-analyzer
 pip install -r requirements.txt
 
 python -m log_analyzer.cli samples/train.log
 pytest -q</code></pre>
-<p><strong>真实运行输出</strong>（本课程实测）：</p>
-<pre><code class="lang-">== 训练日志分析 ==
-事件数            : 22（原始行 22）
-step 范围         : 10 → 1000
-final loss        : 2.2710
-best  loss        : 2.2710 (step 1000)
-平均吞吐          : 4936 tokens/s
-warning 数        : 3
-error   数        : 0
-NaN 事件          : 否</code></pre>
-<p>对发散日志（<code>samples/train_nan.log</code>）：</p>
-<pre><code class="lang-">NaN 事件          : 是（训练可能已发散！）
-warning 数        : 2
-error   数        : 2</code></pre>
-<p><strong>架构</strong>（正好是本节的工程原则）：</p>
+<p><strong>架构</strong>（正是本章的工程原则）：</p>
 <pre><code class="lang-text">src/log_analyzer/
 ├── parser.py    # 文本 → LogEvent（dataclass + 正则 + KV 解析）
 ├── stats.py     # LogEvent 序列 → TrainRunStats（聚合指标）
 └── cli.py       # argparse + logging + JSON 输出 + 退出码
-tests/test_analyzer.py   # 14 个测试</code></pre>
+tests/test_analyzer.py   # 14 个测试函数</code></pre>
 <p><strong>这个项目用到的本章知识点</strong>：</p>
 <table>
 <thead>
 <tr>
 <th>知识点</th>
 <th>项目中的位置</th>
+<th>对应 Step</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>项目结构解耦</td>
 <td>parser / stats / cli 三层互不依赖</td>
+<td>Step 0-9 全程</td>
 </tr>
 <tr>
 <td>dataclass</td>
 <td><code>LogEvent</code>、<code>TrainRunStats</code></td>
+<td>Step 2 / 4</td>
 </tr>
 <tr>
 <td>typing</td>
 <td>全模块 type hints + <code>Optional</code> 指标</td>
+<td>Step 2 / 4</td>
 </tr>
 <tr>
 <td>pathlib</td>
 <td>文件输入一律 <code>Path</code>，不存在时退出码 2</td>
+<td>Step 1 / 7</td>
 </tr>
 <tr>
 <td>logging</td>
 <td><code>logger.info/error</code>，<code>--verbose</code> 控制级别</td>
+<td>Step 7</td>
 </tr>
 <tr>
 <td>argparse</td>
 <td><code>--json / --warnings / --verbose</code></td>
+<td>Step 6</td>
 </tr>
 <tr>
 <td>pytest</td>
-<td>14 个测试：解析 / 统计 / CLI / 子进程入口</td>
+<td>14 个测试函数：解析 / 统计 / CLI / 子进程入口</td>
+<td>Step 1-8</td>
 </tr>
 <tr>
 <td>异常处理</td>
 <td>文件不存在 → 2；空日志 → 1；坏行跳过不崩</td>
+<td>Step 3 / 7</td>
 </tr>
 </tbody></table>
 <div class="box box-note"><div class="box-title">📘 Checkpoint A 的验收问题</div><div class="box-body"><p>这个项目就是 Checkpoint A 的参考实现。完成后你必须能回答：</p>
@@ -403,17 +1033,19 @@ tests/test_analyzer.py   # 14 个测试</code></pre>
 <li>为什么坏行是「跳过」而文件缺失是「退出码 2」？（可恢复 vs 不可恢复）</li>
 </ul>
 </div></div>
-<h2>25.12 面试复盘：Python 工程</h2>
+<h2>25.5 面试复盘：Python 工程</h2>
 <p>不能翻资料，试着回答：</p>
 <ol>
 <li>你的项目为什么按 <code>src/</code> 拆包，而不是全写在 <code>train.py</code>？</li>
 <li>配置为什么用 dataclass 而不是 dict？可变默认值为什么必须用 <code>default_factory</code>？</li>
 <li>JSONL 和 JSON 的区别？流式读取内存优势在哪？</li>
 <li><code>logging</code> 和 <code>print</code> 的本质区别？为什么生产环境要分级别？</li>
-<li>你写过哪些 pytest？覆盖了哪些异常路径？</li>
+<li>你写过哪些 pytest？覆盖了哪些异常路径？Guided Build 里你自己的 3 个边界测试是什么？</li>
 <li>一个 HTTP 请求失败，你的重试策略是什么？为什么 4xx 不重试？</li>
 <li>10 个 LLM 请求如何做并发控制？<code>Semaphore</code> 解决什么问题？</li>
 <li>CLI 工具的退出码有哪几类？为什么它对自动化很重要？</li>
+<li><strong>（新版）</strong> 描述 Step 5 的错位 bug：成因、症状、定位方法、修复方式。</li>
+<li><strong>（新版）</strong> 如果让你把这个项目扩展成「支持多份日志合并分析」，你会改哪一层？为什么？</li>
 </ol>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你在写一个批量评测脚本，需要给 5000 个问题调用 API。以下哪种方案最合理？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>for 循环逐个请求，每个等待 30 秒超时</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>asyncio 全并发，把 5000 个请求同时发出去</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>asyncio + Semaphore(8) 控制并发 + 超时 + 指数退避重试</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>起 5000 个线程一次打完</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：C</strong></p>A 太慢（串行）；B/D 会把服务端和你自己一起打爆（429 限流、连接耗尽）。标准做法是 C：并发提升吞吐，Semaphore 限流保护两端，超时 + 重试处理瞬时故障。这是评测系统（Capstone 1）并发评测一节的核心。</div></details></div>
 <div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
@@ -424,6 +1056,10 @@ tests/test_analyzer.py   # 14 个测试</code></pre>
 </tr>
 </thead>
 <tbody><tr>
+<td>学习模式</td>
+<td>Learn（参考手册）→ Guided Build（starter 10 步）→ Reference（完整工程）</td>
+</tr>
+<tr>
 <td>项目结构</td>
 <td>按职责拆包；scripts 只装配，src 可测试</td>
 </tr>
@@ -451,9 +1087,13 @@ tests/test_analyzer.py   # 14 个测试</code></pre>
 <td>测试</td>
 <td>pytest 覆盖异常路径；先让测试变红再修复</td>
 </tr>
+<tr>
+<td>错位 bug</td>
+<td>不同来源的列表不能按下标对齐；用 <code>loss_steps</code> 同步追加</td>
+</tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 11 章 PyTorch</span><span class="tag">第 23 章 LLM Evaluation（评测脚本工程化）</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 26 章 HuggingFace</span><span class="tag">Capstone 1（Eval Harness）</span><span class="tag">Capstone 2（RAG Service）</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 11 章 PyTorch</span><span class="tag">第 23 章 LLM Evaluation（评测脚本工程化）</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 26 章 HuggingFace Guided Build</span><span class="tag">Capstone 1（Eval Harness）</span><span class="tag">Capstone 2（RAG Service）</span></div></div>
 </div>
 <div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：用工业生态跑模型 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/25-python-engineering.md">content/25-python-engineering.md</a></div>
 </main>

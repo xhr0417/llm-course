@@ -1,0 +1,4 @@
+httpx>=0.27
+pytest>=8.0
+# Step 7（本地 HF 模型）需要额外安装模型依赖，做到那一步再装：
+#   pip install transformers torch

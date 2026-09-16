@@ -47,7 +47,11 @@ if (!fs.existsSync(PROJECTS_DIR)) {
     }
     const testsDir = path.join(dir, "tests");
     if (fs.existsSync(testsDir)) {
-      const testSrc = fs.readdirSync(testsDir).map(f => fs.readFileSync(path.join(testsDir, f), "utf8")).join("\n");
+      // 只读 .py 文件：本地先跑过 pytest 时 tests/ 下会有 __pycache__/（gitignore），
+      // 直接 readFileSync 目录会 EISDIR 崩溃。
+      const testSrc = fs.readdirSync(testsDir)
+        .filter(f => f.endsWith(".py") && fs.statSync(path.join(testsDir, f)).isFile())
+        .map(f => fs.readFileSync(path.join(testsDir, f), "utf8")).join("\n");
       mustHave(`projects/${p}/tests 没有任何 def test_`, /def test_/.test(testSrc));
     }
     const srcDir = path.join(dir, "src");
@@ -113,6 +117,7 @@ function countTests(dir) {
   const testsDir = path.join(dir, "tests");
   if (!fs.existsSync(testsDir)) return 0;
   return fs.readdirSync(testsDir)
+    .filter(f => f.endsWith(".py") && fs.statSync(path.join(testsDir, f)).isFile())
     .map(f => (fs.readFileSync(path.join(testsDir, f), "utf8").match(/def test_/g) || []).length)
     .reduce((a, b) => a + b, 0);
 }

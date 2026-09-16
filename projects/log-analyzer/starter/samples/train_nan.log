@@ -1,0 +1,8 @@
+2025-01-11 10:00:01 INFO  start training run=small-llm-fp16 seed=7 lr=1.5e-3
+2025-01-11 10:00:02 INFO  step=10 loss=7.901 lr=1.5e-3 tokens/s=1210
+2025-01-11 10:00:04 INFO  step=20 loss=6.874 lr=1.5e-3 tokens/s=2190
+2025-01-11 10:00:06 WARNING step=24 grad_norm=31.02 (> clip 1.0)
+2025-01-11 10:00:07 INFO  step=30 loss=6.112 lr=1.5e-3 tokens/s=3310
+2025-01-11 10:00:09 WARNING step=33 grad_norm=88.40 (> clip 1.0)
+2025-01-11 10:00:10 ERROR step=34 loss is NaN — abort candidate, check lr / dtype
+2025-01-11 10:00:10 ERROR training aborted at step 34

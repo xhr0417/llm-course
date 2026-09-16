@@ -1055,3 +1055,270 @@ a.tag::after { content: " ↗"; font-size: 10px; color: var(--text-faint); }
   .bar-row { grid-template-columns: 76px 1fr 62px; }
   .mat td { width: 38px; height: 30px; font-size: 11.5px; }
 }
+
+/* ============================================================
+   Guided Build Track（G0）
+   Lab 容器 / Step 卡片 / 分步状态 / Hint / Solution
+   ============================================================ */
+
+/* ---------- 新增讲解盒类型 ---------- */
+.box-goal { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.box-goal .box-title { color: var(--accent-text); }
+.box-why { background: var(--bg-soft); border-color: var(--border); }
+.box-why .box-title { color: var(--text-soft); }
+.box-files { background: var(--bg); border-color: var(--border); }
+.box-files .box-title { color: var(--text-soft); }
+.box-files .box-body { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.box-predict { background: var(--purple-soft); border-color: color-mix(in srgb, var(--purple) 35%, transparent); }
+.box-predict .box-title { color: var(--purple); }
+.box-write {
+  background: var(--amber-soft);
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+  border-left: 5px solid var(--amber);
+}
+.box-write .box-title { color: var(--amber); }
+.box-run { background: var(--code-bg); border-color: var(--border); }
+.box-run .box-title { color: var(--green); }
+.box-run .box-body pre { margin: 8px 0; background: color-mix(in srgb, var(--bg-panel) 70%, transparent); }
+.box-expect { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 32%, transparent); }
+.box-expect .box-title { color: var(--green); }
+.box-fail {
+  background: var(--red-soft);
+  border-color: color-mix(in srgb, var(--red) 38%, transparent);
+  border-left: 5px solid var(--red);
+}
+.box-fail .box-title { color: var(--red); }
+.box-bug { background: var(--red-soft); border: 1px dashed var(--red); }
+.box-bug .box-title { color: var(--red); }
+.box-checkpoint { background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.box-checkpoint .box-title { color: var(--green); }
+.box-explain { background: var(--purple-soft); border-color: color-mix(in srgb, var(--purple) 35%, transparent); }
+.box-explain .box-title { color: var(--purple); }
+
+/* ---------- Hint（可折叠） ---------- */
+details.hint {
+  margin: 12px 0;
+  border-left: 3px solid var(--yellow);
+  background: color-mix(in srgb, var(--yellow-soft) 65%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+details.hint > summary {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13.8px;
+  color: var(--yellow);
+  font-weight: 650;
+  list-style: none;
+}
+details.hint > summary::-webkit-details-marker { display: none; }
+details.hint > summary::before { content: "▸ "; }
+details.hint[open] > summary::before { content: "▾ "; }
+details.hint > .fold-body { padding: 2px 14px 10px; }
+
+/* ---------- Solution（默认折叠，独立视觉） ---------- */
+details.solution {
+  margin: 16px 0 8px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+details.solution > summary {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13.8px;
+  font-weight: 700;
+  color: var(--accent-text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+details.solution > summary::-webkit-details-marker { display: none; }
+details.solution > summary::before { content: "🔓"; }
+details.solution[open] > summary { border-bottom: 1px dashed var(--border); }
+details.solution[open] > summary::before { content: "🔒"; }
+details.solution > .fold-body { padding: 6px 18px 14px; }
+details.solution .solution-note {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  margin: 8px 0 4px;
+}
+
+/* ---------- Guided Lab 容器 ---------- */
+.guided-lab {
+  margin: 26px 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 16px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.gl-head {
+  padding: 18px 20px 14px;
+  background: linear-gradient(135deg, var(--accent-soft), var(--purple-soft));
+  border-bottom: 1px solid var(--border);
+}
+.gl-eyebrow {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  padding: 3px 12px;
+  border-radius: 99px;
+  margin-bottom: 10px;
+}
+.gl-title { font-size: 20px; font-weight: 800; margin-bottom: 10px; letter-spacing: -.01em; }
+.gl-meta { display: flex; flex-direction: column; gap: 5px; }
+.gl-meta-row { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.6; align-items: baseline; }
+.gl-meta-k {
+  flex: none;
+  min-width: 76px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.gl-meta-v { color: var(--text); min-width: 0; }
+.gl-meta-v code { font-size: 12.5px; }
+
+/* ---------- Lab 进度面板 ---------- */
+.gl-progress {
+  padding: 14px 20px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+}
+.gl-bar-row { display: flex; align-items: center; gap: 12px; }
+.gl-bar {
+  flex: 1;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--border);
+  overflow: hidden;
+}
+.gl-bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--green), var(--accent));
+  transition: width .3s ease;
+}
+.gl-count { font-size: 12.5px; font-weight: 700; color: var(--text-soft); white-space: nowrap; }
+.gl-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.gl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-soft);
+}
+.gl-badge.ok { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.gl-badge.partial { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); }
+.gl-badge.no { color: var(--text-faint); }
+button.gl-badge { cursor: pointer; transition: all .14s; }
+button.gl-badge:hover { border-color: var(--accent); color: var(--accent-text); }
+button.gl-badge.ok:hover { color: var(--green); border-color: var(--green); }
+.gl-note { margin-top: 9px; font-size: 12px; color: var(--text-faint); line-height: 1.6; }
+.gl-body { padding: 6px 20px 18px; }
+.gl-body > .guided-step:first-child { margin-top: 16px; }
+
+/* ---------- Step 卡片 ---------- */
+.guided-step {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color .18s;
+}
+.guided-step[data-state="doing"] { border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+.guided-step[data-state="done"] { border-color: color-mix(in srgb, var(--green) 55%, transparent); }
+.gs-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 16px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.guided-step[data-state="doing"] .gs-head { background: var(--amber-soft); }
+.guided-step[data-state="done"] .gs-head { background: var(--green-soft); }
+.gs-num {
+  flex: none;
+  width: 30px; height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.guided-step[data-state="done"] .gs-num { background: var(--green); }
+.gs-head h3.gs-title {
+  flex: 1;
+  min-width: 140px;
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 750;
+  color: var(--text);
+  scroll-margin-top: 76px;
+}
+.gs-chip {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 11px;
+  border-radius: 99px;
+  color: var(--text-faint);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.gs-chip.doing { color: var(--amber); background: var(--amber-soft); border-color: var(--amber); }
+.gs-chip.done { color: var(--green); background: var(--green-soft); border-color: var(--green); }
+.gs-body { padding: 4px 18px 10px; }
+.gs-body > *:first-child { margin-top: 12px; }
+.gs-body > *:last-child { margin-bottom: 4px; }
+.gs-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px 13px;
+  border-top: 1px dashed var(--border);
+}
+.gs-hinttext { flex: 1; min-width: 180px; font-size: 11.5px; color: var(--text-faint); line-height: 1.5; }
+.gs-btn {
+  padding: 6px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  font-size: 12.8px;
+  font-weight: 650;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .14s;
+}
+.gs-btn:hover { border-color: var(--accent); color: var(--accent-text); }
+.gs-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gs-btn.primary:hover { filter: brightness(1.08); color: #fff; }
+.gs-btn.done { background: var(--green-soft); border-color: var(--green); color: var(--green); }
+.gs-static-chip { font-size: 12px; color: var(--text-faint); }
+
+@media (max-width: 640px) {
+  .gl-head, .gl-progress, .gl-body { padding-left: 14px; padding-right: 14px; }
+  .gl-meta-row { flex-direction: column; gap: 0; }
+  .gs-body { padding-left: 13px; padding-right: 13px; }
+  .gs-foot { flex-direction: column; align-items: stretch; }
+  .gs-btn { width: 100%; }
+}

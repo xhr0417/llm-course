@@ -120,37 +120,38 @@ C++ / CUDA（后续专题）
 
 ## 24.3 第一次找 AI 实习：推荐顺序
 
-面对 26+ 章节不知道从哪开始？如果你还没有实习经历，按这条线走：
+面对 30+ 章节不知道从哪开始？如果你还没有实习经历，按这条线走：
 
 ```
 Python Engineering（25）
+  Learn → Guided Lab（log-analyzer starter · 10 步）→ Checkpoint A
    ↓
-PyTorch（11）
-   ↓
-Transformer（07）
+PyTorch（11）· Transformer（07）
    ↓
 HuggingFace（26）
+  Learn → Guided Lab（hf-mini-lab starter · 13 步）→ Checkpoint B
    ↓
 LLM Evaluation（23）
    ↓
-Retrieval / RAG（第 28 章 ✅）
+Eval Harness（27）
+  Guided Capstone（llm-eval starter · 15 步）→ Checkpoint C
    ↓
-FastAPI / Docker（第 29 章 ✅）
-   ↓
-Capstone 1（第 27 章 ✅）
-   ↓
-Capstone 2：RAG Service（第 29 章 ✅）
+Retrieval / RAG（28）+ FastAPI / Docker（29）
+  Guided Capstone（starter 迁移中：先做现有 Lab + 参考实现）→ Checkpoint D
    ↓
 开始投递
 ```
 
 之后再按方向分叉：
 
-- **算法方向**：SFT / LoRA → Data Pipeline → 后训练（DPO/GRPO）→ 实验设计；
-- **Infra 方向**：GPU → FlashAttention → Distributed → Inference → Profiling。
+- **算法方向**：SFT / LoRA（30）→ Data Pipeline（18）→ 后训练 DPO/GRPO（22）→ 实验设计；
+- **Infra 方向**：GPU（15）→ FlashAttention（19）→ Distributed（16）→ Inference（20）→ Profiling（31）。
 
 :::note 为什么是这个顺序
 Python 工程与 HuggingFace 是所有岗位的**公共分母**：不会其中之一，后面的 RAG / SFT / 评测项目都做不出来。而 RAG 与 FastAPI 是应用类岗位面试中出现频率最高、又最容易在两周内做出作品的方向。
+
+注意看每段路线里的两种动词：**Learn**（读课程、建立理解）与 **Guided Lab**（下载 starter、亲手写代码、跑测试、过 Checkpoint）。
+「读完」和「做出来」是两件不同的事——本 Track 用两个独立进度条分别记录。
 :::
 
 ## 24.4 四级学习标准（本 Track 的验收方式）
@@ -175,28 +176,75 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）
 
 网站侧边栏的进度已升级为 **阅读 / Lab / 项目** 三个独立状态——「读完 Markdown」只点亮第一个。不要因为看完了就以为自己掌握了。
 
+**Guided Build 章节（25 / 26 / 27）的四级标准怎么记录**：
+
+| 级别 | 对应动作 | 网站如何记录 |
+| --- | --- | --- |
+| **Learned** | 读完章节正文 | 点亮「已读完」 |
+| **Implemented** | starter 的测试全部从红变绿 | Guided Build 进度面板自动计算（0 步 / 部分 / 全部） |
+| **Ran** | 在本地真实运行过（CLI / 实验） | 手动 self-check 按钮（网站无法验证你的本地环境） |
+| **Explained** | 不看资料回答每步复盘问题 | 手动 self-check 按钮 |
+
+进度保存在你自己浏览器的 localStorage 里，不上传。**打开 Solution 不会自动算完成**——只有你真的在本地跑通，才有资格点「我已在本地通过」。
+
 ## 24.5 Checkpoint 体系
 
 每一段路线结束后都有一个**检查点**。检查点不是选择题，而是一个可以给别人演示的最小产物：
 
-| Checkpoint | 任务 | 通过标准 | 归属 |
+| Checkpoint | 任务 | 通过标准 | Guided Build（starter） | 归属 |
+| --- | --- | --- | --- | --- |
+| **A** | 写一个 Python CLI：解析日志、统计指标、正确处理中断 | 能跑 + 测试全绿 + 异常路径不崩 | ✅ `log-analyzer/starter`（10 步 / 41 测试） | 第 25 章 |
+| **B** | 加载 Qwen、批量 generate、算 logits/loss、做一个 LoRA | 有 base vs tuned 的对比数据 | ✅ `hf-mini-lab/starter`（13 步 / 38 测试） | 第 26 章 |
+| **C** | 写 Eval Harness（adapter/task/parser/metric/report） | 能对两个模型产出可比较的报告 | ✅ `llm-eval/starter`（15 步 / 79 测试） | 第 27 章 |
+| **D** | 做 RAG + 评测（Recall@k / MRR / faithfulness） | retrieval 与 generation 指标分开报告 | 🔄 迁移中（先做现有 Lab + 参考实现） | 第 28-29 章 |
+| **E** | 用 profiler 找瓶颈并写出 benchmark 报告 | 有 latency/memory 曲线与解释 | 🔄 迁移中（先做现有 Lab + 参考实现） | 第 31 章 |
+
+「✅」只代表 starter 已随课程交付并被真实运行验证；「🔄 迁移中」是诚实标注——RAG / SFT / Infra 三套 Guided Build 会在下一轮用同一套模板迁移，当前版本请先用现有 Lab + Reference Solution 完成 Checkpoint。
+
+## 24.6 每个项目的三个入口：Learn / Guided Build / Reference
+
+从这一版开始，每个 Job-Ready 项目都有**三层产物**。它们不是三个重复的链接，而是三种不同的学习动作：
+
+| 项目 | Learn（建立理解） | Guided Build（亲手做） | Reference（对照完整工程） |
 | --- | --- | --- | --- |
-| **A** | 写一个 Python CLI：读 JSONL、批量请求模型、保存结果、正确处理中断 | 能跑 + 有测试 + 异常路径不崩 | 第 25 章 ✅ 本批 |
-| **B** | 加载 Qwen、批量 generate、算 logits/loss、做一个 LoRA | 有 base vs tuned 的对比数据 | 第 26 章 ✅ 本批 |
-| **C** | 写 Eval Harness（adapter/task/parser/metric/report） | 能对两个模型产出可比较的报告 | 第 27 章 ✅ 本批 |
-| **D** | 做 RAG + 评测（Recall@k / MRR / faithfulness） | retrieval 与 generation 指标分开报告 | 第 28-29 章 ✅ 本批 |
-| **E** | 用 profiler 找瓶颈并写出 benchmark 报告 | 有 latency/memory 曲线与解释 | 第 31 章 ✅ 本批 |
+| **log-analyzer** · Python 工程 | [第 25 章 · Python Engineering](#/python-engineering) | [Guided Build · starter（10 步 / 41 测试）](https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer/starter) | [projects/log-analyzer](https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer) |
+| **hf-mini-lab** · HuggingFace | [第 26 章 · HuggingFace](#/huggingface) | [Guided Build · starter（13 步 / 38 测试）](https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab/starter) | [projects/hf-mini-lab](https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab) |
+| **llm-eval** · Eval Harness | [第 27 章 · Capstone 1](#/capstone-eval) | [Guided Build · starter（15 步 / 79 测试）](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval/starter) | [projects/llm-eval](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval) |
+| **rag-service** · RAG 服务 | [第 28 章](#/rag-engineering) + [第 29 章](#/capstone-rag) | 🔄 迁移中（先用现有 Lab） | [projects/rag-service](https://github.com/xhr0417/llm-course/tree/main/projects/rag-service) |
+| **sft-lora** · SFT 实验 | [第 30 章](#/capstone-sft) | 🔄 迁移中（先用现有 Lab） | [projects/sft-lora](https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora) |
+| **inference-benchmark** · Profiling | [第 31 章](#/capstone-infra) | 🔄 迁移中（先用现有 Lab） | [projects/inference-benchmark](https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark) |
 
-## 24.6 本批已经交付的内容
+**怎么用这三个入口**（顺序不能反）：
 
-| 章节 | 真实项目 | 已验证内容 |
-| --- | --- | --- |
-| **25 Python Engineering** | [`projects/log-analyzer/`](https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer) | 14 个 pytest 通过；`analyze_logs` 对健康/发散日志的真实输出 |
-| **26 HuggingFace** | [`projects/hf-mini-lab/`](https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab) | Qwen2.5-0.5B-Instruct CPU 全程跑通：训练 loss 2.6364→1.3052；held-out loss 3.8168→3.6102；10 个测试通过 |
-| **27 Capstone 1 · Eval Harness** | [`projects/llm-eval/`](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval) | 128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；29 个测试用例通过 |
-| **28-29 Retrieval/RAG + Capstone 2** | [`projects/rag-service/`](https://github.com/xhr0417/llm-course/tree/main/projects/rag-service) | 841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；27 个测试用例通过 |
-| **30 Capstone 3 · SFT/LoRA** | [`projects/sft-lora/`](https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora) | 真实 SFT：train loss 3.89→1.46；val loss 过拟合曲线（best@60）；harness QA F1 20.2%→24.0%；14 个测试 |
-| **31 Capstone 4 · Profiling Lab** | [`projects/inference-benchmark/`](https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark) | CPU 实测：SDPA 快 2.7×、理论中间张量 128MB→0、子进程 RSS 差值≈125MB；compile 反例 0.76×；算子表 bmm 72%；15 个测试；CUDA NOT EXECUTED |
+```
+先读 Learn 章节（或边做边查参考手册）
+   ↓
+下载 starter，运行 pytest —— 看到满屏 failed
+   ↓
+按章节里的 Step 一步一步实现，测试逐组变绿
+   ↓
+（失败 → 看 Hint → 定位 → 修复 → 再跑）
+   ↓
+全绿 + 真实运行一次 → 课程页面的 Guided Build 进度条
+   ↓
+最后才打开 Reference Solution，对照设计差异
+```
+
+:::warning 不要打开 Reference 再回头做 starter
+抄一遍参考实现会让「Implemented」和「Ran」变成假的。评测/面试时这类「做过」会在追问下原形毕露。
+Reference Solution 的正确用法是：**做完之后对照**，回答「我的实现和它差在哪、为什么」。
+:::
+
+## 24.7 交付状态总览（真实状态，逐项标注）
+
+| 章节 | 真实项目 | Guided Build | 已验证内容 |
+| --- | --- | --- | --- |
+| **25 Python Engineering** | [`projects/log-analyzer/`](https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer) | ✅ starter（初始 41 failed → 全绿 41 passed） | 14 个 pytest 通过；对健康/发散日志的真实输出 |
+| **26 HuggingFace** | [`projects/hf-mini-lab/`](https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab) | ✅ starter（初始 38 failed → 全绿 38 passed） | Qwen2.5-0.5B-Instruct CPU 全程跑通：训练 loss 2.6364→1.3052；held-out loss 3.8168→3.6102；11 个测试通过 |
+| **27 Capstone 1 · Eval Harness** | [`projects/llm-eval/`](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval) | ✅ starter（初始 77 failed → 全绿 79 passed） | 128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；32 个测试用例通过 |
+| **28-29 Retrieval/RAG + Capstone 2** | [`projects/rag-service/`](https://github.com/xhr0417/llm-course/tree/main/projects/rag-service) | 🔄 下一轮迁移 | 841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；39 个测试用例通过 |
+| **30 Capstone 3 · SFT/LoRA** | [`projects/sft-lora/`](https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora) | 🔄 下一轮迁移 | 真实 SFT：train loss 3.89→1.46；val loss 过拟合曲线（best@60）；harness QA F1 20.2%→24.0%；15 个测试 |
+| **31 Capstone 4 · Profiling Lab** | [`projects/inference-benchmark/`](https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark) | 🔄 下一轮迁移 | CPU 实测：SDPA 快 2.7×、理论中间张量 128MB→0、子进程 RSS 差值≈125MB；compile 反例 0.76×；算子表 bmm 72%；15 个测试；CUDA NOT EXECUTED |
 
 :::warning 数据纪律（对你自己的项目同样适用）
 只把**真实运行得到**的 loss / accuracy / latency / 显存写成「实验结果」。
