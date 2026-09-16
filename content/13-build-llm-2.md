@@ -1,5 +1,11 @@
 > **本章定位**：Build 主线收尾。7 个 Lab 把第 12 章的 TinyLM 真正训练起来、评估、生成、微调、做一次偏好优化实验。做完本章，你就完整走过了一次「mini 版 LLM 生命周期」。
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## 13.1 训练全景图
 
 ```
@@ -100,10 +106,15 @@ def lr_at(step):
     return cfg["lr"] * (cfg["min_lr_ratio"] + (1 - cfg["min_lr_ratio"]) * 0.5 * (1 + math.cos(math.pi * progress)))
 
 # ============ 训练循环 ============
+# 术语约定（全文统一）：
+#   micro_step   ：每喂一个 micro-batch +1（无论是否更新参数）
+#   global_step  ：每个【参数更新】+1（优化器真正 step 一次）
+#   lr 调度 / eval / checkpoint 全部基于 global_step
 model.train()
-step, tokens_seen = 0, 0
+micro_step, global_step, tokens_seen = 0, 0, 0
 t0 = time.time()
-while step < cfg["max_steps"]:
+loss_running = 0.0
+while global_step < cfg["max_steps"]:
     for x, y in train_loader:
         x, y = x.to(device), y.to(device)
 
@@ -113,22 +124,27 @@ while step < cfg["max_steps"]:
             loss = loss / cfg["accum"]                     # 梯度累积：缩放损失
 
         loss.backward()
+        micro_step += 1
+        loss_running += loss.item()                        # 记录（含缩放，最后还原）
 
-        if (step + 1) % cfg["accum"] == 0:
+        # 每 accum 个 micro-batch 才更新一次参数
+        if micro_step % cfg["accum"] == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["grad_clip"])
             for g in optimizer.param_groups:
-                g["lr"] = lr_at(step)
+                g["lr"] = lr_at(global_step)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            step += 1
+            global_step += 1
             tokens_seen += cfg["batch_size"] * cfg["accum"] * cfg["max_seq"]
 
-            if step % 50 == 0:
+            if global_step % 50 == 0:
                 dt = time.time() - t0
-                print(f"step {step:5d} | loss {loss.item()*cfg['accum']:.4f} | lr {lr_at(step):.2e} | {tokens_seen/1e6:.1f}M tok | {dt:.0f}s")
+                avg_loss = loss_running / (50 * cfg["accum"])   # 还原真实 loss
+                print(f"step {global_step:5d} | loss {avg_loss:.4f} | lr {lr_at(global_step):.2e} | {tokens_seen/1e6:.1f}M tok | {dt:.0f}s")
+                loss_running = 0.0
 
-            # 定期验证 + 保存
-            if step % cfg["eval_every"] == 0:
+            # 定期验证 + 保存（都基于 global_step）
+            if global_step % cfg["eval_every"] == 0:
                 model.eval()
                 with torch.no_grad():
                     xv, yv = next(iter(torch.utils.data.DataLoader(val_ds, batch_size=8)))
@@ -137,9 +153,27 @@ while step < cfg["max_steps"]:
                 print(f"           val loss {vl.item():.4f} | ppl {math.exp(vl.item()):.1f}")
                 model.train()
 
-            if step % cfg["ckpt_every"] == 0:
-                torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "step": step}, f"ckpt_{step}.pt")
-                print(f"           saved ckpt_{step}.pt")
+            if global_step % cfg["ckpt_every"] == 0:
+                torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                            "global_step": global_step, "micro_step": micro_step}, f"ckpt_{global_step}.pt")
+                print(f"           saved ckpt_{global_step}.pt")
+```
+
+:::warning 一个真实的 bug（原版代码踩过）
+很多教程写成：
+
+```python
+step = 0
+loss.backward()
+if (step + 1) % accum == 0:    # ❌ step 一直是 0 → 条件永远为 False
+    optimizer.step()
+    step += 1                  # step 只在条件内 +1 → 永远进不去，死循环
+```
+
+**症状**：循环一直跑但 loss 永远不降、显存慢慢涨（梯度一直累积）。
+**根因**：把「micro-batch 计数」和「参数更新计数」混为一个变量。
+**修法**：如上文，明确分开 `micro_step`（每个 batch +1）与 `global_step`（每次更新 +1）。
+:::
 ```
 
 :::note 第一次训练应该期待什么
@@ -343,34 +377,76 @@ def format_example(ex):
     prompt = f"<|user|>{ex['instruction']}<|assistant|>"
     return prompt, ex["response"] + "<|endoftext|>"
 
-# ② Loss Mask：只对回答部分算损失
+# ② Loss Mask：只对回答部分算损失（prompt 部分标 -100）
 def tokenize_sft(tok, ex, max_len=256):
     p, r = format_example(ex)
     p_ids = tok.encode(p).ids
     r_ids = tok.encode(r).ids
     ids = (p_ids + r_ids)[:max_len]
-    labels = ([-100] * len(p_ids) + r_ids)[:max_len]   # -100 = 忽略（prompt 部分）
+    labels = ([-100] * len(p_ids) + r_ids)[:max_len]   # -100 = 忽略
     return torch.tensor(ids), torch.tensor(labels)
-
-# ③ 训练（与预训练唯一区别：loss 用 masked 版本）
-ids, labels = tokenize_sft(tok, data[0])
-logits = model(ids[None].to(device))
-loss = F.cross_entropy(logits.view(-1, V), labels[None].to(device).view(-1), ignore_index=-100)
 ```
+
+### 必须理解：next-token 对齐 + Shift
+
+GPT 的铁律：**位置 $t$ 的 logits 预测的是 token $t+1$**。所以损失必须**错位一位**：
+
+```python
+# ③ 训练一步（注意 shift！）
+ids, labels = tokenize_sft(tok, data[0])
+ids, labels = ids[None].to(device), labels[None].to(device)      # [1, S]
+
+logits = model(ids)                                              # [1, S, V]
+
+# ✅ 正确：位置 t 的 logits 对齐位置 t+1 的 label
+shift_logits = logits[:, :-1, :]                                 # [1, S-1, V]
+shift_labels = labels[:, 1:]                                     # [1, S-1]
+loss = F.cross_entropy(shift_logits.reshape(-1, V),
+                       shift_labels.reshape(-1),
+                       ignore_index=-100)
+
+# ❌ 错误示范：不 shift 直接对齐 → 用位置 t 的 logits 预测 token t（模型在学习抄自己）
+# loss = F.cross_entropy(logits.reshape(-1, V), labels.reshape(-1), ignore_index=-100)
+```
+
+### 手算例子：prompt 最后一个位置如何预测回答的第一个 token
+
+设 prompt = `[A, B, C]`（3 个 token），response = `[x, y]`（2 个 token）：
+
+| 位置 t | ids | labels | shift 后预测的 label | 是否算 loss |
+| --- | --- | --- | --- | --- |
+| 0 | A | −100 | labels[1] = −100 | ❌ 忽略 |
+| 1 | B | −100 | labels[2] = −100 | ❌ 忽略 |
+| 2 | C | −100 | labels[3] = **x** | ✅ **用最后一个 prompt 位置的 logits 预测回答首 token** |
+| 3 | x | x | labels[4] = **y** | ✅ |
+| 4 | y | y | （无 logits 可用，被 `[:-1]` 切掉） | — |
+
+**关键点**：labels 里 prompt 部分虽然是 −100，但它们**仍然出现在输入序列中作为上下文**；而「预测 x」这个训练信号来自位置 2（最后一个 prompt token）的 logits。这正是 shift 与 Loss Mask 组合后自然得到的正确行为——**不需要**手工为「最后一个 prompt 位置」做任何特殊处理。
 
 :::fold 工程里怎么用（SFT 的完整循环骨架）
 ```python
+# 类型：【Skeleton】需要 tokenizer 与数据
 opt = torch.optim.AdamW(model.parameters(), lr=2e-5)   # SFT 学习率比预训练小 10 倍
+model.train()
+
+# 先记录 SFT 之前的生成效果（★ 必须在训练之前）
+prompt = "<|user|>3 + 5 等于几？<|assistant|>"
+before = generate(model, tok, prompt, max_new_tokens=20)
+
 for epoch in range(3):
     for ex in data:
         ids, labels = tokenize_sft(tok, ex)
-        logits = model(ids[None].to(device))
-        loss = F.cross_entropy(logits.view(-1, V), labels[None].to(device).view(-1), ignore_index=-100)
+        ids, labels = ids[None].to(device), labels[None].to(device)
+        logits = model(ids)
+        loss = F.cross_entropy(logits[:, :-1].reshape(-1, V),
+                               labels[:, 1:].reshape(-1),
+                               ignore_index=-100)
         opt.zero_grad(); loss.backward(); opt.step()
 
-# 对比 SFT 前后
-print("SFT 前:", generate(model, tok, "<|user|>3 + 5 等于几？<|assistant|>"))
-print("SFT 后:", generate(model, tok, "<|user|>3 + 5 等于几？<|assistant|>"))
+# 训练后再生成，与 before 对比
+after = generate(model, tok, prompt, max_new_tokens=20)
+print("SFT 前:", before)
+print("SFT 后:", after)
 ```
 :::
 
@@ -382,35 +458,56 @@ print("SFT 后:", generate(model, tok, "<|user|>3 + 5 等于几？<|assistant|>"
 
 ### DPO：用偏好对直接训练
 
+**数据约定**：一条偏好样本 = 同一 prompt 的两个回答（chosen 更好 / rejected 更差）。tokenize 时沿用 SFT 的规则：prompt 部分 label 为 −100，只对回答算 log 概率。**本节代码已实际运行验证**（与手算结果逐位一致）。
+
 ```python
-def sequence_logprob(model, ids, labels, device):
-    """计算「模型给回答部分的 log 概率之和」"""
-    logits = model(ids[None].to(device))
-    logp = F.log_softmax(logits, dim=-1)[0]
-    mask = labels[None].to(device) != -100
-    # 对齐：位置 t 的 logits 预测 t+1 处的 token
-    tok_logp = logp[:-1].gather(-1, labels[None][:, 1:].to(device).clamp(min=0).transpose(0, 1)).squeeze(-1)
-    return (tok_logp * mask[0, 1:]).sum()
+# 类型：【Runnable】核心函数已实测（见 docs/V2_CORRECTNESS_AUDIT.md）
 
-def dpo_loss(policy, ref, pair, beta=0.1, device="cuda"):
-    """pair: {prompt_ids, chosen_ids, chosen_labels, rejected_ids, rejected_labels}"""
-    lc = sequence_logprob(policy, pair["chosen_ids"], pair["chosen_labels"], device)
-    lr_ = sequence_logprob(policy, pair["rejected_ids"], pair["rejected_labels"], device)
-    with torch.no_grad():
-        rc = sequence_logprob(ref, pair["chosen_ids"], pair["chosen_labels"], device)
-        rr = sequence_logprob(ref, pair["rejected_ids"], pair["rejected_labels"], device)
-    logits = (lc - lr_) - (rc - rr)
-    return -F.logsigmoid(beta * logits)      # 让 chosen 相对 rejected 的概率比升高
+def sequence_logprob(model, ids, labels):
+    """回答部分的 log 概率之和（批大小 1，便于教学）。
+    ids:    [S]  完整序列（prompt + response）
+    labels: [S]  prompt 位置为 -100，response 位置为真实 token id
+    返回：标量（response 各 token 的 log P 之和）
+    """
+    logits = model(ids[None])                        # [1, S, V]
+    logp = F.log_softmax(logits, dim=-1)[0]          # [S, V]
+    # 对齐：位置 t 的 logits 预测 token t+1（next-token 铁律，与 SFT 相同）
+    tgt = labels[1:]                                 # [S-1]  被预测的 token
+    valid = (tgt != -100)                            # [S-1]  只保留 response 部分
+    safe = tgt.clamp(min=0)                          # 让 -100 变成合法索引（随后被 mask 掉）
+    tok_logp = logp[:-1].gather(-1, safe[:, None]).squeeze(-1)   # [S-1]
+    return (tok_logp * valid).sum()                  # 忽略 mask 位置的贡献
 
-# 用法：ref = SFT 模型的冻结副本
-# ref.load_state_dict(model.state_dict())
-# loss = dpo_loss(model, ref, pair); loss.backward(); optimizer.step()
+def dpo_loss(policy, ref, batch, beta=0.1):
+    """batch 包含四条序列：
+    chosen_ids / chosen_labels / rejected_ids / rejected_labels
+    """
+    lc = sequence_logprob(policy, batch["chosen_ids"],   batch["chosen_labels"])
+    lr_ = sequence_logprob(policy, batch["rejected_ids"], batch["rejected_labels"])
+    with torch.no_grad():                            # 参考模型不产生梯度
+        rc = sequence_logprob(ref, batch["chosen_ids"],   batch["chosen_labels"])
+        rr = sequence_logprob(ref, batch["rejected_ids"], batch["rejected_labels"])
+    margin = (lc - lr_) - (rc - rr)                  # policy 相对 ref 的偏好提升
+    return -F.logsigmoid(beta * margin)              # 策略==参考时，loss = ln(2)
+
+# 用法（ref = SFT 模型的冻结副本）：
+# ref = TinyLM(...); ref.load_state_dict(policy.state_dict())
+# for p in ref.parameters(): p.requires_grad_(False)
+# loss = dpo_loss(policy, ref, batch); loss.backward(); optimizer.step()
 ```
+
+:::note 为什么这个实现是对的（可在 Jupyter 里自查）
+- 若 `policy` 与 `ref` 对同一批数据的 log 概率完全相同，则 `margin = 0`，loss = −log σ(0) = **ln 2 ≈ 0.693**；
+- 训练后 chosen 的 log 概率应相对上升（`lc − rc` 增大），rejected 相对下降；
+- 本课程验证脚本对 `sequence_logprob` 做了**逐位手算核对**：函数输出与「手工 gather + 求和」完全一致。
+:::
 
 ### GRPO：同一问题采样一组，组内比较
 
+以下为**算法伪代码**（不保证直接运行，完整原理见第 19 章）：
+
 ```python
-# 伪代码（完整原理见第 19 章）
+# 【Pseudo-code】算法示意
 for prompt in prompts:
     responses = [sample(model, prompt) for _ in range(G)]     # 采样 G 个回答
     rewards = [reward_fn(prompt, r) for r in responses]       # 规则打分（如答案是否正确）

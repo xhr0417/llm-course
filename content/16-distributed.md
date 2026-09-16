@@ -1,12 +1,18 @@
 > **本章定位**：Scale 主线的核心缺口。回答三个问题：① 一张卡为什么不够；② 多卡为什么还会慢；③ DP / TP / PP / ZeRO / FSDP 分别在什么场景用。本章自带 Ring AllReduce 动画与 ZeRO 显存对比两个交互演示。
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## 16.1 一张卡为什么不够
 
 :::unfold 先懂直觉
 两个瓶颈同时出现：**显存**（7B 模型训练要 100GB+，单卡 80GB 放不下）和**时间**（8.4e22 FLOPs 在单卡上要几年）。分布式训练就是「把模型和数据切开，摊到多卡上，同时让通信尽量不拖后腿」。
 :::
 
-回顾第 17 章的显存账（混合精度 + Adam ≈ 16~18 bytes/参数）：
+回顾第 17 章的显存账：**混合精度 + Adam 的训练状态约 16~18 bytes/参数**（两章口径差异见 16.5 节的说明框）。
 
 | 模型 | 仅训练状态 | 单卡 80GB 能否放下 |
 | --- | --- | --- |
@@ -66,23 +72,35 @@ AllReduce = 所有卡把各自的梯度加起来，结果发回给所有卡。�
    结束时所有卡拥有所有块的完整和。
 ```
 
-### 通信量公式
+### 通信量公式（先定义清楚再谈「≈2S」）
+
+设要归约的数据总量为 $S$ 字节（如全部梯度），卡数 $N$。Ring AllReduce 分两阶段，每阶段 $N-1$ 步：
 
 $$
-\text{每卡通信量} = 2 \times \frac{N-1}{N} \times S \approx 2S
+\text{每卡发送量} = \underbrace{\frac{N-1}{N}S}_{\text{Reduce-Scatter}} + \underbrace{\frac{N-1}{N}S}_{\text{All-Gather}} = 2\cdot\frac{N-1}{N}S \approx 2S
 $$
 
-其中 $S$ 是数据总量（如梯度大小）。**关键**：$\frac{N-1}{N} \to 1$，所以每卡通信量趋近 $2S$，不随卡数线性增长。
+【假设条件】$S$ 在两个阶段都被均分成 $N$ 块；忽略协议头与启动开销。
+
+| 口径 | 数值 | 说明 |
+| --- | --- | --- |
+| **每卡发送量**（常用口径） | $\approx 2S$ | 与 N 无关（$N\to\infty$ 时趋近 2S） |
+| 每卡发送 + 接收总量 | $\approx 4S$ | 双向链路视角 |
+| **全网总流量** | $\approx 2(N-1)S$ | 所有卡都在发，随 N 线性增长 |
+
+**关键结论**：单卡的通信量不随卡数增长（≈2S），所以 DDP 能扩展到成千上万卡；但**整个网络的总流量**随卡数线性增长——这是大规模训练集群网络的瓶颈所在。
 
 :::demo allreduce-ring 交互：Ring AllReduce 分步动画
 点「下一步」看 4 张卡如何沿环传递并累加（Reduce-Scatter），再把完整结果传播回去（All-Gather）。方块颜色表示该块包含了几张卡的数据。
 :::
 
-| 方案 | 每卡通信量 | 瓶颈 |
+| 方案 | 每卡发送量 | 特点 |
 | --- | --- | --- |
-| 朴素（全发 GPU0） | O(N·S) | GPU0 带宽 |
-| Ring AllReduce | ≈ 2S（与 N 无关） | 环上最慢链路 |
-| Tree AllReduce | ≈ 2S·log N / N | 适合小消息 |
+| 朴素（全发 GPU0 汇总再广播） | O(N·S) | GPU0 带宽成为瓶颈 |
+| Ring AllReduce | $\approx 2S$（与 N 无关） | **带宽最优**；延迟 $O(N)$ 步 |
+| Tree AllReduce | $\approx 2S$（同量级） | 延迟 $O(\log N)$，适合小消息/低延迟场景 |
+
+> 小消息看**延迟**（步数），大消息看**带宽**（每卡流量）。这就是 NCCL 会按消息大小自动选择 Ring / Tree 等算法的原因。
 
 :::note NCCL 与拓扑
 实际使用的是 NVIDIA 的 **NCCL** 库，它会自动利用 NVLink / NVSwitch（卡间专用高速互联）和 InfiniBand（跨机）。拓扑意识：**同一台机器内用 NVLink（数百 GB/s）远快于跨机网络（几十 GB/s）**——这直接决定了并行策略的选择。
@@ -119,12 +137,17 @@ DDP 的问题：每张卡都存了一份完整的「显存三件套」（参数�
 
 ### 三阶段（逐级把重复数据分片）
 
-| 阶段 | 分片什么 | 每卡显存（16 bytes/参数形式） | 通信变化 |
+> **显存口径说明（重要）**：下表按 **16 bytes/参数**（bf16 参数 2 + bf16 梯度 2 + fp32 主权重 4 + Adam m/v 8）计算，**只含 model states**（参数/梯度/优化器状态），**不含 activations** 与临时缓冲。
+> 第 17 章按「梯度也保留 FP32」的保守口径算成 18 bytes/参数。两者都对，取决于实现——**关键是口径一致，不要混用**。
+
+| 阶段 | 分片什么 | 每卡 model states 显存（16 B/参数口径） | 通信量（相对基线） |
 | --- | --- | --- | --- |
-| ZeRO-0（DDP） | 无 | 16Ψ | 每步一次梯度 AllReduce |
-| **ZeRO-1** | 优化器状态（m/v + fp32 主权重） | 4Ψ + 12Ψ/N | 不变（更新时 all-gather 一次） |
-| **ZeRO-2** | + 梯度 | 2Ψ + 14Ψ/N | 不变（梯度用 reduce-scatter） |
-| **ZeRO-3** | + 参数 | 16Ψ/N | **前向/反向都要 all-gather 参数** |
+| ZeRO-0（DDP） | 无 | 16Ψ | 1×（梯度 AllReduce） |
+| **ZeRO-1** | 优化器状态（m/v + fp32 主权重） | 4Ψ + 12Ψ/N | ≈1.5× |
+| **ZeRO-2** | + 梯度 | 2Ψ + 14Ψ/N | ≈1×（与基线相当） |
+| **ZeRO-3** | + 参数 | 16Ψ/N | ≈1.5× |
+
+> 通信量口径来自 ZeRO 论文的对照分析：ZeRO-2 用「梯度 Reduce-Scatter + 参数 All-Gather」替代「梯度 AllReduce」，总量与基线相同；ZeRO-1/3 因额外的参数 All-Gather 约为 1.5×。
 
 :::demo zero-stages 交互：ZeRO 显存对比
 拖动参数量和 GPU 数，看四个阶段的单卡显存如何下降，以及能否放进 80GB 卡。
@@ -145,10 +168,10 @@ DDP 的问题：每张卡都存了一份完整的「显存三件套」（参数�
 
 > ZeRO-1 几乎总是划算（省显存、通信增加最少）；ZeRO-2 更省；ZeRO-3 最省但通信最多，要配合 prefetch 掩盖。
 
-## 16.6 FSDP：ZeRO-3 的工程实现
+## 16.6 FSDP：ZeRO-3 思想的 PyTorch 实现
 
 :::unfold 先懂直觉
-FSDP（Fully Sharded Data Parallel）就是 PyTorch 原生的 ZeRO-3：把参数分片存，前向时按层 AllGather、用完立即释放。它让你用「写 DDP 的方式」获得 ZeRO-3 的显存收益。
+FSDP（Fully Sharded Data Parallel）的**思想与 ZeRO-3 相同**（参数分片存、用的时候 AllGather、用完释放），是 PyTorch 原生实现，工程细节（分片方式、prefetch 调度、混合分片策略）与 DeepSpeed ZeRO-3 略有差异但目标一致：让你用「写 DDP 的方式」获得接近 ZeRO-3 的显存收益。
 :::
 
 ```python
@@ -158,11 +181,11 @@ model = FSDP(model, sharding_strategy=ShardingStrategy.FULL_SHARD)  # ≈ ZeRO-3
 # 另有 SHARD_GRAD_OP（≈ZeRO-2）、HYBRID_SHARD（机内全切、跨机复制）等策略
 ```
 
-| FSDP 策略 | 等价 | 场景 |
+| FSDP 策略 | 概念上对应 | 场景 |
 | --- | --- | --- |
-| `FULL_SHARD` | ZeRO-3 | 显存最紧 |
-| `SHARD_GRAD_OP` | ZeRO-2 | 通信与显存折中 |
-| `HYBRID_SHARD` | 机内 ZeRO-3 + 机间 DDP | 多机训练常用（省跨机通信） |
+| `FULL_SHARD` | ZeRO-3（全部切） | 显存最紧 |
+| `SHARD_GRAD_OP` | ZeRO-2（切梯度与优化器状态） | 通信与显存折中 |
+| `HYBRID_SHARD` | 机内全切 + 机间复制 | 多机训练常用（省跨机通信） |
 
 ## 16.7 Tensor Parallel：把单层切开
 
@@ -189,7 +212,7 @@ $$
 
 - 每张卡算部分和，最后 **AllReduce 一次**。
 
-### 一层 Transformer 的通信次数
+### 一层 Transformer 的通信次数（Megatron 经典实现）
 
 ```
 QKV 投影（列并行，无通信）
@@ -197,8 +220,10 @@ QKV 投影（列并行，无通信）
 → 输出投影（行并行，1 次 AllReduce）
 → FFN 第一层（列并行，无通信）
 → FFN 第二层（行并行，1 次 AllReduce）
-合计：每层前向 2 次 AllReduce（反向再 2 次）
+合计：每层前向 2 次 AllReduce，反向再 2 次
 ```
+
+【假设条件】以上为 **Megatron 经典（未开 Sequence Parallel）** 的切分方式：列并行输出「切分的结果」，行并行通过 AllReduce 汇总。若开启 Sequence Parallel，通信会改为 All-Gather + Reduce-Scatter 的组合（总量相近，但更省激活显存）。
 
 | 特点 | 说明 |
 | --- | --- |
@@ -222,6 +247,8 @@ micro-batch 2:            GPU0[fwd] → GPU1[fwd] → ...
 （1F1B 调度：前向和反向交错，让气泡最小化）
 
 气泡率 ≈ (P - 1) / (M + P - 1)
+
+【假设条件】经典 1F1B 调度（非 interleaved）、每个 micro-batch 的前向/反向耗时近似相等、忽略阶段间通信时间。interleaved 调度（virtual pipeline）可以进一步减小气泡。
 P = 流水段数，M = micro-batch 数量
 ```
 
@@ -266,7 +293,7 @@ M=4 时：3/7 ≈ 43%（严重浪费）。所以 PP 必须配合较大的 M 使�
 :::note 从「能用」到「高效」的检查顺序
 1. **显存够不够**（先解决能不能训）
 2. **扩展效率**（8 卡是否接近 8 倍）
-3. **通信占比**（profiler 里看 allreduce 时间占比，目标 < 15%）
+3. **通信占比**（profiler 里看 allreduce 时间占比，经验目标 < 15%，非硬标准）
 4. **MFU**（第 14 章：目标 35%~50%）
 :::
 

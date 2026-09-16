@@ -1,5 +1,11 @@
 > **本章定位**：第二部分「构建 (Build)」的起点。前面 10 章解决了「懂原理」，从本章开始解决「写得出来」。目标：读完本章，你能读懂并自己写出 small LLM 的全部代码。本章不引入新模型概念，只补齐动手所需的 PyTorch 工具箱。
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## 11.1 为什么单独练 PyTorch
 
 :::unfold 先懂直觉
@@ -72,10 +78,10 @@ LLM 代码里 80% 的烧脑行都在做 shape 变换：把 `[B, S, d]` 拆成多
 
 ### 对比表（背下来）
 
-| 操作 | 作用 | 是否改变内存布局 | 典型 LLM 用途 |
+| 操作 | 作用 | 是否拷贝 | 典型 LLM 用途 |
 | --- | --- | --- | --- |
-| `reshape` | 按新形状重排（必要时拷贝） | 可能拷贝 | 一般性形状重组 |
-| `view` | 同 reshape，但**要求内存连续** | 不拷贝 | 展平 logits：`[B,S,V] → [B*S,V]` |
+| `reshape` | 按新形状重排（不满足 view 条件时自动拷贝） | 视情况（必要时拷贝） | 一般性形状重组 |
+| `view` | 要求张量的 **stride 与新形状兼容**（见下方说明）；不满足则报错 | 不拷贝 | 展平 logits：`[B,S,V] → [B*S,V]` |
 | `transpose(d1,d2)` | 只交换**两个**维度 | 视图（不拷贝，但变不连续） | `K.transpose(-2,-1)` |
 | `permute(...)` | 任意重排**所有**维度 | 视图（不拷贝，但变不连续） | `[B,H,S,D] → [B,S,H,D]` |
 
@@ -93,14 +99,18 @@ d = x.view(6, 2)                          # → [6, 2]（x 连续，可 view）
 print(a.shape, b.shape)                   # 都是 [2, 2, 3]，但值不同！
 ```
 
-:::math transpose 之后为什么常常要 contiguous
-`transpose`/`permute` 只改「步长」（stride），不搬数据。之后调用 `view` 会报错：
+:::math view 的准确条件：stride 兼容，而非「绝对连续」
+`transpose`/`permute` 只改「步长」（stride），不搬数据。之后调用 `view` 何时会失败？**当新的形状无法用原 stride 表达时**——转置后的张量通常如此：
 
-```
-RuntimeError: view size is not compatible with input tensor's size and stride
+```python
+x = torch.arange(12).reshape(2, 3, 2)
+xt = x.transpose(1, 2)          # [2, 2, 3]，stride 已改变
+xt.view(2, 6)                   # ❌ RuntimeError: view size is not compatible ...
+xt.reshape(2, 6)                # ✅ reshape 自动拷贝一份再变形
+xt.contiguous().view(2, 6)      # ✅ 显式拷贝，然后 view 合法
 ```
 
-解决：`x.transpose(1,2).contiguous().view(...)` —— `contiguous()` 把数据真正排成连续内存（一次拷贝），之后 `view` 才合法。LLM 代码里 `reshape` 更常用，因为它会自动处理不连续的情况。
+严格来说，`view` 要求的是「stride 与新形状兼容」（例如「是否连续」的特殊情况），而**不是**简单的一条「必须 contiguous」；但实操中记「转置/换维之后不要直接 view，改用 reshape 或先 contiguous」就够用了。LLM 代码里 `reshape` 更常用，因为它会自动处理不满足条件的情况。
 :::
 
 :::fold 工程里怎么用（多头注意力的形状往返，第 7 章实现的完整版）

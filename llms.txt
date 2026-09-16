@@ -20,9 +20,9 @@
 - [Scaling Laws 与算力：为什么这样配置训练](https://llm.xhr0417.cn/chapters/scaling-laws.html): 参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。
 - [GPU Fundamentals：从 SM 到 Roofline](https://llm.xhr0417.cn/chapters/gpu.html): SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。
 - [Distributed Training：从 DDP 到 3D 并行](https://llm.xhr0417.cn/chapters/distributed.html): AllReduce/Ring、ZeRO 三阶段、FSDP、张量并行、流水线并行、通信计算重叠与选型指南。
-- [训练显存、混合精度与 LoRA](https://llm.xhr0417.cn/chapters/efficient.html): 显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/FP8、混合精度与 loss scaling、梯度累积、checkpointing、LoRA。
+- [训练显存、混合精度与 LoRA](https://llm.xhr0417.cn/chapters/efficient.html): 显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/INT8/INT4、混合精度与 loss scaling、梯度累积、激活检查点、LoRA。
 - [训练生命周期：Pretrain 与 SFT](https://llm.xhr0417.cn/chapters/pretrain-sft.html): 数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。
-- [Post-training 与 GRPO：偏好优化全景](https://llm.xhr0417.cn/chapters/rl-grpo.html): preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。
+- [强化学习与偏好优化：PPO 与 GRPO](https://llm.xhr0417.cn/chapters/rl-grpo.html): 为什么 SFT 后还要 RL、PPO/GRPO 结构、Group Relative Advantage、Policy Ratio、Clip、KL 散度、On/Off-policy、Reward 来源（DPO 最小实现见第 13 章 Lab 14）。
 
 原始 Markdown：
 - [00-map.md](https://llm.xhr0417.cn/content/00-map.md)

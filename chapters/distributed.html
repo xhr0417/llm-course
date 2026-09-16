@@ -37,10 +37,16 @@
 <blockquote>
 <p><strong>本章定位</strong>：Scale 主线的核心缺口。回答三个问题：① 一张卡为什么不够；② 多卡为什么还会慢；③ DP / TP / PP / ZeRO / FSDP 分别在什么场景用。本章自带 Ring AllReduce 动画与 ZeRO 显存对比两个交互演示。</p>
 </blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重</li>
+<li>【Pseudo-code】算法示意：用于解释思路，不保证可直接运行</li>
+</ul>
+</div></div>
 <h2>16.1 一张卡为什么不够</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>两个瓶颈同时出现：<strong>显存</strong>（7B 模型训练要 100GB+，单卡 80GB 放不下）和<strong>时间</strong>（8.4e22 FLOPs 在单卡上要几年）。分布式训练就是「把模型和数据切开，摊到多卡上，同时让通信尽量不拖后腿」。</p>
 </div></details>
-<p>回顾第 17 章的显存账（混合精度 + Adam ≈ 16~18 bytes/参数）：</p>
+<p>回顾第 17 章的显存账：<strong>混合精度 + Adam 的训练状态约 16~18 bytes/参数</strong>（两章口径差异见 16.5 节的说明框）。</p>
 <table>
 <thead>
 <tr>
@@ -111,35 +117,82 @@ model = nn.parallel.DistributedDataParallel(model, device_ids=[rank])
    沿环传递并累加，结束时每卡恰好拥有一块的完整和。
 ② All-Gather（N−1 步）：把完整块沿环传播，
    结束时所有卡拥有所有块的完整和。</code></pre>
-<h3>通信量公式</h3>
-<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>每卡通信量</mtext><mo>=</mo><mn>2</mn><mo>×</mo><mfrac><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mi>N</mi></mfrac><mo>×</mo><mi>S</mi><mo>≈</mo><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\text{每卡通信量} = 2 \times \frac{N-1}{N} \times S \approx 2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">每卡通信量</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span></div>
-<p>其中 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 是数据总量（如梯度大小）。<strong>关键</strong>：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mi>N</mi></mfrac><mo>→</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\frac{N-1}{N} \to 1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.2173em;vertical-align:-0.345em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8723em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span></span>，所以每卡通信量趋近 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span>，不随卡数线性增长。</p>
+<h3>通信量公式（先定义清楚再谈「≈2S」）</h3>
+<p>设要归约的数据总量为 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 字节（如全部梯度），卡数 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span></span></span>。Ring AllReduce 分两阶段，每阶段 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N-1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span></span> 步：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>每卡发送量</mtext><mo>=</mo><munder><munder><mrow><mfrac><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mi>N</mi></mfrac><mi>S</mi></mrow><mo stretchy="true">⏟</mo></munder><mtext>Reduce-Scatter</mtext></munder><mo>+</mo><munder><munder><mrow><mfrac><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mi>N</mi></mfrac><mi>S</mi></mrow><mo stretchy="true">⏟</mo></munder><mtext>All-Gather</mtext></munder><mo>=</mo><mn>2</mn><mo>⋅</mo><mfrac><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mi>N</mi></mfrac><mi>S</mi><mo>≈</mo><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\text{每卡发送量} = \underbrace{\frac{N-1}{N}S}_{\text{Reduce-Scatter}} + \underbrace{\frac{N-1}{N}S}_{\text{All-Gather}} = 2\cdot\frac{N-1}{N}S \approx 2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">每卡发送量</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:3.3804em;vertical-align:-2.0201em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-1.3402em;"><span class="pstrut" style="height:3.3603em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">Reduce-Scatter</span></span></span></span></span><span style="top:-3.3603em;"><span class="pstrut" style="height:3.3603em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span class="svg-align" style="top:-2.0263em;"><span class="pstrut" style="height:3.3603em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3.3603em;"><span class="pstrut" style="height:3.3603em;"></span><span class="mord"><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.334em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.0201em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:3.3804em;vertical-align:-2.0201em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-1.3402em;"><span class="pstrut" style="height:3.3603em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">All-Gather</span></span></span></span></span><span style="top:-3.3603em;"><span class="pstrut" style="height:3.3603em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span class="svg-align" style="top:-2.0263em;"><span class="pstrut" style="height:3.3603em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3.3603em;"><span class="pstrut" style="height:3.3603em;"></span><span class="mord"><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.334em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.0201em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span></div>
+<p>【假设条件】<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>S</mi></mrow><annotation encoding="application/x-tex">S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span> 在两个阶段都被均分成 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span></span></span> 块；忽略协议头与启动开销。</p>
+<table>
+<thead>
+<tr>
+<th>口径</th>
+<th>数值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>每卡发送量</strong>（常用口径）</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\approx 2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span></td>
+<td>与 N 无关（<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">N\to\infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span></span> 时趋近 2S）</td>
+</tr>
+<tr>
+<td>每卡发送 + 接收总量</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>4</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\approx 4S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">4</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span></td>
+<td>双向链路视角</td>
+</tr>
+<tr>
+<td><strong>全网总流量</strong></td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>2</mn><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi>S</mi></mrow><annotation encoding="application/x-tex">\approx 2(N-1)S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">2</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span></td>
+<td>所有卡都在发，随 N 线性增长</td>
+</tr>
+</tbody></table>
+<p><strong>关键结论</strong>：单卡的通信量不随卡数增长（≈2S），所以 DDP 能扩展到成千上万卡；但<strong>整个网络的总流量</strong>随卡数线性增长——这是大规模训练集群网络的瓶颈所在。</p>
 <div class="demo-block"><div class="demo-head">🎮 交互：Ring AllReduce 分步动画<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点「下一步」看 4 张卡如何沿环传递并累加（Reduce-Scatter），再把完整结果传播回去（All-Gather）。方块颜色表示该块包含了几张卡的数据。</p>
 <p><a class="static-link" href="../index.html#/distributed">在交互版中打开这个演示 →</a></p></div></div>
 <table>
 <thead>
 <tr>
 <th>方案</th>
-<th>每卡通信量</th>
-<th>瓶颈</th>
+<th>每卡发送量</th>
+<th>特点</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>朴素（全发 GPU0）</td>
+<td>朴素（全发 GPU0 汇总再广播）</td>
 <td>O(N·S)</td>
-<td>GPU0 带宽</td>
+<td>GPU0 带宽成为瓶颈</td>
 </tr>
 <tr>
 <td>Ring AllReduce</td>
-<td>≈ 2S（与 N 无关）</td>
-<td>环上最慢链路</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\approx 2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span>（与 N 无关）</td>
+<td><strong>带宽最优</strong>；延迟 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(N)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mclose">)</span></span></span></span></span> 步</td>
 </tr>
 <tr>
 <td>Tree AllReduce</td>
-<td>≈ 2S·log N / N</td>
-<td>适合小消息</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>2</mn><mi>S</mi></mrow><annotation encoding="application/x-tex">\approx 2S</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.05764em;">S</span></span></span></span></span>（同量级）</td>
+<td>延迟 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>log</mi><mo>⁡</mo><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(\log N)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mclose">)</span></span></span></span></span>，适合小消息/低延迟场景</td>
 </tr>
 </tbody></table>
+<blockquote>
+<p>小消息看<strong>延迟</strong>（步数），大消息看<strong>带宽</strong>（每卡流量）。这就是 NCCL 会按消息大小自动选择 Ring / Tree 等算法的原因。</p>
+</blockquote>
 <div class="box box-note"><div class="box-title">📘 NCCL 与拓扑</div><div class="box-body"><p>实际使用的是 NVIDIA 的 <strong>NCCL</strong> 库，它会自动利用 NVLink / NVSwitch（卡间专用高速互联）和 InfiniBand（跨机）。拓扑意识：<strong>同一台机器内用 NVLink（数百 GB/s）远快于跨机网络（几十 GB/s）</strong>——这直接决定了并行策略的选择。</p>
 </div></div>
 <h2>16.4 通信与计算重叠</h2>
@@ -175,40 +228,47 @@ model = nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>DDP 的问题：每张卡都存了一份完整的「显存三件套」（参数、梯度、优化器状态）。但这些数据在每张卡上是<strong>重复的</strong>。ZeRO 的思想：既然重复，那就切开分给各卡，用的时候再 AllGather 回来。</p>
 </div></details>
 <h3>三阶段（逐级把重复数据分片）</h3>
+<blockquote>
+<p><strong>显存口径说明（重要）</strong>：下表按 <strong>16 bytes/参数</strong>（bf16 参数 2 + bf16 梯度 2 + fp32 主权重 4 + Adam m/v 8）计算，<strong>只含 model states</strong>（参数/梯度/优化器状态），<strong>不含 activations</strong> 与临时缓冲。
+第 17 章按「梯度也保留 FP32」的保守口径算成 18 bytes/参数。两者都对，取决于实现——<strong>关键是口径一致，不要混用</strong>。</p>
+</blockquote>
 <table>
 <thead>
 <tr>
 <th>阶段</th>
 <th>分片什么</th>
-<th>每卡显存（16 bytes/参数形式）</th>
-<th>通信变化</th>
+<th>每卡 model states 显存（16 B/参数口径）</th>
+<th>通信量（相对基线）</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>ZeRO-0（DDP）</td>
 <td>无</td>
 <td>16Ψ</td>
-<td>每步一次梯度 AllReduce</td>
+<td>1×（梯度 AllReduce）</td>
 </tr>
 <tr>
 <td><strong>ZeRO-1</strong></td>
 <td>优化器状态（m/v + fp32 主权重）</td>
 <td>4Ψ + 12Ψ/N</td>
-<td>不变（更新时 all-gather 一次）</td>
+<td>≈1.5×</td>
 </tr>
 <tr>
 <td><strong>ZeRO-2</strong></td>
 <td>+ 梯度</td>
 <td>2Ψ + 14Ψ/N</td>
-<td>不变（梯度用 reduce-scatter）</td>
+<td>≈1×（与基线相当）</td>
 </tr>
 <tr>
 <td><strong>ZeRO-3</strong></td>
 <td>+ 参数</td>
 <td>16Ψ/N</td>
-<td><strong>前向/反向都要 all-gather 参数</strong></td>
+<td>≈1.5×</td>
 </tr>
 </tbody></table>
+<blockquote>
+<p>通信量口径来自 ZeRO 论文的对照分析：ZeRO-2 用「梯度 Reduce-Scatter + 参数 All-Gather」替代「梯度 AllReduce」，总量与基线相同；ZeRO-1/3 因额外的参数 All-Gather 约为 1.5×。</p>
+</blockquote>
 <div class="demo-block"><div class="demo-head">🎮 交互：ZeRO 显存对比<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动参数量和 GPU 数，看四个阶段的单卡显存如何下降，以及能否放进 80GB 卡。</p>
 <p><a class="static-link" href="../index.html#/distributed">在交互版中打开这个演示 →</a></p></div></div>
 <div class="box box-math"><div class="box-title">🧮 数字感受（7B 模型，8 卡）</div><div class="box-body"><table>
@@ -241,8 +301,8 @@ model = nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 <blockquote>
 <p>ZeRO-1 几乎总是划算（省显存、通信增加最少）；ZeRO-2 更省；ZeRO-3 最省但通信最多，要配合 prefetch 掩盖。</p>
 </blockquote>
-<h2>16.6 FSDP：ZeRO-3 的工程实现</h2>
-<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>FSDP（Fully Sharded Data Parallel）就是 PyTorch 原生的 ZeRO-3：把参数分片存，前向时按层 AllGather、用完立即释放。它让你用「写 DDP 的方式」获得 ZeRO-3 的显存收益。</p>
+<h2>16.6 FSDP：ZeRO-3 思想的 PyTorch 实现</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>FSDP（Fully Sharded Data Parallel）的<strong>思想与 ZeRO-3 相同</strong>（参数分片存、用的时候 AllGather、用完释放），是 PyTorch 原生实现，工程细节（分片方式、prefetch 调度、混合分片策略）与 DeepSpeed ZeRO-3 略有差异但目标一致：让你用「写 DDP 的方式」获得接近 ZeRO-3 的显存收益。</p>
 </div></details>
 <pre><code class="lang-python">from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
@@ -252,23 +312,23 @@ model = FSDP(model, sharding_strategy=ShardingStrategy.FULL_SHARD)  # ≈ ZeRO-3
 <thead>
 <tr>
 <th>FSDP 策略</th>
-<th>等价</th>
+<th>概念上对应</th>
 <th>场景</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>FULL_SHARD</code></td>
-<td>ZeRO-3</td>
+<td>ZeRO-3（全部切）</td>
 <td>显存最紧</td>
 </tr>
 <tr>
 <td><code>SHARD_GRAD_OP</code></td>
-<td>ZeRO-2</td>
+<td>ZeRO-2（切梯度与优化器状态）</td>
 <td>通信与显存折中</td>
 </tr>
 <tr>
 <td><code>HYBRID_SHARD</code></td>
-<td>机内 ZeRO-3 + 机间 DDP</td>
+<td>机内全切 + 机间复制</td>
 <td>多机训练常用（省跨机通信）</td>
 </tr>
 </tbody></table>
@@ -287,13 +347,14 @@ model = FSDP(model, sharding_strategy=ShardingStrategy.FULL_SHARD)  # ≈ ZeRO-3
 <ul>
 <li>每张卡算部分和，最后 <strong>AllReduce 一次</strong>。</li>
 </ul>
-<h3>一层 Transformer 的通信次数</h3>
+<h3>一层 Transformer 的通信次数（Megatron 经典实现）</h3>
 <pre><code class="lang-">QKV 投影（列并行，无通信）
 → Attention（本地计算）
 → 输出投影（行并行，1 次 AllReduce）
 → FFN 第一层（列并行，无通信）
 → FFN 第二层（行并行，1 次 AllReduce）
-合计：每层前向 2 次 AllReduce（反向再 2 次）</code></pre>
+合计：每层前向 2 次 AllReduce，反向再 2 次</code></pre>
+<p>【假设条件】以上为 <strong>Megatron 经典（未开 Sequence Parallel）</strong> 的切分方式：列并行输出「切分的结果」，行并行通过 AllReduce 汇总。若开启 Sequence Parallel，通信会改为 All-Gather + Reduce-Scatter 的组合（总量相近，但更省激活显存）。</p>
 <table>
 <thead>
 <tr>
@@ -324,6 +385,8 @@ micro-batch 2:            GPU0[fwd] → GPU1[fwd] → ...
 （1F1B 调度：前向和反向交错，让气泡最小化）
 
 气泡率 ≈ (P - 1) / (M + P - 1)
+
+【假设条件】经典 1F1B 调度（非 interleaved）、每个 micro-batch 的前向/反向耗时近似相等、忽略阶段间通信时间。interleaved 调度（virtual pipeline）可以进一步减小气泡。
 P = 流水段数，M = micro-batch 数量</code></pre>
 <table>
 <thead>
@@ -415,7 +478,7 @@ M=4 时：3/7 ≈ 43%（严重浪费）。所以 PP 必须配合较大的 M 使�
 <div class="box box-note"><div class="box-title">📘 从「能用」到「高效」的检查顺序</div><div class="box-body"><ol>
 <li><strong>显存够不够</strong>（先解决能不能训）</li>
 <li><strong>扩展效率</strong>（8 卡是否接近 8 倍）</li>
-<li><strong>通信占比</strong>（profiler 里看 allreduce 时间占比，目标 &lt; 15%）</li>
+<li><strong>通信占比</strong>（profiler 里看 allreduce 时间占比，经验目标 &lt; 15%，非硬标准）</li>
 <li><strong>MFU</strong>（第 14 章：目标 35%~50%）</li>
 </ol>
 </div></div>

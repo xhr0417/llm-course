@@ -189,7 +189,61 @@ $$
 :::
 :::
 
-## 13.5 LoRA：低秩微调 ★
+## 13.5 两个显存开关：梯度累积与激活检查点
+
+:::unfold 先懂直觉
+显存不够时有两个「以时间换空间」的标准动作：**梯度累积**（用时间换 batch 等价性）和 **激活检查点**（用重算换显存）。它们和混合精度一起，构成训练显存调优的三件套。
+:::
+
+### 开关一：梯度累积（Gradient Accumulation）
+
+小显存装不下大 batch 时：把一个大 batch 拆成 $k$ 个 micro-batch，梯度累加 $k$ 次后再更新一次参数。
+
+$$
+g_{effective} = \frac{1}{k}\sum_{i=1}^{k} g_i \quad\Longleftrightarrow\quad \text{等效 batch} = k \times B_{micro}
+$$
+
+```python
+# 类型：【Runnable】核心逻辑（完整训练循环见第 13 章 Lab 9）
+accum = 8
+for micro_step, (x, y) in enumerate(loader):
+    loss = criterion(model(x), y) / accum        # 缩放：保证累加后与平均一致
+    loss.backward()                              # 梯度累加进 .grad
+    if (micro_step + 1) % accum == 0:            # 攒够 accum 个才更新
+        clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+```
+
+| 维度 | 变化 |
+| --- | --- |
+| 激活显存 | 只需放下 1 个 micro-batch → 下降 k 倍 |
+| 等效 batch | k × B_micro（学习率按大 batch 调） |
+| 代价 | 每步多 k−1 次前向/反向的时间（总吞吐基本不变） |
+
+### 开关二：激活检查点（Activation Checkpointing / 梯度检查点）
+
+反向传播需要前向的中间激活，而这些激活是显存大头。做法：**前向只保存少数「检查点」激活，反向时从检查点重算需要的中间值**。
+
+$$
+\text{激活显存} \approx O(\sqrt{L}) \sim O(1) \text{ （取决于策略）}, \qquad \text{额外计算} \approx +30\% \text{ 前向}
+$$
+
+```python
+# PyTorch 一行开关
+from torch.utils.checkpoint import checkpoint
+h = checkpoint(block, x, use_reentrant=False)   # 用重算换显存
+```
+
+| | 梯度累积 | 激活检查点 |
+| --- | --- | --- |
+| 省的显存 | 激活（按 micro-batch 计） | 激活（按层计） |
+| 代价 | 时间几乎不变，**等效 batch 变小** | **多约 30% 计算**（HFU ↑） |
+| 常用场景 | batch 太大装不下 | 序列长 / 层数深 |
+
+> **FP8 简报**：H100 起支持 FP8（E4M3/E5M2）训练，进一步减半显存与带宽需求，但需要缩放与兼容的 kernel 支持。它属于「前沿选项」——本节不展开，知道它存在即可。
+
+## 13.6 LoRA：低秩微调 ★
 
 :::unfold 先懂直觉
 微调不需要改动整个大矩阵——模型只需要在一个「低维方向」上调整。LoRA 把权重更新分解成两个瘦长矩阵相乘（低秩分解），只训练这两个小矩阵，参数量降到 1% 以下。
@@ -245,7 +299,7 @@ $$
 拖动秩 r 滑块，实时看 LoRA 可训练参数量（r×(d+k)）与全量微调（d×k）的对比和百分比。
 :::
 
-## 13.6 为什么 LoRA 省参数 ★
+## 13.7 为什么 LoRA 省参数 ★
 
 ### 公式与算例
 
@@ -294,7 +348,7 @@ model.print_trainable_parameters()
 ```
 :::
 
-## 13.7 LoRA 为什么可行
+## 13.8 LoRA 为什么可行
 
 它背后的假设：
 
@@ -347,7 +401,7 @@ model.print_trainable_parameters()
 :::
 :::
 
-## 13.8 本章总结
+## 13.9 本章总结
 
 :::key 本节必须记住
 | 概念 | 一句话 |

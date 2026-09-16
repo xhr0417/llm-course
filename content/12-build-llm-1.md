@@ -8,6 +8,12 @@ TinyLM 规格：vocab 32000 · d_model 256 · 6 层 · 8 头 · 上下文 512
 ```
 :::
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## Lab 1：训练一个 BPE Tokenizer
 
 :::unfold 目标
@@ -116,19 +122,53 @@ def apply_rope(x, cos, sin):
     x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
     return torch.cat([x1 * cos - x2 * sin,
                       x1 * sin + x2 * cos], dim=-1)
+```
 
-# 验证：相对位置不变性（第 10 章结论）
+**验证：相对位置性质**。注意正确做法——**固定同一组内容向量 $q_0, k_0$**，只改变它们的绝对位置：
+
+$$
+(R_m q_0)^\top (R_n k_0) = q_0^\top R_{n-m}\, k_0
+$$
+
+点积只取决于相对距离 $n-m$，与绝对位置无关。
+
+```python
+def rope_at(vec, pos, cos, sin):
+    """对单个 [D] 向量在位置 pos 施加旋转（便于精确验证）"""
+    half = vec.shape[-1] // 2
+    x1, x2 = vec[:half], vec[half:]
+    c, s = cos[pos], sin[pos]
+    return torch.cat([x1 * c - x2 * s, x1 * s + x2 * c])
+
 D = 64
 cos, sin = build_rope_cache(16, D)
-q = torch.randn(1, 1, 16, D)
-k = torch.randn(1, 1, 16, D)
-qr = apply_rope(q, cos, sin)
-kr = apply_rope(k, cos, sin)
-dot_mn = (qr[0, 0, 8] * kr[0, 0, 6]).sum()      # 相对位置 2
-dot_mn2 = (qr[0, 0, 5] * kr[0, 0, 3]).sum()     # 相对位置 2
-assert torch.allclose(dot_mn, dot_mn2, atol=1e-5)   # 相同相对距离 → 相同点积
+
+q0 = torch.randn(D)                    # ← 同一组内容向量
+k0 = torch.randn(D)
+
+# 相同相对距离（8-6 = 2，5-3 = 2）→ 点积应相同
+score_a = (rope_at(q0, 8, cos, sin) * rope_at(k0, 6, cos, sin)).sum()
+score_b = (rope_at(q0, 5, cos, sin) * rope_at(k0, 3, cos, sin)).sum()
+assert torch.allclose(score_a, score_b, atol=1e-5)
+
+# 反例：不同相对距离（5-1 = 4）→ 点积不同
+score_c = (rope_at(q0, 5, cos, sin) * rope_at(k0, 1, cos, sin)).sum()
+assert not torch.allclose(score_a, score_c, atol=1e-4)
 print("RoPE 相对位置性质通过 ✅")
 ```
+
+:::warning 一个容易写错的测试
+如果像下面这样写测试，是**错的**：
+
+```python
+q = torch.randn(1, 1, 16, D)   # 16 个位置的随机向量
+k = torch.randn(1, 1, 16, D)
+# ❌ 错误：q[8] 和 q[5] 是两个完全不同的随机向量！
+# 它们点积相同不是因为位置性质，而是纯属巧合（几乎不可能成立）
+```
+
+相对位置性质的前提是**同一个内容向量**在不同位置被旋转。测试必须固定 $q_0, k_0$（本章验证脚本已实际运行，两种相对距离的对比均通过）。
+:::
 
 :::warning 坑
 - cos/sin 要搬到和 x 相同的 device；

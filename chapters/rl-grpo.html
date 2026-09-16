@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Post-training 与 GRPO：偏好优化全景 · 大模型知识体系</title>
-<meta name="description" content="preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。">
+<title>强化学习与偏好优化：PPO 与 GRPO · 大模型知识体系</title>
+<meta name="description" content="为什么 SFT 后还要 RL、PPO/GRPO 结构、Group Relative Advantage、Policy Ratio、Clip、KL 散度、On/Off-policy、Reward 来源（DPO 最小实现见第 13 章 Lab 14）。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/rl-grpo.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,10 +32,11 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="pretrain-sft.html">← 训练生命周期：Pretrain 与 SFT</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rl-grpo">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 19 章 · 第四部分 · 训练与对齐 (Train &amp; Align)</div><h1 class="chapter-title">Post-training 与 GRPO：偏好优化全景</h1><p class="chapter-desc">preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。</p><p class="chapter-source">对应课件：GRPO强化学习算法</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 19 章 · 第四部分 · 训练与对齐 (Train &amp; Align)</div><h1 class="chapter-title">强化学习与偏好优化：PPO 与 GRPO</h1><p class="chapter-desc">为什么 SFT 后还要 RL、PPO/GRPO 结构、Group Relative Advantage、Policy Ratio、Clip、KL 散度、On/Off-policy、Reward 来源（DPO 最小实现见第 13 章 Lab 14）。</p><p class="chapter-source">对应课件：GRPO强化学习算法</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《GRPO强化学习算法》。核心知识点全部按统一模板展开。本章公式较多，但每个都能用数字算例验证。</p>
+<p>说明：偏好数据、Reward Model 与 <strong>DPO 的最小可运行实现</strong>见第 13 章 Lab 14（Build 训练篇）；本章聚焦 PPO / GRPO 的算法核心。</p>
 </blockquote>
 <h2>12.1 为什么 SFT 后还要 RL</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>SFT 教模型「照着示范做」，但没有告诉它「哪个回答更好」。同一个问题可以有很多正确回答，人类偏好的是其中更有帮助、更安全、更准确的那些。RL 就是用奖励信号去优化这个「更好」。</p>

@@ -1,9 +1,21 @@
 > **本章定位**：Scale 主线的地基。不理解 GPU 的算力与带宽模型，后面 FlashAttention、分布式训练、推理优化都只能「背结论」。本章目标：让你看到任何算子都能问出「它是 compute-bound 还是 memory-bound」。
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## 15.1 为什么必须懂 GPU
 
 :::unfold 先懂直觉
-训练 LLaMA-2-7B 要 8.4e22 FLOPs。如果按 CPU 的算力（约 1 TFLOPS），需要 260 万年；用 1000 张 A100 只要 9 天。**GPU 不是「更快的 CPU」，而是完全不同的计算哲学**——理解它的强项和瓶颈，才能理解后面所有的系统优化。
+训练 LLaMA-2-7B 要 8.4e22 FLOPs。做一道数量级估算（**注意：下面 CPU 的 1 TFLOPS 是为了直觉而设的教学假设**，真实 CPU 训练吞吐取决于 SIMD 宽度、核心数与内存带宽）：按 1 TFLOPS 算需要
+
+$$
+8.4\times10^{22} \div 10^{12} = 8.4\times10^{10}\ \text{秒} \approx 2660\ \text{年}
+$$
+
+而用 1000 张 A100 只要 9 天。**GPU 不是「更快的 CPU」，而是完全不同的计算哲学**——理解它的强项和瓶颈，才能理解后面所有的系统优化。
 :::
 
 本章回答四个问题：
@@ -26,8 +38,8 @@ CPU 是「几个博士生」——聪明的核心，擅长复杂的串行逻辑�
 | 核心数 | 8~64 个复杂核心 | 108 个 SM / 6912 个 CUDA Core |
 | 单核能力 | 强（分支预测、乱序执行、大缓存） | 弱（简单流水线） |
 | 设计目标 | 低延迟（一件事尽快做完） | 高吞吐（单位时间做最多事） |
-| 内存带宽 | ~100 GB/s | **2039 GB/s**（HBM2e） |
-| BF16 算力 | ~1 TFLOPS | **312 TFLOPS**（Tensor Core） |
+| 内存带宽 | ~50~200 GB/s | **2039 GB/s**（A100 80GB HBM2e） |
+| BF16 算力 | ~0.5~2 TFLOPS（量级示意） | **312 TFLOPS**（Tensor Core，dense） |
 | 适合 | 操作系统、分支复杂逻辑 | 矩阵乘、逐元素运算 |
 
 ## 15.3 GPU 硬件结构：从 SM 到 warp
@@ -119,31 +131,37 @@ $$
 - $AI < AI^*$：**memory-bound**（带宽墙）
 - $AI > AI^*$：**compute-bound**（算力平台）
 
-### 常见算子的算术强度
+### 常见算子的算术强度（教学量级近似）
 
-| 算子 | AI（约） | 判定 | 优化方向 |
+> **假设约定**：以下按 bf16、计入 HBM **读+写**流量估算；不同实现差异很大（融合程度、是否物化中间矩阵等），表中数值只用于**判断瓶颈方向**，不是精确测量值。
+
+| 算子 | AI（量级） | 判定 | 优化方向 |
 | --- | --- | --- | --- |
-| 向量加法 | 0.08 | memory-bound | 融合、减少读写 |
-| GELU / Dropout | 0.2 | memory-bound | 融合进邻近算子 |
-| Softmax | 0.25 | memory-bound | 在线 softmax、融合 |
-| LayerNorm | 0.5 | memory-bound | 融合 |
-| 朴素 Attention | 4 | memory-bound | FlashAttention |
-| FlashAttention | 40+ | 接近拐点 | — |
-| 大 GEMM（M=N=K 大） | 200+ | compute-bound | Tensor Core、低精度 |
+| 向量加法（读 2 写 1） | ~0.2 | memory-bound | 融合、减少读写 |
+| GELU / 逐元素激活 | ~1 | memory-bound | 融合进邻近算子 |
+| Softmax（每行） | ~1 | memory-bound | 在线 softmax、融合 |
+| LayerNorm | ~1.3 | memory-bound | 融合 |
+| 朴素 Attention | 数 ~ 数十 | 偏 memory-bound | FlashAttention |
+| FlashAttention | 数十以上 | 接近/越过拐点 | — |
+| 大 GEMM（M=N=K 大） | 100~1000+ | compute-bound | Tensor Core、低精度 |
 
 :::demo roofline 交互：算术强度与瓶颈判断
-拖动滑块改变算子算术强度，或直接点选常见算子，观察它在 Roofline 图上的位置：左侧「斜线墙」是带宽瓶颈，右侧「平顶」是算力瓶颈。
+拖动滑块改变算子算术强度，或直接点选常见算子，观察它在 Roofline 图上的位置：左侧「斜线墙」是带宽瓶颈，右侧「平顶」是算力瓶颈。（演示中的 AI 数值同为教学近似。）
 :::
 
-:::math 一个具体算例：为什么 LayerNorm 慢
-LayerNorm 处理 `[B, S, d] = [8, 512, 4096]`：
+:::math 一个具体算例：为什么 LayerNorm 慢（理想下界估算）
+LayerNorm 处理 `[B, S, d] = [8, 512, 4096]`，bf16：
 
-- 数据量 = 8×512×4096×2 bytes ≈ 33 MB（bf16）
-- 计算量 ≈ 8×512×4096×5 FLOPs ≈ 84 MFLOPs
-- $AI = 84e6 / 33e6 \approx 2.5$ → 远低于拐点 153 → **memory-bound**
-- 时间下限 = 33 MB ÷ 2039 GB/s ≈ **16 微秒**（计算本身只需 0.0003 微秒）
+- 元素数 = $8 \times 512 \times 4096 \approx 1.68\times10^7$
+- 内存流量（读入 + 写出）= $2 \times 1.68{\times}10^7 \times 2\ \text{B} \approx 67\ \text{MB}$
+- 计算量 ≈ 每元素约 5 FLOPs → $\approx 8.4\times10^7$ FLOPs
+- $AI = 84\text{e}6 / 67\text{e}6 \approx 1.25$ → 远低于拐点 153 → **memory-bound**
+- 内存时间下界 = 67 MB ÷ 2039 GB/s ≈ **33 微秒**
+- 计算时间 = 84 MFLOPs ÷ 312 TFLOPS ≈ **0.27 微秒**（比内存时间小约 120 倍）
 
-结论：LayerNorm 再省计算也没用，唯一的优化是少读写。
+（这是假设带宽 100% 利用率的**理想下界**；真实 kernel 通常达到峰值带宽的 60%~80%。）
+
+结论：LayerNorm 再省计算也没用，唯一的优化是**少读写**。
 :::
 
 ## 15.6 为什么 GEMM 快：分块与 Tensor Core
@@ -193,7 +211,7 @@ y = gelu_and_add(x, residual)   # 读 8MB → 写 4MB = 12MB 流量（省 25%）
 | 现象 | 原因 |
 | --- | --- |
 | `torch.compile` 让模型变快 | 自动做 kernel fusion |
-| FlashAttention 快 | 把 QKᵀ、softmax、×V 融合为一个 kernel（见第 19 章） |
+| FlashAttention 快 | 把 QKᵀ、softmax、×V 融合为一个 kernel（FlashAttention 章节将在第二批上线，见第 16 章末的路线图） |
 | 逐元素操作「太慢」 | 每个算子各搬一次 HBM |
 
 ## 15.8 Profiling 入门：找到瓶颈
@@ -303,5 +321,5 @@ D. 精度损失
 
 :::related
 依赖 | 第 7 章 Attention, 第 14 章 MFU
-用于 | 第 16 章 分布式训练, 第 19 章 FlashAttention, 推理优化
+用于 | 第 16 章 分布式训练, FlashAttention（第二批）, 推理优化（第二批）
 :::

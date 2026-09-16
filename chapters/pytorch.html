@@ -37,6 +37,12 @@
 <blockquote>
 <p><strong>本章定位</strong>：第二部分「构建 (Build)」的起点。前面 10 章解决了「懂原理」，从本章开始解决「写得出来」。目标：读完本章，你能读懂并自己写出 small LLM 的全部代码。本章不引入新模型概念，只补齐动手所需的 PyTorch 工具箱。</p>
 </blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重</li>
+<li>【Pseudo-code】算法示意：用于解释思路，不保证可直接运行</li>
+</ul>
+</div></div>
 <h2>11.1 为什么单独练 PyTorch</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>LLM 的论文公式最终都要落成 PyTorch 代码。但初学者常见的困境是：<strong>公式看懂了，代码读不懂</strong>——<code>transpose(-2,-1)</code> 是转什么？<code>keepdim=True</code> 为什么必要？<code>loss.backward()</code> 到底写了什么？本章把这些问题一次性讲清，后面 12、13 章的 Lab 才能顺畅跟做。</p>
 </div></details>
@@ -171,19 +177,19 @@ x_reshaped = x.view(1, 4)             # 改形状</code></pre>
 <tr>
 <th>操作</th>
 <th>作用</th>
-<th>是否改变内存布局</th>
+<th>是否拷贝</th>
 <th>典型 LLM 用途</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>reshape</code></td>
-<td>按新形状重排（必要时拷贝）</td>
-<td>可能拷贝</td>
+<td>按新形状重排（不满足 view 条件时自动拷贝）</td>
+<td>视情况（必要时拷贝）</td>
 <td>一般性形状重组</td>
 </tr>
 <tr>
 <td><code>view</code></td>
-<td>同 reshape，但<strong>要求内存连续</strong></td>
+<td>要求张量的 <strong>stride 与新形状兼容</strong>（见下方说明）；不满足则报错</td>
 <td>不拷贝</td>
 <td>展平 logits：<code>[B,S,V] → [B*S,V]</code></td>
 </tr>
@@ -210,9 +216,13 @@ c = x.reshape(2, 6)                       # → [2, 6]
 d = x.view(6, 2)                          # → [6, 2]（x 连续，可 view）
 
 print(a.shape, b.shape)                   # 都是 [2, 2, 3]，但值不同！</code></pre>
-<div class="box box-math"><div class="box-title">🧮 transpose 之后为什么常常要 contiguous</div><div class="box-body"><p><code>transpose</code>/<code>permute</code> 只改「步长」（stride），不搬数据。之后调用 <code>view</code> 会报错：</p>
-<pre><code class="lang-">RuntimeError: view size is not compatible with input tensor&#39;s size and stride</code></pre>
-<p>解决：<code>x.transpose(1,2).contiguous().view(...)</code> —— <code>contiguous()</code> 把数据真正排成连续内存（一次拷贝），之后 <code>view</code> 才合法。LLM 代码里 <code>reshape</code> 更常用，因为它会自动处理不连续的情况。</p>
+<div class="box box-math"><div class="box-title">🧮 view 的准确条件：stride 兼容，而非「绝对连续」</div><div class="box-body"><p><code>transpose</code>/<code>permute</code> 只改「步长」（stride），不搬数据。之后调用 <code>view</code> 何时会失败？<strong>当新的形状无法用原 stride 表达时</strong>——转置后的张量通常如此：</p>
+<pre><code class="lang-python">x = torch.arange(12).reshape(2, 3, 2)
+xt = x.transpose(1, 2)          # [2, 2, 3]，stride 已改变
+xt.view(2, 6)                   # ❌ RuntimeError: view size is not compatible ...
+xt.reshape(2, 6)                # ✅ reshape 自动拷贝一份再变形
+xt.contiguous().view(2, 6)      # ✅ 显式拷贝，然后 view 合法</code></pre>
+<p>严格来说，<code>view</code> 要求的是「stride 与新形状兼容」（例如「是否连续」的特殊情况），而<strong>不是</strong>简单的一条「必须 contiguous」；但实操中记「转置/换维之后不要直接 view，改用 reshape 或先 contiguous」就够用了。LLM 代码里 <code>reshape</code> 更常用，因为它会自动处理不满足条件的情况。</p>
 </div></div>
 <details class="fold"><summary>工程里怎么用（多头注意力的形状往返，第 7 章实现的完整版）</summary><div class="fold-body"><pre><code class="lang-python">B, S, d_model, H = x.size(0), x.size(1), x.size(2), 8
 D = d_model // H

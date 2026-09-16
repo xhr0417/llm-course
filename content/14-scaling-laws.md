@@ -1,5 +1,11 @@
 > **本章定位**：Scale 主线开篇。回答一个现实问题：**给定预算（GPU 数量 × 时间），模型开多大、数据喂多少，才是最优的？** 这是从「会训模型」到「会配置训练」的关键一跃，也是 CS336 的核心前置之一。
 
+:::note 代码类型约定（Build / Systems 章节统一）
+- 【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）
+- 【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重
+- 【Pseudo-code】算法示意：用于解释思路，不保证可直接运行
+:::
+
 ## 14.1 为什么需要 Scaling Laws
 
 :::unfold 先懂直觉
@@ -140,25 +146,47 @@ $$
 N^* \propto C^{0.5}, \qquad D^* \propto C^{0.5}, \qquad \frac{D^*}{N^*} \approx 20
 $$
 
-参数化损失函数（Chinchilla 论文拟合）：
+参数化损失函数（Chinchilla 论文附录报告的拟合形式与系数）：
 
 $$
 L(N, D) = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}}, \qquad E = 1.69,\ A = 406.4,\ B = 410.7,\ \alpha = 0.34,\ \beta = 0.28
 $$
 
-### 数值算例：Chinchilla 70B vs GPT-3 175B
+:::warning 关于本页交互演示的说明
+用论文的拟合系数直接求最优点，得到的 D/N 比值会与 headline 的「约 20:1」有出入（论文的 IsoFLOP 分析与参数化拟合两种方法给出的指数略有差异）。因此本页的 **chinchilla-curve 演示使用了一个教学用简化拟合**（令 α=β=0.3，并校准到 D*/N*≈20），**目的是展示 isoFLOP 曲线的定性形状与「最优配比」的直觉，不是原论文曲线的精确复现**。需要论文原值请查阅 Chinchilla 论文（附录 Table A9）。
+:::
 
-| | GPT-3 | Chinchilla |
-| --- | --- | --- |
-| 参数量 | 175B | 70B |
-| 训练 token | 300B | 1.4T |
-| 训练 FLOPs | 3.15e23 | 5.9e23 |
-| 关键对比 | 算力更小 | **训练成本更低，效果全面更好** |
+### 数值算例：三种模型的真实配置对比
 
-**结论**：GPT-3 的 175B 参数只喂了 300B token（D/N ≈ 1.7），远低于最优；Chinchilla 用 70B 参数喂 1.4T token（D/N = 20），在更小算力下全面超越。
+先把三个历史事实摆清楚（FLOPs 按 6ND 口径估算）：
+
+| | GPT-3（2020） | Gopher（2021） | Chinchilla（2022） |
+| --- | --- | --- | --- |
+| 参数量 | 175B | 280B | **70B** |
+| 训练 token | 300B | 300B | **1.4T** |
+| D/N | 1.7 | 1.1 | **20** |
+| 训练 FLOPs（6ND） | 3.15e23 | 5.04e23 | 5.88e23 |
+
+**怎么读这张表（三个层次，不要混在一起）**：
+
+1. **Chinchilla vs Gopher（直接对照）**：两者训练预算同量级（≈5e23），但 Chinchilla 参数少 4 倍、数据多 4 倍，在绝大多数评测任务上全面胜出。这是「**同样的钱，更均衡的分配**」最直接的证据。
+2. **Chinchilla vs GPT-3**：Chinchilla 参数只有 GPT-3 的 40%，却表现更好。注意：Chinchilla 的训练 FLOPs（5.88e23）**高于** GPT-3 的训练 FLOPs（3.15e23）——所以不能说「Chinchilla 用更少的算力超越了 GPT-3」，而是「用少得多的**参数**（部署更便宜）达到了更好的效果」。
+3. **compute-optimal 分析（论文的核心结论）**：如果把预算定在 GPT-3 的 3.15e23 FLOPs，按其拟合关系，**约 40~50B 参数配约 1T token** 就能超过 GPT-3。也就是说：**GPT-3 不是算力不够，是参数/数据分配远离最优点**。
+
+> **一句话总结 Chinchilla 的核心结论**：在固定训练计算预算下，参数 $N$ 与数据 $D$ 应当**均衡扩张**（近似等比例），而不是一味堆参数。
+
+:::warning 20 token/param 是经典参考，不是永恒定律
+「D/N ≈ 20」来自 Chinchilla 论文的实验设定（他们的数据、tokenizer、架构，且只优化**训练**成本）。它是有用的数量级参考，但不是所有现代训练的硬规则，原因：
+- **推理成本也进目标函数**：部署场景下常故意「过度训练」小模型（见 14.8）；
+- **数据质量差异**：高质量数据可重复多轮（epoch），等效 token 数变多；
+- **tokenizer 不同**：同样的文本，token 数不同，D/N 比值随之变化；
+- **架构与任务不同**（GQA/MoE、多语言、代码/数学配比）也会移动最优点。
+
+正确用法：**把它当作起点和直觉校准，而不是教条**——先算 20N 做参考，再根据部署成本、数据质量做实验调整。
+:::
 
 :::demo chinchilla-curve 交互：isoFLOP 曲线与最优配比
-拖动算力预算滑块，观察曲线的凹陷点（最优点）如何移动：算力越大，最优模型越大、数据越多，且 D*/N* 始终约 20。
+拖动算力预算滑块，观察凹点（最优点）如何移动：算力越大，最优模型越大、数据越多。**注意：图中曲线为教学简化拟合（非原论文精确复现），用于展示定性形状。**
 :::
 
 ## 14.6 isoFLOP 曲线：为什么不是越大越好
@@ -186,26 +214,63 @@ Loss
 ## 14.7 GPU hours 与 MFU
 
 :::unfold 先懂直觉
-FLOPs 是「活的总量」，GPU 是「干活的工人」。**MFU（Model FLOPs Utilization）**衡量实际算力利用率——它是大模型训练最重要的工程指标之一，通常只有 30%~50%。
+FLOPs 是「活的总量」，GPU 是「干活的工人」。**MFU（Model FLOPs Utilization）**衡量「模型需要的 FLOPs」占「集群理论峰值」的比例——它是大模型训练最重要的工程指标之一，实际通常在 30%~50%。
 :::
 
+### 公式（先定义量纲，再谈利用率）
+
 $$
-\text{MFU} = \frac{\text{实际有效 FLOPs/秒} \times 6ND}{\text{峰值算力}} \quad \Rightarrow \quad T = \frac{6ND}{N_{gpu} \cdot \text{峰值} \cdot \text{MFU}}
+\underbrace{C_{model} \approx 6ND}_{\text{模型侧：训练总 FLOPs}},
+\qquad
+\underbrace{P_{peak} = N_{gpu} \times P_{gpu}}_{\text{硬件侧：集群理论峰值 FLOPs/s}}
 $$
+
+训练耗时 $T$（秒），则实际达到的算力为 $C_{model}/T$（FLOPs/s），于是：
+
+$$
+\text{MFU} = \frac{C_{model} / T}{N_{gpu} \times P_{gpu}}
+\;\;\Longrightarrow\;\;
+T = \frac{6ND}{N_{gpu} \cdot P_{gpu} \cdot \text{MFU}}
+$$
+
+| 符号 | 含义 | 单位 |
+| --- | --- | --- |
+| $C_{model} = 6ND$ | 模型训练总 FLOPs | FLOPs |
+| $T$ | 训练耗时 | 秒（s） |
+| $C_{model}/T$ | 实际算力 | FLOPs/s |
+| $N_{gpu} \times P_{gpu}$ | 集群理论峰值 | FLOPs/s |
+| MFU | 两者之比（无量纲） | % |
+
+:::math 数字算例（与计算器一致）
+7B 模型 × 2T token，1000 张 A100（BF16 峰值 312 TFLOPS/卡），实测 MFU = 35%：
+
+$$
+C_{model} = 6 \times 7{\times}10^9 \times 2{\times}10^{12} = 8.4 \times 10^{22}\ \text{FLOPs}
+$$
+
+$$
+T = \frac{8.4{\times}10^{22}}{1000 \times 312{\times}10^{12} \times 0.35} \approx 7.69 \times 10^5\ \text{s} \approx 8.9\ \text{天}
+$$
+
+反推验证：实际算力 $= 8.4{\times}10^{22} / 7.69{\times}10^5 \approx 1.09{\times}10^{17}$ FLOPs/s，等价于每卡 109 TFLOPS；$109 / 312 = 35\%$ ✅ 与设定一致。
+:::
 
 | 概念 | 含义 | 典型值 |
 | --- | --- | --- |
-| 峰值算力 | 硬件理论最大（A100 BF16：312 TFLOPS） | — |
-| MFU | 模型 FLOPs 有效利用率 | 30%~50%（Llama 3 约 38%） |
-| HFU | 含重算的硬件利用率（activation checkpointing 时 > MFU） | — |
-| GPU hours | 训练总成本单位（云上约 $1~$3/卡时） | — |
+| 峰值算力 | 硬件理论最大（A100 BF16 dense：312 TFLOPS，**不含**稀疏加速） | — |
+| MFU | 只计「模型有效 FLOPs」的利用率 | 30%~50% |
+| HFU | 计「硬件实际执行 FLOPs」的利用率（含 activation checkpointing 的重算等额外开销） | 通常 ≈ 1.2~1.5 × MFU |
+| GPU hours | 训练总成本单位（云上约 $1~$3/卡时，随市场波动） | — |
+
+> **MFU vs HFU**：开了 activation checkpointing 后，反向会**重算一遍前向**，硬件多做了约 1/3 的活。这些重算的 FLOPs **不算**在 MFU 里（MFU 只认 6ND），但**算**在 HFU 里。所以 HFU 可以高于 MFU 而不矛盾——两个指标回答的问题不同。
 
 :::demo scaling-calculator 交互：训练成本计算器
-调整参数量、token 数、GPU 数量、MFU，实时看到 FLOPs / GPU hours / 墙钟时间，并自动对比 Chinchilla 配比。
+调整参数量、token 数、GPU 数量、MFU，实时看到 FLOPs / GPU hours / 墙钟时间（`T = 6ND/(N_gpu·P·MFU)`），并对比 Chinchilla 参考配比。
 :::
 
 :::fold 工程里怎么用（估算训练预算的三行代码）
 ```python
+# 类型：【Runnable】纯算术
 N = 7e9            # 参数量
 D = 2e12           # token 数
 C = 6 * N * D      # FLOPs

@@ -37,6 +37,12 @@
 <blockquote>
 <p><strong>本章定位</strong>：Build 主线收尾。7 个 Lab 把第 12 章的 TinyLM 真正训练起来、评估、生成、微调、做一次偏好优化实验。做完本章，你就完整走过了一次「mini 版 LLM 生命周期」。</p>
 </blockquote>
+<div class="box box-note"><div class="box-title">📘 代码类型约定（Build / Systems 章节统一）</div><div class="box-body"><ul>
+<li>【Runnable】可直接运行（关键逻辑已在本课程验证脚本中实测）</li>
+<li>【Skeleton】工程骨架：逻辑完整，需要自备数据/环境/权重</li>
+<li>【Pseudo-code】算法示意：用于解释思路，不保证可直接运行</li>
+</ul>
+</div></div>
 <h2>13.1 训练全景图</h2>
 <pre><code class="lang-">语料文本 ──→ [Lab 8] tokenize + 打包 ──→ train.bin / val.bin
                                             │
@@ -134,10 +140,15 @@ def lr_at(step):
     return cfg[&quot;lr&quot;] * (cfg[&quot;min_lr_ratio&quot;] + (1 - cfg[&quot;min_lr_ratio&quot;]) * 0.5 * (1 + math.cos(math.pi * progress)))
 
 # ============ 训练循环 ============
+# 术语约定（全文统一）：
+#   micro_step   ：每喂一个 micro-batch +1（无论是否更新参数）
+#   global_step  ：每个【参数更新】+1（优化器真正 step 一次）
+#   lr 调度 / eval / checkpoint 全部基于 global_step
 model.train()
-step, tokens_seen = 0, 0
+micro_step, global_step, tokens_seen = 0, 0, 0
 t0 = time.time()
-while step &lt; cfg[&quot;max_steps&quot;]:
+loss_running = 0.0
+while global_step &lt; cfg[&quot;max_steps&quot;]:
     for x, y in train_loader:
         x, y = x.to(device), y.to(device)
 
@@ -147,22 +158,27 @@ while step &lt; cfg[&quot;max_steps&quot;]:
             loss = loss / cfg[&quot;accum&quot;]                     # 梯度累积：缩放损失
 
         loss.backward()
+        micro_step += 1
+        loss_running += loss.item()                        # 记录（含缩放，最后还原）
 
-        if (step + 1) % cfg[&quot;accum&quot;] == 0:
+        # 每 accum 个 micro-batch 才更新一次参数
+        if micro_step % cfg[&quot;accum&quot;] == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg[&quot;grad_clip&quot;])
             for g in optimizer.param_groups:
-                g[&quot;lr&quot;] = lr_at(step)
+                g[&quot;lr&quot;] = lr_at(global_step)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            step += 1
+            global_step += 1
             tokens_seen += cfg[&quot;batch_size&quot;] * cfg[&quot;accum&quot;] * cfg[&quot;max_seq&quot;]
 
-            if step % 50 == 0:
+            if global_step % 50 == 0:
                 dt = time.time() - t0
-                print(f&quot;step {step:5d} | loss {loss.item()*cfg[&#39;accum&#39;]:.4f} | lr {lr_at(step):.2e} | {tokens_seen/1e6:.1f}M tok | {dt:.0f}s&quot;)
+                avg_loss = loss_running / (50 * cfg[&quot;accum&quot;])   # 还原真实 loss
+                print(f&quot;step {global_step:5d} | loss {avg_loss:.4f} | lr {lr_at(global_step):.2e} | {tokens_seen/1e6:.1f}M tok | {dt:.0f}s&quot;)
+                loss_running = 0.0
 
-            # 定期验证 + 保存
-            if step % cfg[&quot;eval_every&quot;] == 0:
+            # 定期验证 + 保存（都基于 global_step）
+            if global_step % cfg[&quot;eval_every&quot;] == 0:
                 model.eval()
                 with torch.no_grad():
                     xv, yv = next(iter(torch.utils.data.DataLoader(val_ds, batch_size=8)))
@@ -171,9 +187,21 @@ while step &lt; cfg[&quot;max_steps&quot;]:
                 print(f&quot;           val loss {vl.item():.4f} | ppl {math.exp(vl.item()):.1f}&quot;)
                 model.train()
 
-            if step % cfg[&quot;ckpt_every&quot;] == 0:
-                torch.save({&quot;model&quot;: model.state_dict(), &quot;optimizer&quot;: optimizer.state_dict(), &quot;step&quot;: step}, f&quot;ckpt_{step}.pt&quot;)
-                print(f&quot;           saved ckpt_{step}.pt&quot;)</code></pre>
+            if global_step % cfg[&quot;ckpt_every&quot;] == 0:
+                torch.save({&quot;model&quot;: model.state_dict(), &quot;optimizer&quot;: optimizer.state_dict(),
+                            &quot;global_step&quot;: global_step, &quot;micro_step&quot;: micro_step}, f&quot;ckpt_{global_step}.pt&quot;)
+                print(f&quot;           saved ckpt_{global_step}.pt&quot;)</code></pre>
+<p><div class="box box-warning"><div class="box-title">⚠️ 一个真实的 bug（原版代码踩过）</div><div class="box-body"><p>很多教程写成：</p>
+<pre><code class="lang-python">step = 0
+loss.backward()
+if (step + 1) % accum == 0:    # ❌ step 一直是 0 → 条件永远为 False
+    optimizer.step()
+    step += 1                  # step 只在条件内 +1 → 永远进不去，死循环</code></pre>
+<p><strong>症状</strong>：循环一直跑但 loss 永远不降、显存慢慢涨（梯度一直累积）。
+<strong>根因</strong>：把「micro-batch 计数」和「参数更新计数」混为一个变量。
+<strong>修法</strong>：如上文，明确分开 <code>micro_step</code>（每个 batch +1）与 <code>global_step</code>（每次更新 +1）。</p>
+</div></div>
+<pre><code class="lang-">
 <div class="box box-note"><div class="box-title">📘 第一次训练应该期待什么</div><div class="box-body"><p>以 TinyLM（12.9M）+ 100MB 中文语料为例：</p>
 <table>
 <thead>
@@ -206,6 +234,7 @@ while step &lt; cfg[&quot;max_steps&quot;]:
 </tbody></table>
 <p>跑完约几十分钟（视 GPU）。<strong>这个 loss 数字没有意义，重要的是你有了一条从零到能生成的完整链路。</strong></p>
 </div></div>
+
 <details class="fold"><summary>常见故障排查表（训练必备）</summary><div class="fold-body"><table>
 <thead>
 <tr>
@@ -241,12 +270,14 @@ while step &lt; cfg[&quot;max_steps&quot;]:
 </tr>
 </tbody></table>
 </div></details>
-<h2>Lab 10：评估</h2>
+
+## Lab 10：评估
+
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>评测三件套：val loss（PPL）、采样样质量、下一步（SFT 后的对比）。</p>
 </div></details>
-<pre><code class="lang-python">import math, torch, torch.nn.functional as F
-
-@torch.no_grad()
+</code></pre>python
+import math, torch, torch.nn.functional as F</p>
+<p>@torch.no_grad()
 def evaluate(model, ds, n_batches=20, batch_size=8):
     model.eval()
     loader = torch.utils.data.DataLoader(ds, batch_size=batch_size)
@@ -257,66 +288,51 @@ def evaluate(model, ds, n_batches=20, batch_size=8):
         logits = model(x)
         losses.append(F.cross_entropy(logits.view(-1, V), y.view(-1)).item())
     mean = sum(losses) / len(losses)
-    return mean, math.exp(mean)
+    return mean, math.exp(mean)</p>
+<p>loss, ppl = evaluate(model, val_ds)
+print(f&quot;val loss {loss:.4f}  ppl {ppl:.1f}&quot;)
+<pre><code class="lang-">
+| 指标 | 含义 | 注意 |
+| --- | --- | --- |
+| val loss | 每个 token 的平均交叉熵 | 最有用的训练监控信号 |
+| PPL = e^loss | 平均「犹豫多少个候选」 | 只能和同 tokenizer 比（第 18 章） |
+| 采样目测 | 生成几句话看语法/事实 | 最终用户视角，loss 不能替代 |
 
-loss, ppl = evaluate(model, val_ds)
-print(f&quot;val loss {loss:.4f}  ppl {ppl:.1f}&quot;)</code></pre>
-<table>
-<thead>
-<tr>
-<th>指标</th>
-<th>含义</th>
-<th>注意</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>val loss</td>
-<td>每个 token 的平均交叉熵</td>
-<td>最有用的训练监控信号</td>
-</tr>
-<tr>
-<td>PPL = e^loss</td>
-<td>平均「犹豫多少个候选」</td>
-<td>只能和同 tokenizer 比（第 18 章）</td>
-</tr>
-<tr>
-<td>采样目测</td>
-<td>生成几句话看语法/事实</td>
-<td>最终用户视角，loss 不能替代</td>
-</tr>
-</tbody></table>
 <div class="demo-block"><div class="demo-head">🎮 交互：生成流程三步（第 9 章实现）<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>复习 logits → softmax → 采样的完整循环，下面 Lab 11 就是它的代码版。</p>
 <p><a class="static-link" href="../index.html#/build-llm-2">在交互版中打开这个演示 →</a></p></div></div>
-<h2>Lab 11：生成推理</h2>
+
+## Lab 11：生成推理
+
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>把训练好的模型变成「会说话的模型」：自回归循环 + 采样策略（第 9 章原理，<code>temperature</code> / <code>top-k-p</code> 演示可复习）。</p>
 </div></details>
-<pre><code class="lang-python">@torch.no_grad()
+</code></pre>python
+@torch.no_grad()
 def generate(model, tok, prompt, max_new_tokens=100, temperature=0.8, top_k=50, top_p=0.9):
     model.eval()
     idx = torch.tensor([tok.encode(prompt).ids], device=device)   # [1, S]
     for _ in range(max_new_tokens):
         logits = model(idx[:, -model.max_seq:])[:, -1, :]          # 取最后位置 [1, V]
-        logits = logits / temperature
+        logits = logits / temperature</p>
+<pre><code>    # Top-K 截断
+    if top_k:
+        kth = torch.topk(logits, top_k).values[..., -1, None]
+        logits = logits.masked_fill(logits &lt; kth, float(&quot;-inf&quot;))
+    # Top-P（nucleus）截断
+    if top_p and top_p &lt; 1.0:
+        sorted_logits, sorted_idx = torch.sort(logits, descending=True)
+        probs = sorted_logits.softmax(-1)
+        cum = probs.cumsum(-1)
+        remove = cum - probs &gt; top_p                        # 累计概率超过 p 之后的都去掉
+        sorted_logits[remove] = float(&quot;-inf&quot;)
+        logits = torch.empty_like(logits).scatter_(-1, sorted_idx, sorted_logits)
 
-        # Top-K 截断
-        if top_k:
-            kth = torch.topk(logits, top_k).values[..., -1, None]
-            logits = logits.masked_fill(logits &lt; kth, float(&quot;-inf&quot;))
-        # Top-P（nucleus）截断
-        if top_p and top_p &lt; 1.0:
-            sorted_logits, sorted_idx = torch.sort(logits, descending=True)
-            probs = sorted_logits.softmax(-1)
-            cum = probs.cumsum(-1)
-            remove = cum - probs &gt; top_p                        # 累计概率超过 p 之后的都去掉
-            sorted_logits[remove] = float(&quot;-inf&quot;)
-            logits = torch.empty_like(logits).scatter_(-1, sorted_idx, sorted_logits)
-
-        probs = logits.softmax(-1)
-        next_id = torch.multinomial(probs, num_samples=1)        # 采样
-        idx = torch.cat([idx, next_id], dim=1)
-    return tok.decode(idx[0].tolist())
-
-print(generate(model, tok, &quot;从前有座山，&quot;, max_new_tokens=80))</code></pre>
+    probs = logits.softmax(-1)
+    next_id = torch.multinomial(probs, num_samples=1)        # 采样
+    idx = torch.cat([idx, next_id], dim=1)
+return tok.decode(idx[0].tolist())
+</code></pre>
+<p>print(generate(model, tok, &quot;从前有座山，&quot;, max_new_tokens=80))
+<pre><code class="lang-">
 <div class="box box-note"><div class="box-title">📘 参数经验值</div><div class="box-body"><table>
 <thead>
 <tr>
@@ -342,137 +358,207 @@ print(generate(model, tok, &quot;从前有座山，&quot;, max_new_tokens=80))</
 </tr>
 </tbody></table>
 </div></div>
-<h2>Lab 12：KV Cache（把生成提速一个数量级）</h2>
+
+## Lab 12：KV Cache（把生成提速一个数量级）
+
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>理解并实现推理加速的核心机制（第 10 章原理，<code>kv-cache</code> 演示可复习）：缓存历史的 K/V，新 token 只算自己的。</p>
 </div></details>
-<h3>先看问题：无缓存时每一步都在重算</h3>
-<pre><code class="lang-python"># 生成第 t 个 token 时，模型对前 t 个位置全部重新做一遍 QKV 投影
-# 总计算量 ∝ 1 + 2 + 3 + ... + n = O(n²)</code></pre>
-<h3>最小实现：带缓存的单层注意力</h3>
-<pre><code class="lang-python">class CachedAttention(nn.Module):
+
+### 先看问题：无缓存时每一步都在重算
+</code></pre>python</p>
+<h1>生成第 t 个 token 时，模型对前 t 个位置全部重新做一遍 QKV 投影</h1>
+<h1>总计算量 ∝ 1 + 2 + 3 + ... + n = O(n²)</h1>
+<p><pre><code class="lang-">
+### 最小实现：带缓存的单层注意力
+</code></pre>python
+class CachedAttention(nn.Module):
     &quot;&quot;&quot;演示版：一层带 KV Cache 的注意力&quot;&quot;&quot;
-    def __init__(self, d_model, n_heads):
-        super().__init__()
+    def <strong>init</strong>(self, d_model, n_heads):
+        super().<strong>init</strong>()
         self.h, self.d = n_heads, d_model // n_heads
         self.Wq = nn.Linear(d_model, d_model, bias=False)
         self.Wk = nn.Linear(d_model, d_model, bias=False)
         self.Wv = nn.Linear(d_model, d_model, bias=False)
-        self.Wo = nn.Linear(d_model, d_model, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)</p>
+<pre><code>def forward(self, x, cache=None):
+    B, S, _ = x.shape
+    q = self.Wq(x).view(B, S, self.h, self.d).transpose(1, 2)
+    k = self.Wk(x).view(B, S, self.h, self.d).transpose(1, 2)
+    v = self.Wv(x).view(B, S, self.h, self.d).transpose(1, 2)
 
-    def forward(self, x, cache=None):
-        B, S, _ = x.shape
-        q = self.Wq(x).view(B, S, self.h, self.d).transpose(1, 2)
-        k = self.Wk(x).view(B, S, self.h, self.d).transpose(1, 2)
-        v = self.Wv(x).view(B, S, self.h, self.d).transpose(1, 2)
+    if cache is not None:                            # ← 关键 3 行
+        k = torch.cat([cache[&quot;k&quot;], k], dim=2)        # 拼接历史 K
+        v = torch.cat([cache[&quot;v&quot;], v], dim=2)        # 拼接历史 V
 
-        if cache is not None:                            # ← 关键 3 行
-            k = torch.cat([cache[&quot;k&quot;], k], dim=2)        # 拼接历史 K
-            v = torch.cat([cache[&quot;v&quot;], v], dim=2)        # 拼接历史 V
-
-        new_cache = {&quot;k&quot;: k, &quot;v&quot;: v}                     # 存回缓存
-        scores = q @ k.transpose(-2, -1) / (self.d ** 0.5)
-        # 单 token 推理（S=1）时 q 只能看自己，无需 causal mask；
-        # 若一次喂多个 token，仍需 mask（略）
-        attn = scores.softmax(dim=-1)
-        out = (attn @ v).transpose(1, 2).contiguous().view(B, S, -1)
-        return self.Wo(out), new_cache</code></pre>
-<h3>速度对比（同一层，生成 200 个 token）</h3>
-<pre><code class="lang-python">import time
-layer = CachedAttention(256, 8).cuda().eval()
-
-# 无缓存：每一步重新喂入整个序列
-x = torch.randn(1, 1, 256).cuda()
+    new_cache = {&quot;k&quot;: k, &quot;v&quot;: v}                     # 存回缓存
+    scores = q @ k.transpose(-2, -1) / (self.d ** 0.5)
+    # 单 token 推理（S=1）时 q 只能看自己，无需 causal mask；
+    # 若一次喂多个 token，仍需 mask（略）
+    attn = scores.softmax(dim=-1)
+    out = (attn @ v).transpose(1, 2).contiguous().view(B, S, -1)
+    return self.Wo(out), new_cache
+</code></pre>
+<p><pre><code class="lang-">
+### 速度对比（同一层，生成 200 个 token）
+</code></pre>python
+import time
+layer = CachedAttention(256, 8).cuda().eval()</p>
+<h1>无缓存：每一步重新喂入整个序列</h1>
+<p>x = torch.randn(1, 1, 256).cuda()
 seq = x.clone()
 t0 = time.time()
 with torch.no_grad():
     for _ in range(200):
         out, _ = layer(seq)          # 全序列重算
         seq = torch.cat([seq, out[:, -1:]], dim=1)
-t_no = time.time() - t0
-
-# 有缓存：每次只喂新 token
-seq = x.clone(); cache = None
+t_no = time.time() - t0</p>
+<h1>有缓存：每次只喂新 token</h1>
+<p>seq = x.clone(); cache = None
 t0 = time.time()
 with torch.no_grad():
     for _ in range(200):
         out, cache = layer(seq[:, -1:], cache)
         seq = torch.cat([seq, out], dim=1)
-t_yes = time.time() - t0
-
-print(f&quot;无缓存 {t_no:.2f}s  有缓存 {t_yes:.2f}s  加速 {t_no/t_yes:.1f}×&quot;)</code></pre>
+t_yes = time.time() - t0</p>
+<p>print(f&quot;无缓存 {t_no:.2f}s  有缓存 {t_yes:.2f}s  加速 {t_no/t_yes:.1f}×&quot;)
+<pre><code class="lang-">
 <div class="box box-math"><div class="box-title">🧮 为什么序列越长收益越大</div><div class="box-body"><p>无缓存第 t 步要算 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>t</mi></mrow><annotation encoding="application/x-tex">t</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6151em;"></span><span class="mord mathnormal">t</span></span></span></span></span> 个位置 → 总计算 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><mi>t</mi><mo>=</mo><mi>O</mi><mo stretchy="false">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\sum t = O(n^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">t</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>；
 有缓存每步只算 1 个位置 → 总计算 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span></span>。
 代价是显存：缓存大小 = <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mi>L</mi><mo>×</mo><mi>H</mi><mo>×</mo><msub><mi>d</mi><mi>h</mi></msub><mo>×</mo><mi>n</mi><mo>×</mo><mtext>bytes</mtext></mrow><annotation encoding="application/x-tex">2 \times L \times H \times d_h \times n \times \text{bytes}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.08125em;">H</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">h</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">bytes</span></span></span></span></span></span>（第 10 章公式，<code>kv-cache</code> 演示的估算器可复核）。</p>
 </div></div>
-<h2>Lab 13：SFT（让模型学会「回答问题」）</h2>
+
+## Lab 13：SFT（让模型学会「回答问题」）
+
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>在预训练模型上做指令微调：数据换成「指令-回答」对，损失只算回答部分（第 18 章 Loss Mask 原理）。</p>
 </div></details>
-<pre><code class="lang-python"># ① 构造 SFT 数据（格式 = 第 18 章的 chat template）
-data = [
+</code></pre>python</p>
+<h1>① 构造 SFT 数据（格式 = 第 18 章的 chat template）</h1>
+<p>data = [
     {&quot;instruction&quot;: &quot;把下面的话翻译成英文：我爱编程。&quot;, &quot;response&quot;: &quot;I love programming.&quot;},
     {&quot;instruction&quot;: &quot;3 + 5 等于几？&quot;, &quot;response&quot;: &quot;3 + 5 = 8。&quot;},
     {&quot;instruction&quot;: &quot;用一句话解释什么是 token。&quot;, &quot;response&quot;: &quot;token 是模型处理文本的最小单位。&quot;},
     # ... 几十~几百条即可看到效果
-]
-
-def format_example(ex):
+]</p>
+<p>def format_example(ex):
     prompt = f&quot;&lt;|user|&gt;{ex[&#39;instruction&#39;]}&lt;|assistant|&gt;&quot;
-    return prompt, ex[&quot;response&quot;] + &quot;&lt;|endoftext|&gt;&quot;
-
-# ② Loss Mask：只对回答部分算损失
-def tokenize_sft(tok, ex, max_len=256):
+    return prompt, ex[&quot;response&quot;] + &quot;&lt;|endoftext|&gt;&quot;</p>
+<h1>② Loss Mask：只对回答部分算损失（prompt 部分标 -100）</h1>
+<p>def tokenize_sft(tok, ex, max_len=256):
     p, r = format_example(ex)
     p_ids = tok.encode(p).ids
     r_ids = tok.encode(r).ids
     ids = (p_ids + r_ids)[:max_len]
-    labels = ([-100] * len(p_ids) + r_ids)[:max_len]   # -100 = 忽略（prompt 部分）
+    labels = ([-100] * len(p_ids) + r_ids)[:max_len]   # -100 = 忽略
     return torch.tensor(ids), torch.tensor(labels)
+<pre><code class="lang-">
+### 必须理解：next-token 对齐 + Shift
 
-# ③ 训练（与预训练唯一区别：loss 用 masked 版本）
-ids, labels = tokenize_sft(tok, data[0])
-logits = model(ids[None].to(device))
-loss = F.cross_entropy(logits.view(-1, V), labels[None].to(device).view(-1), ignore_index=-100)</code></pre>
-<details class="fold"><summary>工程里怎么用（SFT 的完整循环骨架）</summary><div class="fold-body"><pre><code class="lang-python">opt = torch.optim.AdamW(model.parameters(), lr=2e-5)   # SFT 学习率比预训练小 10 倍
+GPT 的铁律：**位置 $t$ 的 logits 预测的是 token $t+1$**。所以损失必须**错位一位**：
+</code></pre>python</p>
+<h1>③ 训练一步（注意 shift！）</h1>
+<p>ids, labels = tokenize_sft(tok, data[0])
+ids, labels = ids[None].to(device), labels[None].to(device)      # [1, S]</p>
+<p>logits = model(ids)                                              # [1, S, V]</p>
+<h1>✅ 正确：位置 t 的 logits 对齐位置 t+1 的 label</h1>
+<p>shift_logits = logits[:, :-1, :]                                 # [1, S-1, V]
+shift_labels = labels[:, 1:]                                     # [1, S-1]
+loss = F.cross_entropy(shift_logits.reshape(-1, V),
+                       shift_labels.reshape(-1),
+                       ignore_index=-100)</p>
+<h1>❌ 错误示范：不 shift 直接对齐 → 用位置 t 的 logits 预测 token t（模型在学习抄自己）</h1>
+<h1>loss = F.cross_entropy(logits.reshape(-1, V), labels.reshape(-1), ignore_index=-100)</h1>
+<p><pre><code class="lang-">
+### 手算例子：prompt 最后一个位置如何预测回答的第一个 token
+
+设 prompt = `[A, B, C]`（3 个 token），response = `[x, y]`（2 个 token）：
+
+| 位置 t | ids | labels | shift 后预测的 label | 是否算 loss |
+| --- | --- | --- | --- | --- |
+| 0 | A | −100 | labels[1] = −100 | ❌ 忽略 |
+| 1 | B | −100 | labels[2] = −100 | ❌ 忽略 |
+| 2 | C | −100 | labels[3] = **x** | ✅ **用最后一个 prompt 位置的 logits 预测回答首 token** |
+| 3 | x | x | labels[4] = **y** | ✅ |
+| 4 | y | y | （无 logits 可用，被 `[:-1]` 切掉） | — |
+
+**关键点**：labels 里 prompt 部分虽然是 −100，但它们**仍然出现在输入序列中作为上下文**；而「预测 x」这个训练信号来自位置 2（最后一个 prompt token）的 logits。这正是 shift 与 Loss Mask 组合后自然得到的正确行为——**不需要**手工为「最后一个 prompt 位置」做任何特殊处理。
+
+<details class="fold"><summary>工程里怎么用（SFT 的完整循环骨架）</summary><div class="fold-body"><pre><code class="lang-python"># 类型：【Skeleton】需要 tokenizer 与数据
+opt = torch.optim.AdamW(model.parameters(), lr=2e-5)   # SFT 学习率比预训练小 10 倍
+model.train()
+
+# 先记录 SFT 之前的生成效果（★ 必须在训练之前）
+prompt = &quot;&lt;|user|&gt;3 + 5 等于几？&lt;|assistant|&gt;&quot;
+before = generate(model, tok, prompt, max_new_tokens=20)
+
 for epoch in range(3):
     for ex in data:
         ids, labels = tokenize_sft(tok, ex)
-        logits = model(ids[None].to(device))
-        loss = F.cross_entropy(logits.view(-1, V), labels[None].to(device).view(-1), ignore_index=-100)
+        ids, labels = ids[None].to(device), labels[None].to(device)
+        logits = model(ids)
+        loss = F.cross_entropy(logits[:, :-1].reshape(-1, V),
+                               labels[:, 1:].reshape(-1),
+                               ignore_index=-100)
         opt.zero_grad(); loss.backward(); opt.step()
 
-# 对比 SFT 前后
-print(&quot;SFT 前:&quot;, generate(model, tok, &quot;&lt;|user|&gt;3 + 5 等于几？&lt;|assistant|&gt;&quot;))
-print(&quot;SFT 后:&quot;, generate(model, tok, &quot;&lt;|user|&gt;3 + 5 等于几？&lt;|assistant|&gt;&quot;))</code></pre>
+# 训练后再生成，与 before 对比
+after = generate(model, tok, prompt, max_new_tokens=20)
+print(&quot;SFT 前:&quot;, before)
+print(&quot;SFT 后:&quot;, after)</code></pre>
 </div></details>
-<h2>Lab 14：DPO / GRPO 小实验</h2>
+
+## Lab 14：DPO / GRPO 小实验
+
 <details class="fold" open><summary>目标</summary><div class="fold-body"><p>在 mini 模型上体验一次偏好优化（第 19 章完整原理）。DPO 用「更好/更差」回答对直接优化模型；GRPO 用「同一问题采样一组 + 组内比较」。</p>
 </div></details>
-<h3>DPO：用偏好对直接训练</h3>
-<pre><code class="lang-python">def sequence_logprob(model, ids, labels, device):
-    &quot;&quot;&quot;计算「模型给回答部分的 log 概率之和」&quot;&quot;&quot;
-    logits = model(ids[None].to(device))
-    logp = F.log_softmax(logits, dim=-1)[0]
-    mask = labels[None].to(device) != -100
-    # 对齐：位置 t 的 logits 预测 t+1 处的 token
-    tok_logp = logp[:-1].gather(-1, labels[None][:, 1:].to(device).clamp(min=0).transpose(0, 1)).squeeze(-1)
-    return (tok_logp * mask[0, 1:]).sum()
 
-def dpo_loss(policy, ref, pair, beta=0.1, device=&quot;cuda&quot;):
-    &quot;&quot;&quot;pair: {prompt_ids, chosen_ids, chosen_labels, rejected_ids, rejected_labels}&quot;&quot;&quot;
-    lc = sequence_logprob(policy, pair[&quot;chosen_ids&quot;], pair[&quot;chosen_labels&quot;], device)
-    lr_ = sequence_logprob(policy, pair[&quot;rejected_ids&quot;], pair[&quot;rejected_labels&quot;], device)
-    with torch.no_grad():
-        rc = sequence_logprob(ref, pair[&quot;chosen_ids&quot;], pair[&quot;chosen_labels&quot;], device)
-        rr = sequence_logprob(ref, pair[&quot;rejected_ids&quot;], pair[&quot;rejected_labels&quot;], device)
-    logits = (lc - lr_) - (rc - rr)
-    return -F.logsigmoid(beta * logits)      # 让 chosen 相对 rejected 的概率比升高
+### DPO：用偏好对直接训练
 
-# 用法：ref = SFT 模型的冻结副本
-# ref.load_state_dict(model.state_dict())
-# loss = dpo_loss(model, ref, pair); loss.backward(); optimizer.step()</code></pre>
-<h3>GRPO：同一问题采样一组，组内比较</h3>
-<pre><code class="lang-python"># 伪代码（完整原理见第 19 章）
-for prompt in prompts:
+**数据约定**：一条偏好样本 = 同一 prompt 的两个回答（chosen 更好 / rejected 更差）。tokenize 时沿用 SFT 的规则：prompt 部分 label 为 −100，只对回答算 log 概率。**本节代码已实际运行验证**（与手算结果逐位一致）。
+</code></pre>python</p>
+<h1>类型：【Runnable】核心函数已实测（见 docs/V2_CORRECTNESS_AUDIT.md）</h1>
+<p>def sequence_logprob(model, ids, labels):
+    &quot;&quot;&quot;回答部分的 log 概率之和（批大小 1，便于教学）。
+    ids:    [S]  完整序列（prompt + response）
+    labels: [S]  prompt 位置为 -100，response 位置为真实 token id
+    返回：标量（response 各 token 的 log P 之和）
+    &quot;&quot;&quot;
+    logits = model(ids[None])                        # [1, S, V]
+    logp = F.log_softmax(logits, dim=-1)[0]          # [S, V]
+    # 对齐：位置 t 的 logits 预测 token t+1（next-token 铁律，与 SFT 相同）
+    tgt = labels[1:]                                 # [S-1]  被预测的 token
+    valid = (tgt != -100)                            # [S-1]  只保留 response 部分
+    safe = tgt.clamp(min=0)                          # 让 -100 变成合法索引（随后被 mask 掉）
+    tok_logp = logp[:-1].gather(-1, safe[:, None]).squeeze(-1)   # [S-1]
+    return (tok_logp * valid).sum()                  # 忽略 mask 位置的贡献</p>
+<p>def dpo_loss(policy, ref, batch, beta=0.1):
+    &quot;&quot;&quot;batch 包含四条序列：
+    chosen_ids / chosen_labels / rejected_ids / rejected_labels
+    &quot;&quot;&quot;
+    lc = sequence_logprob(policy, batch[&quot;chosen_ids&quot;],   batch[&quot;chosen_labels&quot;])
+    lr_ = sequence_logprob(policy, batch[&quot;rejected_ids&quot;], batch[&quot;rejected_labels&quot;])
+    with torch.no_grad():                            # 参考模型不产生梯度
+        rc = sequence_logprob(ref, batch[&quot;chosen_ids&quot;],   batch[&quot;chosen_labels&quot;])
+        rr = sequence_logprob(ref, batch[&quot;rejected_ids&quot;], batch[&quot;rejected_labels&quot;])
+    margin = (lc - lr_) - (rc - rr)                  # policy 相对 ref 的偏好提升
+    return -F.logsigmoid(beta * margin)              # 策略==参考时，loss = ln(2)</p>
+<h1>用法（ref = SFT 模型的冻结副本）：</h1>
+<h1>ref = TinyLM(...); ref.load_state_dict(policy.state_dict())</h1>
+<h1>for p in ref.parameters(): p.requires_grad_(False)</h1>
+<h1>loss = dpo_loss(policy, ref, batch); loss.backward(); optimizer.step()</h1>
+<p><pre><code class="lang-">
+<div class="box box-note"><div class="box-title">📘 为什么这个实现是对的（可在 Jupyter 里自查）</div><div class="box-body"><ul>
+<li>若 <code>policy</code> 与 <code>ref</code> 对同一批数据的 log 概率完全相同，则 <code>margin = 0</code>，loss = −log σ(0) = <strong>ln 2 ≈ 0.693</strong>；</li>
+<li>训练后 chosen 的 log 概率应相对上升（<code>lc − rc</code> 增大），rejected 相对下降；</li>
+<li>本课程验证脚本对 <code>sequence_logprob</code> 做了<strong>逐位手算核对</strong>：函数输出与「手工 gather + 求和」完全一致。</li>
+</ul>
+</div></div>
+
+### GRPO：同一问题采样一组，组内比较
+
+以下为**算法伪代码**（不保证直接运行，完整原理见第 19 章）：
+</code></pre>python</p>
+<h1>【Pseudo-code】算法示意</h1>
+<p>for prompt in prompts:
     responses = [sample(model, prompt) for _ in range(G)]     # 采样 G 个回答
     rewards = [reward_fn(prompt, r) for r in responses]       # 规则打分（如答案是否正确）
     mean = sum(rewards) / G
@@ -480,37 +566,17 @@ for prompt in prompts:
     for r, resp in zip(rewards, responses):
         adv = (r - mean) / std                                # 组内相对优势
         loss = -adv * sequence_logprob(model, resp.ids, resp.labels)   # 提高优势为正的回答概率
-        loss.backward(); optimizer.step()</code></pre>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>DPO</th>
-<th>GRPO</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>数据</td>
-<td>现成偏好对（chosen/rejected）</td>
-<td>在线采样，无需标注</td>
-</tr>
-<tr>
-<td>需要 Reward Model</td>
-<td>不需要</td>
-<td>不需要（规则 reward 即可）</td>
-</tr>
-<tr>
-<td>需要 Reference</td>
-<td>需要（冻结副本）</td>
-<td>需要（冻结副本）</td>
-</tr>
-<tr>
-<td>适合</td>
-<td>有偏好数据</td>
-<td>可验证任务（数学/代码）</td>
-</tr>
-</tbody></table>
-<h2>13.x 全课验收：你现在能做什么</h2>
+        loss.backward(); optimizer.step()</p>
+<pre><code>
+| | DPO | GRPO |
+| --- | --- | --- |
+| 数据 | 现成偏好对（chosen/rejected） | 在线采样，无需标注 |
+| 需要 Reward Model | 不需要 | 不需要（规则 reward 即可） |
+| 需要 Reference | 需要（冻结副本） | 需要（冻结副本） |
+| 适合 | 有偏好数据 | 可验证任务（数学/代码） |
+
+## 13.x 全课验收：你现在能做什么
+
 <div class="box box-key"><div class="box-title">🔑 完工清单</div><div class="box-body"><p>完成 14 个 Lab 后，你应该能够独立完成：</p>
 <ol>
 <li>训练一个自己的 tokenizer，并解释压缩率</li>
@@ -522,10 +588,15 @@ for prompt in prompts:
 </ol>
 <p><strong>接下来往哪走</strong>：第 14 章（Scaling Laws，决定怎么配置训练）→ 第 15 章（GPU 基础，理解为什么慢）→ 第 16 章（分布式，把规模放大）。</p>
 </div></div>
+
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Lab 8 用 uint16 存 token 的前提是什么？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>文本是英文</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>词表大小 &lt; 65536（uint16 的表示范围）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>序列长度小于 512</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>训练数据小于 2GB</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>uint16 最大 65535。vocab 32000 能放下，比 int32 省一半磁盘和 IO。若词表超过 65535 需换 uint32。</div></details></div>
+
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">SFT 训练时 prompt 部分的 label 设为 -100 的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加快训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>在 cross_entropy 中忽略该位置，只对回答部分计算损失</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>标记特殊 token</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PyTorch 的 cross_entropy 用 ignore_index=-100 跳过这些位置。这保证模型学习「如何回答」而不是「复述问题」（第 18 章 Loss Mask）。</div></details></div>
+
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">KV Cache 为什么能在推理时带来加速？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>它减少了模型的参数量</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>新 token 只需计算自己的 K/V，历史 K/V 直接读缓存，总计算从 O(n²) 降到 O(n)</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>它使用更低的精度</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>它跳过了 softmax</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>无缓存时每生成一步都要重算整个前缀的 K/V；缓存后每步只算 1 个新位置。代价是显存随序列增长。</div></details></div>
+
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 12 章 组件篇</span><span class="tag">第 9 章 生成</span><span class="tag">第 10 章 KV Cache</span><span class="tag">第 18 章 Loss Mask</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 14 章 Scaling Laws</span><span class="tag">第 17 章 显存</span><span class="tag">第 19 章 Post-training</span></div></div>
+</code></pre>
 </div>
 <div class="static-nav"><a href="build-llm-1.html">← Build Your Own Small LLM（上）：组件篇</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="scaling-laws.html">Scaling Laws 与算力：为什么这样配置训练 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-build-llm-2.md">content/13-build-llm-2.md</a></div>
 </main>

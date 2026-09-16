@@ -36,15 +36,15 @@
       ]));
       view.appendChild(LC.bars([
         { label: "本配置 tokens", value: D, max: Math.max(D, 2000), text: D + "B", color: "green" },
-        { label: "Chinchilla 最优", value: chinchillaD, max: Math.max(D, 2000), text: chinchillaD.toFixed(0) + "B", color: "amber" }
+        { label: "Chinchilla 参考(20N)", value: chinchillaD, max: Math.max(D, 2000), text: chinchillaD.toFixed(0) + "B", color: "amber" }
       ], { max: Math.max(D, 2000) }));
       out.textContent =
         "结论：一个 " + N + "B 模型训练 " + D + "B token，\n" +
         "在 " + gpus + " 张 " + (peak === 312 ? "A100" : "H100") + "（MFU " + (mfu * 100).toFixed(0) + "%）上大约需要 " + wallDays.toFixed(1) + " 天。\n\n" +
-        "Chinchilla 视角：同一算力预算下最优 token 数约为 20 × N = " + chinchillaD.toFixed(0) + "B，当前配置是它的 " + ratio.toFixed(2) + " 倍。\n" +
+        "Chinchilla 经典参考：D ≈ 20 × N = " + chinchillaD.toFixed(0) + "B（论文实验设定下的经验比值，不是硬规则；现代模型常过度训练以降低推理成本）。当前配置是它的 " + ratio.toFixed(2) + " 倍。\n" +
         (ratio > 1.5 ? "→ 属于「过度训练」策略（用更多数据换更强小模型，现代主流）。" :
-         ratio < 0.7 ? "→ 数据偏少，可能没训够。" : "→ 接近 compute-optimal 配比。") +
-        "\n\n经验参考：GPT-3 175B ≈ 3.1e23 FLOPs；一个 7B/1.4T 配置 ≈ " + flops.toExponential(1) + " FLOPs。";
+         ratio < 0.7 ? "→ 数据偏少，可能没训够。" : "→ 接近经典 compute-optimal 配比。") +
+        "\n\n经验参考：GPT-3 约 3.15e23 FLOPs；本配置 ≈ " + flops.toExponential(1) + " FLOPs。";
     }
 
     var nS = LC.slider("参数量 N（B）", 0.1, 175, 0.1, N, function (v) { N = v; render(); });
@@ -147,10 +147,10 @@
         "计算预算 C = 10^" + logC + " ≈ " + C.toExponential(1) + " FLOPs\n" +
         "最优模型 N* ≈ " + (Nstar / 1e9).toFixed(1) + "B 参数\n" +
         "最优数据 D* ≈ " + (Dstar / 1e9).toFixed(0) + "B token\n" +
-        "比值 D*/N* ≈ " + (Dstar / Nstar).toFixed(1) + "（Chinchilla 结论 ≈ 20）\n\n" +
+        "比值 D*/N* ≈ " + (Dstar / Nstar).toFixed(1) + "（校准到经典结论 ≈ 20）\n\n" +
         "灰色曲线是不同预算的 isoFLOP 曲线——每条都有一个最优点，\n" +
-        "说明：固定算力下，模型不是越大越好，也不是数据越多越好，而是存在最优配比。\n" +
-        "该配置的损失约 " + Lstar.toFixed(2) + "。";
+        "说明：固定算力下，模型不是越大越好，也不是数据越多越好，而是存在最优配比。\n\n" +
+        "⚠️ 教学简化拟合：本图的损失曲线不是原论文拟合曲线的精确复现，仅用于展示 isoFLOP 的定性形状。";
     }
     var s = LC.slider("log₁₀(计算预算 FLOPs)", 19, 25, 0.1, logC, function (v) { logC = v; draw(); });
     root.appendChild(h("div", { class: "demo-controls" }, [
@@ -175,12 +175,12 @@
     var out = LC.readout();
 
     var OPS = [
-      { name: "向量加法（逐元素）", ai: 0.08 },
-      { name: "Softmax", ai: 0.25 },
-      { name: "LayerNorm", ai: 0.5 },
-      { name: "GELU", ai: 0.2 },
-      { name: "Attention（朴素）", ai: 4 },
-      { name: "FlashAttention", ai: 40 },
+      { name: "向量加法", ai: 0.2 },
+      { name: "GELU", ai: 1.0 },
+      { name: "Softmax", ai: 1.0 },
+      { name: "LayerNorm", ai: 1.3 },
+      { name: "朴素 Attention", ai: 10 },
+      { name: "FlashAttention", ai: 60 },
       { name: "大 GEMM", ai: 200 }
     ];
     function draw() {
@@ -233,7 +233,8 @@
       var achieved = Math.min(peak, bw * ai / 1000);
       out.textContent =
         "硬件：A100（HBM 带宽 " + bw + " GB/s，BF16 峰值 " + peak + " TFLOPS）\n" +
-        "拐点算术强度 AI* = 峰值 ÷ 带宽 ≈ " + (peak * 1e12 / (bw * 1e9)).toFixed(0) + " FLOPs/Byte\n\n" +
+        "拐点算术强度 AI* = 峰值 ÷ 带宽 ≈ " + (peak * 1e12 / (bw * 1e9)).toFixed(0) + " FLOPs/Byte\n" +
+        "（演示中的 AI 值为教学近似，用于判断瓶颈方向，非精确测量）\n\n" +
         "当前算子：AI = " + ai + " FLOPs/Byte → " + achieved.toFixed(1) + " TFLOPS，属于 " + bound + "\n\n" +
         (bound.indexOf("Memory") === 0
           ? "含义：算力大量闲置，瓶颈是把数据从 HBM 搬到计算单元。优化方向是减少内存读写（kernel fusion、FlashAttention、量化）。"
@@ -385,8 +386,9 @@
       });
       view.innerHTML = "";
       view.appendChild(LC.bars(items, { max: P * 16 / 1e9 }));
-      view.appendChild(LC.panel("说明", [
-        h("div", { class: "stat-line", html: "模型 " + paramsB + "B 参数 × " + N + " 卡，混合精度 + Adam（基线 16 bytes/参数）" }),
+      view.appendChild(LC.panel("说明（口径与假设）", [
+        h("div", { class: "stat-line", html: "模型 " + paramsB + "B 参数 × " + N + " 卡；口径：bf16 参数 2 + bf16 梯度 2 + fp32 主权重 4 + Adam m/v 8 = <b>16 bytes/参数</b>（ZeRO 论文口径）" }),
+        h("div", { class: "stat-line", html: "⚠️ 只统计 <b>model states</b>（参数/梯度/优化器状态），<b>不含 activations</b> 与临时缓冲；若梯度保留 FP32 则为 18 bytes/参数（第 17 章口径）" }),
         h("div", { class: "stat-line", html: "ZeRO-0：全部复制 → " + (P * 16 / 1e9).toFixed(1) + " GB/卡" }),
         h("div", { class: "stat-line", html: "ZeRO-1：切优化器状态（m/v + 主权重）→ 参数2 + 梯度2 + 12/" + N }),
         h("div", { class: "stat-line", html: "ZeRO-2：再切梯度 → 参数2 + (2+12)/" + N }),
