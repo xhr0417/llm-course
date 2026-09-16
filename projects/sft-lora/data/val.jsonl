@@ -1,0 +1,12 @@
+{"messages": [{"role": "user", "content": "用一句话解释什么是自注意力。"}, {"role": "assistant", "content": "自注意力让序列内部各位置互相计算注意力，聚合全局信息。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是层归一化。"}, {"role": "assistant", "content": "层归一化对单个样本的特征维度做归一化，稳定数值分布。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Dropout。"}, {"role": "assistant", "content": "Dropout 训练时随机丢弃部分神经元，抑制过拟合。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 AdamW。"}, {"role": "assistant", "content": "AdamW 把权重衰减从梯度更新中解耦，正则更正确。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是显存峰值。"}, {"role": "assistant", "content": "显存峰值是训练过程中占用的最大显存量，由激活与优化器状态主导。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 ZeRO。"}, {"role": "assistant", "content": "ZeRO 把优化器状态、梯度、参数分片到多卡，降低单卡显存。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是张量并行。"}, {"role": "assistant", "content": "张量并行把单层矩阵计算拆到多卡，降低单卡计算与显存压力。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 MFU。"}, {"role": "assistant", "content": "MFU 是实际算力利用率，等于达到 FLOPs 除以硬件峰值 FLOPs。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是梯度消失。"}, {"role": "assistant", "content": "梯度消失是反向传播中梯度逐层缩小，浅层几乎学不动。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是学习率调度。"}, {"role": "assistant", "content": "学习率调度让 lr 随训练变化，常见 warmup 后余弦衰减。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是温度采样。"}, {"role": "assistant", "content": "温度调整采样分布平滑度：越低越确定，越高越随机。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 top-p 采样。"}, {"role": "assistant", "content": "top-p 从累计概率达到 p 的最小集合中采样，控制多样性。"}]}

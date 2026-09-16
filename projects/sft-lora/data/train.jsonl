@@ -1,0 +1,48 @@
+{"messages": [{"role": "user", "content": "用一句话解释什么是过拟合。"}, {"role": "assistant", "content": "过拟合是模型记住了训练数据的噪声，在新数据上表现变差。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是欠拟合。"}, {"role": "assistant", "content": "欠拟合是模型容量不足，连训练数据都没学好。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是学习率。"}, {"role": "assistant", "content": "学习率控制每次参数更新的步长：太大震荡，太小收敛太慢。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是梯度裁剪。"}, {"role": "assistant", "content": "梯度裁剪限制梯度范数上限，防止个别 batch 把参数更新推飞。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 warmup。"}, {"role": "assistant", "content": "warmup 让学习率从很小逐步升高，避免训练初期剧烈更新。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是权重衰减。"}, {"role": "assistant", "content": "权重衰减在损失中加入参数范数惩罚，抑制参数过大。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 batch size。"}, {"role": "assistant", "content": "batch size 是一次前向传播处理的样本数，影响显存与梯度噪声。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是梯度累积。"}, {"role": "assistant", "content": "梯度累积用小 batch 多次累积再更新一次，等效更大 batch。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是混合精度训练。"}, {"role": "assistant", "content": "混合精度用 FP16/BF16 做计算、FP32 做关键状态，省显存提速。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是激活检查点。"}, {"role": "assistant", "content": "激活检查点不保存全部中间激活，反向时重算以省显存。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 LoRA。"}, {"role": "assistant", "content": "LoRA 冻结原权重，只训练一对低秩矩阵，用极少参数完成微调。"}]}
+{"messages": [{"role": "user", "content": "LoRA 的 rank 和 alpha 分别是什么？"}, {"role": "assistant", "content": "rank 决定低秩矩阵的秩，alpha 是缩放系数，通常取两倍 rank。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是量化。"}, {"role": "assistant", "content": "量化用更低比特表示权重或激活，省显存提速，代价是少量精度。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是知识蒸馏。"}, {"role": "assistant", "content": "知识蒸馏让小模型学习大模型的输出分布，迁移能力。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 KV Cache。"}, {"role": "assistant", "content": "KV Cache 缓存历史 token 的 K/V，避免解码时重复计算前缀。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 GQA。"}, {"role": "assistant", "content": "GQA 让多个查询头共享一组 KV 头，压缩 KV Cache 显存。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 PagedAttention。"}, {"role": "assistant", "content": "PagedAttention 把 KV Cache 按固定大小的页管理，减少显存碎片。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 continuous batching。"}, {"role": "assistant", "content": "continuous batching 在每个解码步动态进出请求，提高 GPU 利用率。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是投机解码。"}, {"role": "assistant", "content": "投机解码用草稿模型先猜多个 token，再由大模型并行验证。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 TTFT。"}, {"role": "assistant", "content": "TTFT 是首个 token 的延迟，主要由排队与 prefill 决定。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 ITL。"}, {"role": "assistant", "content": "ITL 是相邻输出 token 的间隔，主要由 decode 带宽决定。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 prefill。"}, {"role": "assistant", "content": "prefill 一次处理整个 prompt，产出首 token 的 logits 与全部 KV。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Attention。"}, {"role": "assistant", "content": "Attention 让每个位置按相关性对其它位置加权求和，聚合上下文。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是多头注意力。"}, {"role": "assistant", "content": "多头注意力并行做多组注意力，从不同子空间捕捉关系。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 RoPE。"}, {"role": "assistant", "content": "RoPE 用旋转把绝对位置编码为相对位置信息，支持外推。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 RMSNorm。"}, {"role": "assistant", "content": "RMSNorm 只用均方根做归一化，比 LayerNorm 更省计算。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 SwiGLU。"}, {"role": "assistant", "content": "SwiGLU 是带门控的 FFN 激活结构，比 ReLU 效果更好。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是残差连接。"}, {"role": "assistant", "content": "残差连接把输入加到输出上，让梯度更容易回传。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Softmax。"}, {"role": "assistant", "content": "Softmax 把一组实数变成概率分布，指数放大大值并归一化。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是交叉熵损失。"}, {"role": "assistant", "content": "交叉熵衡量预测分布与真实分布的差距，是分类的标准损失。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Tokenizer。"}, {"role": "assistant", "content": "Tokenizer 把文本切分成子词并映射为整数 id。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 BPE。"}, {"role": "assistant", "content": "BPE 从字符出发不断合并高频相邻对，构建子词词表。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Chat Template。"}, {"role": "assistant", "content": "Chat Template 把多轮消息渲染成带特殊 token 的模型输入格式。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 loss mask。"}, {"role": "assistant", "content": "loss mask 用 -100 屏蔽不参与损失的位置，如 prompt 部分。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 SFT。"}, {"role": "assistant", "content": "SFT 用指令—回答示范数据继续训练模型，学会按指令作答。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 RLHF。"}, {"role": "assistant", "content": "RLHF 用人类偏好训练奖励模型，再用强化学习优化模型输出。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 GRPO。"}, {"role": "assistant", "content": "GRPO 用组内相对优势替代价值网络，简化 PPO 训练。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 DPO。"}, {"role": "assistant", "content": "DPO 直接用偏好对优化策略，跳过奖励模型与强化学习。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 perplexity。"}, {"role": "assistant", "content": "困惑度是交叉熵的指数形式，越低说明预测越准。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 pass@k。"}, {"role": "assistant", "content": "pass@k 是对每题采样 k 个答案至少有一个正确的比例。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是数据去重。"}, {"role": "assistant", "content": "数据去重删除重复或高度相似样本，减少记忆与分数虚高。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是去污染。"}, {"role": "assistant", "content": "去污染从训练集中移除与评测集重叠的样本，避免分数虚高。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是数据配比。"}, {"role": "assistant", "content": "数据配比决定各来源数据的混合比例，影响能力分布。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 RAG。"}, {"role": "assistant", "content": "RAG 先检索外部文档再把相关内容放进上下文，让模型有据可依。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 chunking。"}, {"role": "assistant", "content": "chunking 把长文档切成可检索的段落，平衡上下文与精度。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 BM25。"}, {"role": "assistant", "content": "BM25 是关键词检索算法，用词频与逆文档频率给文档打分。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 reranker。"}, {"role": "assistant", "content": "reranker 用 cross-encoder 对候选段落精排，选出最相关的少数。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 Recall@k。"}, {"role": "assistant", "content": "Recall@k 衡量前 k 个结果里是否包含相关文档。"}]}

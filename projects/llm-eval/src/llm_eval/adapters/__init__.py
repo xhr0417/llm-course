@@ -20,7 +20,8 @@ def get_adapter(cfg) -> ModelAdapter:
     """
     if cfg.adapter == "hf":
         return HuggingFaceAdapter(cfg.model, max_new_tokens=cfg.max_new_tokens,
-                                  temperature=cfg.temperature)
+                                  temperature=cfg.temperature,
+                                  peft_adapter=getattr(cfg, "peft_adapter", None))
     if cfg.adapter == "openai":
         return OpenAICompatibleAdapter(cfg.model, base_url=cfg.base_url, api_key=cfg.api_key,
                                        max_new_tokens=cfg.max_new_tokens, temperature=cfg.temperature)

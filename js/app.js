@@ -381,7 +381,10 @@
     "RAG": "rag-engineering", "BM25": "rag-engineering", "Chunking": "rag-engineering",
     "Reranker": "rag-engineering", "Recall@k": "rag-engineering", "MRR": "rag-engineering",
     "nDCG": "rag-engineering", "Hybrid Retrieval": "rag-engineering",
-    "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag"
+    "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag",
+    "SFT 实验": "capstone-sft", "best checkpoint": "capstone-sft", "实验报告": "capstone-sft",
+    "profiler": "capstone-infra", "torch.profiler": "capstone-infra", "vLLM": "capstone-infra",
+    "torch.compile": "capstone-infra", "TTFT 压测": "capstone-infra", "serving benchmark": "capstone-infra"
   };
   function renderRelated(content) {
     var rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); });
@@ -615,12 +618,12 @@
         chLink("Transformer", "transformer") + " → " + chLink("Build Small LLM", "build-llm-1") + " → " +
         chLink("Data Pipeline", "data-pipeline") + " → " + chLink("Pretraining", "pretrain-sft") + " → " +
         chLink("HuggingFace", "huggingface") + " → " + chLink("SFT/LoRA", "efficient") + " → " +
-        chLink("DPO/GRPO", "rl-grpo") + " → " + chLink("Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>SFT Capstone（下一批）</span>") +
+        chLink("DPO/GRPO", "rl-grpo") + " → " + chLink("Evaluation", "llm-eval") + " → " + chLink("Capstone 3 · SFT/LoRA", "capstone-sft") + " → <span style='color:var(--text-soft)'>Experiment Design ✅</span>") +
       trackCard("Track C · AI Infra / ML Systems", "job-ready",
         "AI Infra / ML Systems / 大模型推理框架 / 性能工程实习",
         chLink("PyTorch", "pytorch") + " → " + chLink("GPU", "gpu") + " → " +
         chLink("FlashAttention/Triton", "flash-attention") + " → " + chLink("Distributed", "distributed") + " → " +
-        chLink("Inference", "inference") + " → <span style='color:var(--text-soft)'>Profiling / vLLM Benchmark（下一批，需 CUDA）</span>") +
+        chLink("Inference", "inference") + " → " + chLink("Capstone 4 · Profiling Lab", "capstone-infra") + " → <span style='color:var(--text-soft)'>vLLM Benchmark（需 CUDA）</span>") +
       "</div>" +
       '<p style="font-size:13px;color:var(--text-soft)">完整能力矩阵、Checkpoint 验收标准与四级学习标准见 ' +
       '<a class="tag" href="#/job-ready">第 24 章 · Job-Ready Track</a>。</p>';

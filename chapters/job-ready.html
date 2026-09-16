@@ -83,7 +83,7 @@ Pretraining（第 21 章）
    ↓
 HuggingFace（第 26 章）
    ↓
-SFT / LoRA（Capstone 3） ← 下一批
+SFT / LoRA（第 30 章 ✅）
    ↓
 DPO / GRPO（第 22 章）
    ↓
@@ -96,7 +96,7 @@ Experiment Design（Capstone 3 报告）</code></pre>
    ↓
 GPU Fundamentals（第 15 章）
    ↓
-Profiling（Capstone 4）   ← 下一批
+Profiling（第 31 章 ✅）
    ↓
 FlashAttention / Triton（第 19 章）
    ↓
@@ -104,7 +104,7 @@ Distributed Training（第 16 章）
    ↓
 Inference Systems（第 20 章）
    ↓
-vLLM / SGLang Benchmark（Capstone 4） ← 下一批
+vLLM / SGLang Benchmark（第 31 章，需 CUDA）
    ↓
 C++ / CUDA（后续专题）</code></pre>
 <p>⚠️ Infra Lab（profiler、benchmark）需要 CUDA 环境。<strong>没有 GPU 时如实写 <code>NOT EXECUTED ON CUDA</code></strong>——招聘方见过太多造假，如实标注反而是加分项。</p>
@@ -306,7 +306,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>E</strong></td>
 <td>用 profiler 找瓶颈并写出 benchmark 报告</td>
 <td>有 latency/memory 曲线与解释</td>
-<td>Capstone 4 · 下一批</td>
+<td>第 31 章 ✅ 本批</td>
 </tr>
 </tbody></table>
 <h2>24.6 本批已经交付的内容</h2>
@@ -337,6 +337,16 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>28-29 Retrieval/RAG + Capstone 2</strong></td>
 <td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a></td>
 <td>841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；27 个测试用例通过</td>
+</tr>
+<tr>
+<td><strong>30 Capstone 3 · SFT/LoRA</strong></td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora"><code>projects/sft-lora/</code></a></td>
+<td>真实 SFT：train loss 3.89→1.46；val loss 过拟合曲线（best@60）；harness QA F1 20.2%→24.0%；14 个测试</td>
+</tr>
+<tr>
+<td><strong>31 Capstone 4 · Profiling Lab</strong></td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a></td>
+<td>CPU 实测：SDPA 快 2.7×/省内存 37×；compile 反例 0.72×；算子表 bmm 66%；10 个测试；CUDA 部分 NOT EXECUTED</td>
 </tr>
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对你自己的项目同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>

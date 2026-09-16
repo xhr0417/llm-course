@@ -24,6 +24,7 @@ class EvalConfig:
     data_overrides: dict[str, str] = field(default_factory=dict)  # {task: jsonl路径}
     base_url: str = "http://localhost:8000"   # openai-compatible adapter
     api_key: str = ""
+    peft_adapter: str = ""                    # HF adapter 可选：LoRA adapter 路径（Capstone 3 对比用）
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

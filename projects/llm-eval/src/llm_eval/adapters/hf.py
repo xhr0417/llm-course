@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 class HuggingFaceAdapter(ModelAdapter):
     def __init__(self, model_name: str, max_new_tokens: int = 16, temperature: float = 0.0,
-                 dtype: str = "float32", device: str = "cpu", batch_size: int = 4):
-        self.name = f"hf:{model_name}"
+                 dtype: str = "float32", device: str = "cpu", batch_size: int = 4,
+                 peft_adapter: str | None = None):
+        self.name = f"hf:{model_name}" + (f"+peft:{peft_adapter}" if peft_adapter else "")
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
         self.batch_size = batch_size
@@ -24,8 +25,15 @@ class HuggingFaceAdapter(ModelAdapter):
         self.tokenizer.padding_side = "left"
         torch_dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}.get(dtype, torch.float32)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch_dtype).to(device)
+        if peft_adapter:
+            from peft import PeftModel
+            self.model = PeftModel.from_pretrained(self.model, peft_adapter)
+            logger.info("已加载 LoRA adapter：%s", peft_adapter)
         self.model.eval()
-        logger.info("HF adapter 就绪：%s（%.1fM 参数）", model_name, sum(p.numel() for p in self.model.parameters()) / 1e6)
+        n_params = sum(p.numel() for p in self.model.parameters())
+        n_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        logger.info("HF adapter 就绪：%s（%.1fM 参数，可训练 %.3fM）",
+                    model_name, n_params / 1e6, n_trainable / 1e6)
 
     def _generate_batch(self, prompts: list[str]) -> list[str]:
         chats = [

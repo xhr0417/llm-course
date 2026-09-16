@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-new-tokens", type=int, default=None)
     p.add_argument("--base-url", default=None)
     p.add_argument("--api-key", default=None)
+    p.add_argument("--peft-adapter", default=None, help="HF 模型挂 LoRA adapter 路径（评测微调前后）")
     p.add_argument("--no-cache", action="store_true", help="关闭响应缓存")
     p.add_argument("--verbose", action="store_true")
     return p
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         max_new_tokens=args.max_new_tokens,
         base_url=args.base_url,
         api_key=args.api_key,
+        peft_adapter=args.peft_adapter,
         data_overrides=parse_data_overrides(args.data) or None,
     )
     if args.no_cache:

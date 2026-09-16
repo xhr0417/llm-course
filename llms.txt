@@ -33,6 +33,8 @@
 - [Capstone 1 · Mini LLM Evaluation Harness](https://llm.xhr0417.cn/chapters/capstone-eval.html): Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。
 - [Retrieval & RAG Engineering：让模型用上外部知识](https://llm.xhr0417.cn/chapters/rag-engineering.html): Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。
 - [Capstone 2 · Search + Rerank + RAG Service](https://llm.xhr0417.cn/chapters/capstone-rag.html): 完整 RAG 服务：FastAPI（/chat、/chat/stream SSE、超时 504、线程池）+ 检索与生成分开评测 + Dockerfile——Checkpoint D。
+- [Capstone 3 · Real SFT / LoRA Experiment](https://llm.xhr0417.cn/chapters/capstone-sft.html): 真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。
+- [Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track）](https://llm.xhr0417.cn/chapters/capstone-infra.html): profiler 算子表、CUDA Event 计时、naive vs SDPA 实测、torch.compile 反例、serving TTFT/TPOT 压测客户端 + vLLM runbook（NOT EXECUTED ON CUDA）。
 
 原始 Markdown：
 - [00-map.md](https://llm.xhr0417.cn/content/00-map.md)
@@ -65,3 +67,5 @@
 - [27-capstone-eval.md](https://llm.xhr0417.cn/content/27-capstone-eval.md)
 - [28-rag-engineering.md](https://llm.xhr0417.cn/content/28-rag-engineering.md)
 - [29-capstone-rag.md](https://llm.xhr0417.cn/content/29-capstone-rag.md)
+- [30-capstone-sft.md](https://llm.xhr0417.cn/content/30-capstone-sft.md)
+- [31-capstone-infra.md](https://llm.xhr0417.cn/content/31-capstone-infra.md)

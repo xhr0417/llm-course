@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capstone 3 · Real SFT / LoRA Experiment · 大模型知识体系</title>
+<meta name="description" content="真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-sft.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 30 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/capstone-sft">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="capstone-rag.html">← Capstone 2 · Search + Rerank + RAG Service</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-infra.html">Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track） →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-sft">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 30 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 3 · Real SFT / LoRA Experiment</h1><p class="chapter-desc">真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="md">
+<h1>第 30 章 · Capstone 3：Real SFT / LoRA Experiment</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>不再「从零手写 SFT trainer」，而是用工业生态完成一次<strong>真实的实验闭环</strong>：训练 LoRA → 用同一套评测对比 base/tuned → 分析 bad case → 自动生成实验报告。这是大模型算法实习的核心工作流。</p>
+</div></div>
+<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora"><code>projects/sft-lora/</code></a>
+<strong>真实运行</strong>：Qwen2.5-0.5B-Instruct，48 训练 / 12 验证 / 20 评测，CPU 469s。</p>
+<h2>30.1 目标与验收（Checkpoint 升级版）</h2>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>本项目交付</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Dataset</td>
+<td>真实指令格式 <code>{&quot;messages&quot;: [...]}</code>（48+12 条）</td>
+</tr>
+<tr>
+<td>Response-only loss</td>
+<td>prompt 置 -100，只学 assistant 回答（接通第 21 章）</td>
+</tr>
+<tr>
+<td>LoRA</td>
+<td>r/alpha/dropout/target_modules 全部可配（接通第 17 章）</td>
+</tr>
+<tr>
+<td>Train</td>
+<td>grad accum + 梯度裁剪 + warmup/余弦 + 验证 loss 记录</td>
+</tr>
+<tr>
+<td>Checkpoint</td>
+<td>adapter 保存 / 可选 merge 合并权重</td>
+</tr>
+<tr>
+<td>Eval</td>
+<td><strong>同一套 held-out + 同一 harness</strong>（Capstone 1）的 before/after</td>
+</tr>
+<tr>
+<td>Bad case</td>
+<td>20 条结构化失败样本 + 粗分类</td>
+</tr>
+<tr>
+<td>Report</td>
+<td><code>experiment.md</code> 自动生成（设置/曲线/对比/badcase/局限）</td>
+</tr>
+</tbody></table>
+<h2>30.2 训练：真实曲线与一个刻意的反例</h2>
+<pre><code class="lang-">train loss：3.8878 → 1.4638（150 步，等效 batch 8，lr 2e-4，CPU 469s）
+LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%</code></pre>
+<p>验证曲线（每 30 步）：</p>
+<table>
+<thead>
+<tr>
+<th>step</th>
+<th>30</th>
+<th>60</th>
+<th>90</th>
+<th>120</th>
+<th>150</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>val loss</td>
+<td>2.8671</td>
+<td><strong>2.7344</strong></td>
+<td>2.9813</td>
+<td>3.2416</td>
+<td>3.2923</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ train loss 下降 ≠ 模型变好</div><div class="box-body"><p>train loss 一路降到 1.46，但 val loss 从 step 60 起<strong>持续上升</strong>——经典过拟合。</p>
+<p>正规做法：保存 <strong>best checkpoint</strong>（step 60）或 early stopping。本项目刻意保存了<strong>最终</strong> checkpoint，作为反例写进报告——你可以直接对比 adapter 在 step 60 与 step 150 的差异复现这个结论。</p>
+</div></div>
+<h2>30.3 评测：把「变好了吗」交给数字回答</h2>
+<p>同一 held-out、同一 harness（Capstone 1 的 <code>llm-eval</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>Base</th>
+<th>SFT (LoRA)</th>
+<th>Δ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>held-out response-only loss</td>
+<td>3.7565</td>
+<td>3.2923</td>
+<td><strong>-0.4641</strong></td>
+</tr>
+<tr>
+<td>QA F1（20 题）</td>
+<td>20.2%</td>
+<td><strong>24.0%</strong></td>
+<td><strong>+3.8pt</strong></td>
+</tr>
+<tr>
+<td>QA EM</td>
+<td>0.0%</td>
+<td>0.0%</td>
+<td>+0.0pt</td>
+</tr>
+</tbody></table>
+<div class="box box-note"><div class="box-title">📘 公平对比的三个前提（一个都不能少）</div><div class="box-body"><ol>
+<li><strong>同一 held-out 集</strong>（12 条验证 + 20 条 QA，训练时从未见过）；</li>
+<li><strong>同一 prompt 模板</strong>（同一 chat template 与生成参数）；</li>
+<li><strong>干净加载的 base</strong>——PEFT 就地注入陷阱：训练用的 <code>model</code> 变量已被注入 LoRA，拿它当 base 会得到 Δ=0.0000 的假结论（第 26 章踩过的坑，本项目用独立加载规避）。</li>
+</ol>
+</div></div>
+<h2>30.4 生成风格：SFT 到底学到了什么</h2>
+<pre><code class="lang-">Q: 用一句话解释什么是早停。
+- base ：&quot;早停&quot;通常指的是在某些情况下，人们或组织提前停止某种活动、项目或计划，以避免风险……
+- tuned：早停时模型不等待下游损失下降就停止优化，避免鞍点死循环。</code></pre>
+<ul>
+<li><strong>风格迁移成功</strong>：tuned 回答变短、更直接（训练数据是「一句话解释」风格）；</li>
+<li><strong>内容仍然经常错误</strong>：上例把「早停」解释成了别的东西——<strong>SFT 教格式，不教知识</strong>。</li>
+</ul>
+<p>这个结论解释了 RAG（第 28 章）与 SFT 的分工：</p>
+<ul>
+<li>知识 → 检索注入（RAG）；</li>
+<li>格式/风格/行为 → 微调（SFT）；</li>
+<li>两者都要评测，且要分开评测。</li>
+</ul>
+<h2>30.5 Bad case：20 条失败样本怎么用</h2>
+<p>每条 bad case 记录 <code>{id, question, gold, base, tuned, error_type}</code>，粗分类（教学启发式）：</p>
+<table>
+<thead>
+<tr>
+<th>分类</th>
+<th>含义</th>
+<th>该修什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ok</code></td>
+<td>F1 ≥ 0.6</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>partial</code></td>
+<td>部分匹配</td>
+<td>数据质量 / 更大模型</td>
+</tr>
+<tr>
+<td><code>verbose</code></td>
+<td>太长（&gt;80 字）</td>
+<td>风格数据 / 长度惩罚</td>
+</tr>
+<tr>
+<td><code>wrong</code></td>
+<td>完全无关</td>
+<td>数据覆盖 / 知识注入</td>
+</tr>
+<tr>
+<td><code>refusal</code></td>
+<td>拒绝回答</td>
+<td>训练数据里的拒绝样本比例</td>
+</tr>
+</tbody></table>
+<p>本实验 20 条全部 <code>partial</code>（F1 ∈ (0, 0.6)）——如果只报告「F1 +3.8pt」而不看 bad case，你会错过「模型在瞎说但格式很像」这个事实。</p>
+<h2>30.6 实验报告：让别人能复现你的结论</h2>
+<p><code>experiment.md</code> 自动生成，必须包含七要素：</p>
+<pre><code class="lang-">model / dataset / hyperparameters / hardware / training curve / eval / failure cases / limitations</code></pre>
+<p>复现命令：</p>
+<pre><code class="lang-bash">cd projects/sft-lora
+python scripts/run_experiment.py --steps 150 --output outputs/sft_run --run-harness</code></pre>
+<div class="box box-warning"><div class="box-title">⚠️ 为什么硬件必须写</div><div class="box-body"><p>「CPU 469s」和「8×A100 20 分钟」是两个完全不同的成本事实。报告里不写硬件，读者无法判断实验规模，也无法复现。本项目如实标注 <code>无 CUDA（CPU 运行）</code>。</p>
+</div></div>
+<h2>30.7 面试复盘：SFT / 算法岗</h2>
+<ol>
+<li>为什么用 LoRA 而不是全量微调？可训练参数占比怎么算？</li>
+<li>response-only loss 的掩码怎么构造？为什么 prompt 置 -100？</li>
+<li>训练 loss 下降但验证 loss 上升，你怎么处理？</li>
+<li>Base vs SFT 怎么公平比较？为什么 base 必须干净加载？</li>
+<li>为什么 F1 提高了但 EM 还是 0？这两个指标差在哪？</li>
+<li>bad case 怎么分类？分类之后各自的修法？</li>
+<li>如果要把「知识」加进模型，SFT 和 RAG 你怎么选？</li>
+<li>你的实验报告里哪些数字是必须的？为什么硬件与数据规模缺一不可？</li>
+</ol>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你的 SFT 实验：train loss 3.89→1.46，val loss 2.73（step 60）→3.29（step 150），QA F1 +3.8pt。最专业的结论是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>训练非常成功，loss 下降了 60%</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>模型在 step 60 附近达到最优泛化；最终 checkpoint 已过拟合；应保存 best checkpoint 并考虑 early stopping；F1 只有小幅提升，需要更多数据或更大模型</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>直接上更多步数，loss 还能降</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>放弃 SFT，改用 RAG</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>必须同时读 train 与 val 两条曲线：val 的最低点在 step 60，之后上升说明过拟合。报告应给 best checkpoint 的成绩并诚实标注最终 checkpoint 的状态；「loss 下降 60%」是被 train loss 蒙蔽的典型误读；C 会让过拟合更严重；D 是把「格式问题」与「知识问题」混淆了——本项目 F1 +3.8pt 说明 SFT 有效，只是数据规模限制了上限。</div></details></div>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>站点</th>
+<th>核心结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>数据</td>
+<td>指令 messages 格式 + response-only loss（-100 掩码）</td>
+</tr>
+<tr>
+<td>训练</td>
+<td>grad accum + clip + warmup/余弦；val 曲线是必看信号</td>
+</tr>
+<tr>
+<td>反例</td>
+<td>保存 final 而非 best 会过拟合；best checkpoint 才是交付物</td>
+</tr>
+<tr>
+<td>对比</td>
+<td>同一 held-out / 同一模板 / 干净加载的 base</td>
+</tr>
+<tr>
+<td>发现</td>
+<td>SFT 教格式不教知识（真实输出证据）</td>
+</tr>
+<tr>
+<td>报告</td>
+<td>model/data/hyperparams/hardware/curve/eval/badcase/limits 七要素</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 17 章 LoRA</span><span class="tag">第 21 章 SFT/Loss Mask</span><span class="tag">第 26 章 HuggingFace</span><span class="tag">第 27 章 Eval Harness</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">大模型算法实习面试</span><span class="tag">后训练方向</span><span class="tag">后续 DPO/GRPO 实验</span></div></div>
+</div>
+<div class="static-nav"><a href="capstone-rag.html">← Capstone 2 · Search + Rerank + RAG Service</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-infra.html">Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track） →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/30-capstone-sft.md">content/30-capstone-sft.md</a></div>
+</main>
+</body>
+</html>

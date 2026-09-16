@@ -104,7 +104,9 @@ const claims = [
   { project: "log-analyzer", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
   { project: "hf-mini-lab", pattern: /(\d+)[ \t]*(?:个[ \t]*)?pytest|(\d+)[ \t]*(?:个[ \t]*)?测试/ },
   { project: "llm-eval", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试|(\d+)[ \t]*(?:个[ \t]*)?pytest/ },
-  { project: "rag-service", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ }
+  { project: "rag-service", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
+  { project: "sft-lora", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
+  { project: "inference-benchmark", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ }
 ];
 claims.forEach(({ project, pattern }) => {
   const dir = path.join(PROJECTS_DIR, project);
@@ -133,7 +135,7 @@ jobChapters.forEach(ch => {
     mustHave(`${ch.file} 疑似伪造实验规模（命中 ${re}）`, !re.test(md));
   });
 });
-[["projects/log-analyzer/README.md"], ["projects/hf-mini-lab/README.md"], ["projects/llm-eval/README.md"], ["projects/rag-service/README.md"]].forEach(([p]) => {
+[["projects/log-analyzer/README.md"], ["projects/hf-mini-lab/README.md"], ["projects/llm-eval/README.md"], ["projects/rag-service/README.md"], ["projects/sft-lora/README.md"], ["projects/inference-benchmark/README.md"]].forEach(([p]) => {
   const full = path.join(ROOT, p);
   if (!fs.existsSync(full)) return;
   const txt = fs.readFileSync(full, "utf8");

@@ -159,7 +159,10 @@ const TOPIC_LINKS = {
   "RAG": "rag-engineering", "BM25": "rag-engineering", "Chunking": "rag-engineering",
   "Reranker": "rag-engineering", "Recall@k": "rag-engineering", "MRR": "rag-engineering",
   "nDCG": "rag-engineering", "Hybrid Retrieval": "rag-engineering",
-  "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag"
+  "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag",
+  "SFT 实验": "capstone-sft", "best checkpoint": "capstone-sft", "实验报告": "capstone-sft",
+  "profiler": "capstone-infra", "torch.profiler": "capstone-infra", "vLLM": "capstone-infra",
+  "torch.compile": "capstone-infra", "TTFT 压测": "capstone-infra", "serving benchmark": "capstone-infra"
 };
 
 function renderContent(content, ctx, chapterId) {

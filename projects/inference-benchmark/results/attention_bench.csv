@@ -1,0 +1,11 @@
+impl,seq_len,batch,heads,head_dim,dtype,latency_ms,peak_mem_mb
+naive,128,1,4,64,float32,0.217,2.7
+sdpa,128,1,4,64,float32,0.113,0.3
+naive,256,1,4,64,float32,0.496,4.3
+sdpa,256,1,4,64,float32,0.289,1.2
+naive,512,1,4,64,float32,3.029,29.0
+sdpa,512,1,4,64,float32,1.164,1.8
+naive,1024,1,4,64,float32,8.289,32.0
+sdpa,1024,1,4,64,float32,5.198,9.0
+naive,2048,1,4,64,float32,29.238,128.2
+sdpa,2048,1,4,64,float32,10.886,3.5
