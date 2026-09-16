@@ -3,7 +3,7 @@
   "projects": [
     {
       "name": "hf-mini-lab",
-      "testFunctions": 10
+      "testFunctions": 11
     },
     {
       "name": "inference-benchmark",
@@ -23,7 +23,7 @@
     },
     {
       "name": "sft-lora",
-      "testFunctions": 14
+      "testFunctions": 15
     }
   ]
 }

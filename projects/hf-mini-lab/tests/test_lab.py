@@ -72,6 +72,19 @@ class TestData:
 
 
 class TestModelAndLora:
+    def test_build_labels_accepts_batchencoding(self):
+        """回归：新版 transformers 返回 BatchEncoding（CI 曾真实失败）→ build_labels 必须兼容。"""
+        class FakeTokenizer:
+            def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False):
+                ids = [10, 11, 12, 20, 21]
+                prompt_len = 4 if add_generation_prompt else 3
+                return {"input_ids": ids[:prompt_len] if add_generation_prompt else ids}
+
+        ids, labels = build_labels(FakeTokenizer(), [{"role": "user", "content": "x"},
+                                                     {"role": "assistant", "content": "y"}])
+        assert isinstance(ids, list) and isinstance(labels, list)
+        assert sum(1 for x in labels if x != -100) == 1
+
     def test_logits_shape(self, tokenizer, tiny_model):
         import torch
 

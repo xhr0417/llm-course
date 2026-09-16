@@ -87,10 +87,10 @@ python scripts/run_experiment.py --steps 150 --run-harness
 ├── js/                 # 交互演示与站点逻辑
 ├── projects/           # 6 个真实工程项目（见 projects/README.md）
 │   ├── log-analyzer/       # Python 工程 CLI（14 test functions）
-│   ├── hf-mini-lab/        # HuggingFace + LoRA 全流程
+│   ├── hf-mini-lab/        # HuggingFace + LoRA 全流程（11 test functions）
 │   ├── llm-eval/           # Evaluation Harness（21 test functions / 32 cases）
 │   ├── rag-service/        # RAG Service（39 test functions）
-│   ├── sft-lora/           # SFT/LoRA 实验（14 test functions）
+│   ├── sft-lora/           # SFT/LoRA 实验（15 test functions）
 │   └── inference-benchmark # Profiling Lab（15 test functions）
 ├── tools/              # 构建与校验（发布门禁见下）
 ├── docs/               # 审计文档与实验环境快照

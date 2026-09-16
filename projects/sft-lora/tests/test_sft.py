@@ -56,6 +56,21 @@ class TestData:
         assert 0 < n_supervised < len(labels)
         assert labels[0] == -100 and labels[-1] != -100
 
+    def test_build_example_accepts_batchencoding(self):
+        """回归：新版 transformers 的 apply_chat_template(tokenize=True) 返回 BatchEncoding，
+        旧代码会把它当 list 使用（CI 曾真实失败）。这里用假 tokenizer 模拟该行为。"""
+        class FakeTokenizer:
+            def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False):
+                ids = [10, 11, 12, 20, 21, 22]
+                prompt_len = 4 if add_generation_prompt else 3
+                return {"input_ids": ids[:prompt_len] if add_generation_prompt else ids}
+
+        ids, labels = build_example(FakeTokenizer(), [{"role": "user", "content": "x"},
+                                                      {"role": "assistant", "content": "y"}])
+        assert isinstance(ids, list) and isinstance(labels, list)
+        assert len(ids) == len(labels) == 6
+        assert sum(1 for x in labels if x != -100) == 2   # 只学回答（6-4）
+
     def test_collate_padding(self, tokenizer):
         collate = make_collate(tokenizer, max_length=64)
         samples = load_messages(TRAIN)[:2]

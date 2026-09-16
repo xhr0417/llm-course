@@ -21,7 +21,7 @@ python scripts/run_experiment.py --steps 150
 # 训练并导出合并权重（merge，文件约 1GB）
 python scripts/run_experiment.py --steps 150 --merge
 
-pytest -q   # 14 passed
+pytest -q   # 15 passed
 ```
 
 ## 真实实验结果（本机 CPU，Qwen2.5-0.5B-Instruct）
@@ -89,7 +89,7 @@ sft-lora/
 │   ├── metrics_shim.py         # 与 llm-eval 同口径的 F1
 │   └── report.py               # experiment.md + losses.csv 自动生成
 ├── scripts/run_experiment.py   # 端到端（含调用 llm-eval harness）
-└── tests/test_sft.py           # 14 个测试函数
+└── tests/test_sft.py           # 15 个测试函数（15 个用例）
 ```
 
 ## 与课程对应

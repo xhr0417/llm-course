@@ -16,10 +16,17 @@ def load_messages(path: Path | str) -> list[list[dict]]:
     return rows
 
 
+def _as_ids(encoded) -> list[int]:
+    """兼容 transformers 新旧行为：tokenize=True 可能返回 list 或 BatchEncoding。"""
+    if hasattr(encoded, "keys"):
+        return list(encoded["input_ids"])
+    return list(encoded)
+
+
 def build_example(tokenizer, messages: list[dict], max_length: int = 256) -> tuple[list[int], list[int]]:
     """Response-only loss：prompt（含 system/user/assistant 头）置 -100，只学回答。"""
-    input_ids = tokenizer.apply_chat_template(messages, tokenize=True)
-    prompt_ids = tokenizer.apply_chat_template(messages[:-1], tokenize=True, add_generation_prompt=True)
+    input_ids = _as_ids(tokenizer.apply_chat_template(messages, tokenize=True))
+    prompt_ids = _as_ids(tokenizer.apply_chat_template(messages[:-1], tokenize=True, add_generation_prompt=True))
     labels = list(input_ids)
     n_prompt = min(len(prompt_ids), len(labels))
     labels[:n_prompt] = [-100] * n_prompt

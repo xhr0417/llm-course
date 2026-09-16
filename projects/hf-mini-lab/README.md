@@ -45,7 +45,7 @@ hf-mini-lab/
 │   ├── train.py              # 最小可读 LoRA 训练循环 + adapter 保存
 │   └── evaluate.py           # held-out loss、base/tuned 生成对比
 ├── scripts/run_lab.py        # 端到端 8 步实验 + 自动生成 report.md
-├── tests/test_lab.py         # 10 个测试函数（10 个用例）
+├── tests/test_lab.py         # 11 个测试函数（11 个用例）
 └── outputs/lab_run/          # 产物：adapter + config + losses.json + report.md（运行后生成）
 ```
 
