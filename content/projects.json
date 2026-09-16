@@ -1,0 +1,29 @@
+{
+  "count": 6,
+  "projects": [
+    {
+      "name": "hf-mini-lab",
+      "testFunctions": 10
+    },
+    {
+      "name": "inference-benchmark",
+      "testFunctions": 15
+    },
+    {
+      "name": "llm-eval",
+      "testFunctions": 21
+    },
+    {
+      "name": "log-analyzer",
+      "testFunctions": 14
+    },
+    {
+      "name": "rag-service",
+      "testFunctions": 39
+    },
+    {
+      "name": "sft-lora",
+      "testFunctions": 14
+    }
+  ]
+}

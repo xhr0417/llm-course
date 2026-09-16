@@ -28,7 +28,7 @@ python run_eval.py --adapter openai --model qwen2.5 --base-url http://localhost:
 # ④ Mock 冒烟（验证管线，不评测真实能力）
 python run_eval.py --adapter mock --tasks c3 --limit 12
 
-pytest -q
+pytest -q    # 32 passed
 ```
 
 ## 真实运行记录（本机，CPU）
@@ -67,7 +67,7 @@ llm-eval/
 │   ├── runner.py                # 并发 + 重试 + badcase 收集
 │   └── reports.py               # results.json / summary.md / badcases.jsonl
 ├── scripts/fetch_data.py        # 拉取真实数据切片（XCOPA / C3）
-└── tests/test_eval.py           # 18 个测试函数（参数化后共 29 个用例）
+└── tests/test_eval.py           # 21 个测试函数（参数化后共 32 个用例）
 ```
 
 ## 设计要点对照（课程章节）
@@ -85,7 +85,7 @@ llm-eval/
 ## 三个真实踩坑（开发中遇到并已修复）
 
 1. **Mock 全选同一选项会「假高分」**：夹具答案必须先均衡（测试里就有这条断言）；
-2. **parser 是 accuracy 的隐形杀手**：模型输出 `"The correct answer is C."`、`"**D**"`、`"C)"` 都要能解析——本项目 29 个用例里有 12 条在测 parser；
+2. **parser 是 accuracy 的隐形杀手**：模型输出 `"The correct answer is C."`、`"**D**"`、`"C)"` 都要能解析——本项目 32 个用例里有 12 条在测 parser；
 3. **缓存 key 必须包含全部影响输出的参数**（model / prompt / max_tokens / temperature），否则改参数会拿到旧答案。
 
 ## 数据来源与许可

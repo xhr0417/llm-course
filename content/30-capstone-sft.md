@@ -27,27 +27,33 @@ train loss：3.8878 → 1.4638（150 步，等效 batch 8，lr 2e-4，CPU 469s�
 LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%
 ```
 
-验证曲线（每 30 步）：
+验证曲线（每 30 步，本次运行）：
 
 | step | 30 | 60 | 90 | 120 | 150 |
 | --- | --- | --- | --- | --- | --- |
-| val loss | 2.8671 | **2.7344** | 2.9813 | 3.2416 | 3.2923 |
+| val loss | 2.8677 | **2.7301** | 2.9822 | 3.2427 | 3.2947 |
+
+**本轮实现**：每次 val 改善自动保存 `adapter_best/`；训练结束保存 `adapter_final/`。
 
 :::warning train loss 下降 ≠ 模型变好
 train loss 一路降到 1.46，但 val loss 从 step 60 起**持续上升**——经典过拟合。
-
-正规做法：保存 **best checkpoint**（step 60）或 early stopping。本项目刻意保存了**最终** checkpoint，作为反例写进报告——你可以直接对比 adapter 在 step 60 与 step 150 的差异复现这个结论。
+正规做法：保存 **best checkpoint**（本轮已实现）或 early stopping；本项目同时保留 final 作为反例，
+让你直接对比两份 checkpoint 的差异。
 :::
 
 ## 30.3 评测：把「变好了吗」交给数字回答
 
-同一 held-out、同一 harness（Capstone 1 的 `llm-eval`）：
+同一 held-out、同一 harness（Capstone 1 的 `llm-eval`），**Base / Best / Final 三路**：
 
-| 指标 | Base | SFT (LoRA) | Δ |
+| 指标 | Base | Best (step 60) | Final (step 150) |
 | --- | --- | --- | --- |
-| held-out response-only loss | 3.7565 | 3.2923 | **-0.4641** |
-| QA F1（20 题） | 20.2% | **24.0%** | **+3.8pt** |
-| QA EM | 0.0% | 0.0% | +0.0pt |
+| held-out response-only loss | 3.7565 | **2.7301** | 3.2947 |
+| QA F1（20 题） | 20.2% | **24.4%** | 22.5% |
+| QA EM | 0.0% | 0.0% | 0.0% |
+
+**本次运行的观察**：best val loss 的 checkpoint 同时也是 QA F1 最高点。
+但这只是单次运行的经验观察——**val 最优不必然等于 downstream 最优**（反之亦然），
+所以实验报告固定输出三路对比来检查一致性。
 
 :::note 公平对比的三个前提（一个都不能少）
 1. **同一 held-out 集**（12 条验证 + 20 条 QA，训练时从未见过）；
@@ -64,12 +70,42 @@ Q: 用一句话解释什么是早停。
 ```
 
 - **风格迁移成功**：tuned 回答变短、更直接（训练数据是「一句话解释」风格）；
-- **内容仍然经常错误**：上例把「早停」解释成了别的东西——**SFT 教格式，不教知识**。
+- **内容仍然经常错误**：上例把「早停」解释成了别的东西（部分回答偏离）。
 
-这个结论解释了 RAG（第 28 章）与 SFT 的分工：
-- 知识 → 检索注入（RAG）；
-- 格式/风格/行为 → 微调（SFT）；
-- 两者都要评测，且要分开评测。
+:::note 准确的定位（避免过度二分）
+SFT 可以改变模型的行为、格式与任务能力，也可能注入一定的任务知识；但在本项目
+**「0.5B + 48 条训练样本」的小数据 regime** 下，最明显的现象是**输出风格变化**，
+而不是稳定的事实能力提升。RAG 与 SFT 不是互斥方案：
+
+- RAG 适合：外部知识、频繁更新的知识、需要引用的知识；
+- SFT 适合：行为格式、instruction following、领域风格、任务适配；
+- 实际系统常常两者叠加（先微调行为，再挂检索补充知识）。
+:::
+
+## 30.4b Training Data Correctness：错误答案也会被认真学习
+
+SFT 的一个残酷现实：
+
+```text
+错误 teacher answer
+   ↓
+training loss 一样会下降（模型在认真拟合你的数据）
+   ↓
+模型会认真地学错
+```
+
+本项目在 Correctness Pass 中逐条 auditing 了训练数据，修正了过度绝对的表述。典型例子（修正前后）：
+
+| 主题 | 修正前（过度绝对） | 修正后（准确口径） |
+| --- | --- | --- |
+| LoRA alpha | 「通常取两倍 rank」 | alpha 是缩放超参数，常见取 rank / 2×rank 或其它值，需实验选择 |
+| RoPE | 「支持外推」 | 不天然保证可靠外推；长上下文通常配合位置插值/缩放 |
+| 量化 | 「代价是少量精度」 | 精度影响取决于 bit width / 算法 / 校准 / 模型与任务 |
+| SwiGLU | 「比 ReLU 更好」 | 广泛采用，但配置不同，不能抽象成对所有任务必然更优 |
+| 混合精度 | 「FP32 做关键状态」 | 保留哪些高精度状态取决于 AMP / optimizer / 分布式实现 |
+
+**工程纪律**：合成数据 / teacher 模型产出的答案必须做事实审查——loss 不会替你发现数据是错的。
+这条对后续做 DPO/GRPO 与合成数据管线同样适用。
 
 ## 30.5 Bad case：20 条失败样本怎么用
 
@@ -132,9 +168,9 @@ D. 放弃 SFT，改用 RAG
 | --- | --- |
 | 数据 | 指令 messages 格式 + response-only loss（-100 掩码） |
 | 训练 | grad accum + clip + warmup/余弦；val 曲线是必看信号 |
-| 反例 | 保存 final 而非 best 会过拟合；best checkpoint 才是交付物 |
-| 对比 | 同一 held-out / 同一模板 / 干净加载的 base |
-| 发现 | SFT 教格式不教知识（真实输出证据） |
+| 反例 | final 已过拟合；本轮已实现 best checkpoint 自动保存 |
+| 对比 | 同一 held-out / 同一模板 / 干净 base；Base–Best–Final 三路 |
+| 发现 | 小数据 regime 下 SFT 主要改风格；能力提升需更大数据与更严评测 |
 | 报告 | model/data/hyperparams/hardware/curve/eval/badcase/limits 七要素 |
 :::
 

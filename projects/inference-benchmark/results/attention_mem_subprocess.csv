@@ -1,0 +1,5 @@
+impl,seq_len,batch,heads,head_dim,dtype,theoretical_intermediate_mb,process_peak_rss_mb,note
+sdpa,512,1,4,64,float32,0.0,174.3,进程 peak RSS（含 Python/PyTorch 运行时开销），非纯张量内存
+naive,512,1,4,64,float32,8.0,186.3,进程 peak RSS（含 Python/PyTorch 运行时开销），非纯张量内存
+sdpa,2048,1,4,64,float32,0.0,185.4,进程 peak RSS（含 Python/PyTorch 运行时开销），非纯张量内存
+naive,2048,1,4,64,float32,128.0,310.3,进程 peak RSS（含 Python/PyTorch 运行时开销），非纯张量内存

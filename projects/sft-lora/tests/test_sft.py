@@ -87,15 +87,18 @@ class TestConfigAndSchedule:
 
 
 class TestTrainSmoke:
-    def test_train_records_logs(self, tokenizer, tiny_cfg):
+    def test_train_records_logs_and_best_checkpoint(self, tokenizer, tiny_cfg, tmp_path):
         model = apply_lora(load_base_model(tiny_cfg), tiny_cfg)
         samples = load_messages(TRAIN)[:8]
         val = load_messages(VAL)[:3]
-        log = train(tokenizer, model, samples, val, tiny_cfg)
+        log = train(tokenizer, model, samples, val, tiny_cfg, checkpoint_dir=tmp_path)
         assert len(log.steps) == tiny_cfg.max_steps
         assert all(row["grad_norm"] >= 0 for row in log.steps)
         assert len(log.val_losses) >= 1
         assert all(isinstance(row["val_loss"], float) for row in log.val_losses)
+        assert log.best_step is not None
+        assert log.best_val_loss == min(row["val_loss"] for row in log.val_losses)
+        assert (tmp_path / "adapter_best" / "adapter_config.json").exists()
 
 
 class TestEvaluateAndReport:
@@ -130,7 +133,8 @@ class TestEvaluateAndReport:
         log = train(tokenizer, model, load_messages(TRAIN)[:4], load_messages(VAL)[:2], tiny_cfg)
         write_losses_csv(log, tmp_path / "losses.csv")
         assert (tmp_path / "losses.csv").exists()
-        md = build_experiment_md(tiny_cfg, log, 5.0, 4.5, 48, 12, [], None, 12.3, tmp_path / "adapter")
+        md = build_experiment_md(tiny_cfg, log, 5.0, 4.6, 4.5, 48, 12, [], None, 12.3, tmp_path / "adapter")
         for section in ["实验设置", "训练曲线", "评测对比", "Bad cases", "Limitations"]:
             assert section in md
-        assert "adapter" in md
+        assert "Base / Best / Final" in md
+        assert "best" in md

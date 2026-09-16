@@ -19,15 +19,14 @@
 **真实结果**（Qwen2.5-0.5B，CPU 469s）：
 
 ```
-train loss：3.8878 → 1.4638
-val loss：2.8671@30 → 2.7344@60（best）→ 2.9813@90 → 3.2416@120 → 3.2923@150
-held-out loss：3.7565 → 3.2923（Δ -0.4641）
-QA harness：F1 20.2% → 24.0%（+3.8pt）；EM 0% → 0%
+train loss：3.8878 → 1.4638（final@150）
+val loss：2.8677@30 → 2.7301@60（best，已保存 adapter_best）→ 3.2947@150（adapter_final）
+三路评测：held-out loss base 3.7565 / best 2.7301 / final 3.2947；QA F1 base 20.2% / best 24.4% / final 22.5%；EM 全 0
 bad cases：20 条（全部 partial）
 ```
 
 **核心教学结论**：
-1. train loss 降 ≠ 变好（val 从 step 60 起上升）→ 保留「保存 final 而非 best」的**刻意反例**；
+1. train loss 降 ≠ 变好（val 从 step 60 起上升）→ 本轮已实现 **best checkpoint 保存**，final 作为反例保留，并做 Base/Best/Final 三路对比；
 2. SFT 教格式不教知识（真实输出对比：风格迁移成功、内容仍常错）；
 3. 公平对比三前提：同一 held-out / 同一模板 / 干净加载的 base（PEFT 就地注入陷阱）。
 
@@ -38,12 +37,12 @@ bad cases：20 条（全部 partial）
 | 工具 | timer（CUDA Event/同步）、profiler 算子表、attention benchmark、compile 对比、serving 压测客户端 |
 | 报告 | results/*.csv + analysis.md 自动生成（含「GPU 预期行为（待验证）」与「未执行清单」） |
 | vLLM | runbook（命令 + 四问 + 记录模板）→ **NOT EXECUTED ON CUDA** |
-| 测试 | **10/10 通过** |
+| 测试 | **15/15 通过** |
 
 **真实结果**（CPU）：
 
 ```
-Attention (seq 2048)：naive 29.24 ms/128.2MB → SDPA 10.89 ms/3.5MB（2.7× 快 / 37× 省内存）
+Attention (seq 2048)：naive 19.57 ms → SDPA 7.20 ms；内存口径为「理论中间张量 128MB→0 + 独立子进程 RSS（310.3→185.4MB）」（见 JOB_READY_CORRECTNESS_AUDIT）
 伸缩性：naive 1024→2048 = 3.53×（理论 4×）
 Profiler：bmm 66.4% + softmax 23.3% = 90% 时间
 torch.compile：0.249 → 0.345 ms（0.72×，更慢，编译 3.3s）→ 「compile 不是信仰」
@@ -69,7 +68,7 @@ Serving 客户端（mock）：并发 4 时 TPOT 不变、TTFT 4.4→851ms（排�
 ## 四、Known Limitations（本批 + 全 Track）
 
 1. **生成模型统一为 0.5B**：生成质量受模型规模限制；评测/工程方法论不受影响；
-2. **SFT 实验保存 final 而非 best**：刻意反例；读者可改为 best checkpoint 复现更优结果；
+2. **SFT 已实现 best/final 双 checkpoint**；三路对比显示本 run 中 best val 同时是 best QA F1（单次观察，不构成普遍规律）；
 3. **CUDA 相关实验未执行**：profiling（GPU 侧）、vLLM benchmark、Triton kernel——命令与模板齐全，NOT EXECUTED 标注一致；
 4. **RAG faithfulness 未自动化**：当前靠引用校验 + 人工检查；
 5. **单种子实验**：SFT 未做多 seed 均值；检索评测集 22 条（doc 级）；

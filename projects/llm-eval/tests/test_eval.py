@@ -193,6 +193,44 @@ def mock_server():
     server.shutdown()
 
 
+class TestCachePerTask:
+    def test_cache_hits_not_leaked_across_tasks(self, tmp_path):
+        import asyncio
+        # 同一任务跑三遍：第 2、3 遍各自应报告 6 次命中（若用累计值，第 3 遍会显示 12）
+        cfg = _cfg(tmp_path, tasks=["c3"], limit=6)
+        adapter = MockAdapter(policy=lambda p: "A")
+        run = asyncio.run(evaluate_tasks(adapter, [get_task("c3"), get_task("c3"), get_task("c3")], cfg))
+        assert run.tasks[0].cache_hits == 0   # 冷缓存
+        assert run.tasks[1].cache_hits == 6   # 全部命中第 1 遍
+        assert run.tasks[2].cache_hits == 6   # 不累计（旧实现会显示 12）
+
+    def test_cache_hits_counted_per_task_on_second_run(self, tmp_path):
+        import asyncio
+        cfg = _cfg(tmp_path, tasks=["c3", "xcopa"], limit=6)
+        _ = asyncio.run(evaluate_tasks(MockAdapter(policy=lambda p: "A"),
+                                       [get_task("c3"), get_task("xcopa")], cfg))
+        adapter2 = MockAdapter(policy=lambda p: "A")
+        run2 = asyncio.run(evaluate_tasks(adapter2, [get_task("c3"), get_task("xcopa")], cfg))
+        assert adapter2.calls == 0
+        assert run2.tasks[0].cache_hits == 6
+        assert run2.tasks[1].cache_hits == 6
+
+
+class TestAdapterLifecycle:
+    def test_aclose_called_when_available(self, tmp_path):
+        import asyncio
+
+        class ClosingAdapter(MockAdapter):
+            closed = False
+
+            async def aclose(self):
+                ClosingAdapter.closed = True
+
+        cfg = _cfg(tmp_path, tasks=["c3"], limit=2)
+        asyncio.run(evaluate_tasks(ClosingAdapter(policy=lambda p: "A"), [get_task("c3")], cfg))
+        assert ClosingAdapter.closed is True
+
+
 class TestOpenAIAdapter:
     def test_chat_completions_roundtrip(self, mock_server):
         import asyncio

@@ -216,11 +216,13 @@ HuggingFace（26）
    ↓
 LLM Evaluation（23）
    ↓
-Retrieval / RAG（下一批）
+Retrieval / RAG（第 28 章 ✅）
    ↓
-FastAPI / Docker（下一批）
+FastAPI / Docker（第 29 章 ✅）
    ↓
-Capstone 1（第 27 章 ✅）/ Capstone 2（下一批）
+Capstone 1（第 27 章 ✅）
+   ↓
+Capstone 2：RAG Service（第 29 章 ✅）
    ↓
 开始投递</code></pre>
 <p>之后再按方向分叉：</p>
@@ -346,7 +348,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <tr>
 <td><strong>31 Capstone 4 · Profiling Lab</strong></td>
 <td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a></td>
-<td>CPU 实测：SDPA 快 2.7×/省内存 37×；compile 反例 0.72×；算子表 bmm 66%；10 个测试；CUDA 部分 NOT EXECUTED</td>
+<td>CPU 实测：SDPA 快 2.7×、理论中间张量 128MB→0、子进程 RSS 差值≈125MB；compile 反例 0.76×；算子表 bmm 72%；15 个测试；CUDA NOT EXECUTED</td>
 </tr>
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对你自己的项目同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>

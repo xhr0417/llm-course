@@ -75,22 +75,29 @@ def main() -> int:
     base_val = eval_loss(base_cmp, tokenizer, val_samples, cfg.max_length)
     logger.info("base held-out loss：%.4f", base_val)
 
-    # 训练
+    # 训练（每次 val 改善保存 adapter_best）
     model = apply_lora(load_base_model(cfg), cfg)
-    log = train(tokenizer, model, train_samples, val_samples, cfg)
-    adapter_dir = out_dir / "adapter"
+    log = train(tokenizer, model, train_samples, val_samples, cfg, checkpoint_dir=out_dir)
+    adapter_dir = out_dir / "adapter_final"
     model.save_pretrained(adapter_dir)
     cfg.save(adapter_dir / "config.json")
-    logger.info("adapter 已保存：%s", adapter_dir)
+    adapter_best_dir = out_dir / "adapter_best"
+    logger.info("final adapter 已保存：%s", adapter_dir)
+    logger.info("best  adapter：%s（val %.4f @step %s）", adapter_best_dir,
+                log.best_val_loss, log.best_step)
 
     if cfg.merge:
         merge_adapter(cfg.base_model, str(adapter_dir), str(out_dir / "merged"), dtype="float16")
 
-    # tuned 评测
+    # 三路评测：Base / Best / Final
     from peft import PeftModel
     tuned = PeftModel.from_pretrained(load_base_model(cfg), adapter_dir)
     tuned_val = eval_loss(tuned, tokenizer, val_samples, cfg.max_length)
-    logger.info("tuned held-out loss：%.4f（Δ=%+.4f）", tuned_val, tuned_val - base_val)
+    best_val = log.best_val_loss
+    if adapter_best_dir.exists() and log.best_step not in (None, cfg.max_steps):
+        tuned_best = PeftModel.from_pretrained(load_base_model(cfg), adapter_best_dir)
+        best_val = eval_loss(tuned_best, tokenizer, val_samples, cfg.max_length)
+    logger.info("held-out：base %.4f | best %.4f | final %.4f", base_val, best_val, tuned_val)
 
     # 生成对比 + bad case
     questions = [r["question"] for r in eval_rows]
@@ -104,29 +111,41 @@ def main() -> int:
                              "base": ba, "tuned": ta, "error_type": err})
     export_badcases(badcases, out_dir / "badcases.jsonl")
 
-    # harness（可选）
+    # harness（可选）：Base / Best / Final 三路
     eval_table = None
     if args.run_harness:
         base_res = run_harness(cfg.base_model, args.eval_qa.resolve(), out_dir / "eval_base", None)
-        tuned_res = run_harness(cfg.base_model, args.eval_qa.resolve(), out_dir / "eval_tuned", str(adapter_dir.resolve()))
-        if base_res and tuned_res:
+        best_res = None
+        if adapter_best_dir.exists():
+            best_res = run_harness(cfg.base_model, args.eval_qa.resolve(), out_dir / "eval_best",
+                                   str(adapter_best_dir.resolve()))
+        final_res = run_harness(cfg.base_model, args.eval_qa.resolve(), out_dir / "eval_final",
+                                str(adapter_dir.resolve()))
+        if base_res and final_res:
             bm = base_res["tasks"][0]["metrics"]
-            tm = tuned_res["tasks"][0]["metrics"]
+            fm = final_res["tasks"][0]["metrics"]
+            best_metrics = best_res["tasks"][0]["metrics"] if best_res else {"em": float("nan"), "f1": float("nan")}
             eval_table = [
-                {"metric": "QA EM", "base": f"{bm['em'] * 100:.1f}%", "tuned": f"{tm['em'] * 100:.1f}%",
-                 "delta": f"{(tm['em'] - bm['em']) * 100:+.1f}pt"},
-                {"metric": "QA F1", "base": f"{bm['f1'] * 100:.1f}%", "tuned": f"{tm['f1'] * 100:.1f}%",
-                 "delta": f"{(tm['f1'] - bm['f1']) * 100:+.1f}pt"},
+                {"metric": "QA EM",
+                 "base": f"{bm['em'] * 100:.1f}%",
+                 "best": f"{best_metrics['em'] * 100:.1f}%" if best_res else "—",
+                 "final": f"{fm['em'] * 100:.1f}%"},
+                {"metric": "QA F1",
+                 "base": f"{bm['f1'] * 100:.1f}%",
+                 "best": f"{best_metrics['f1'] * 100:.1f}%" if best_res else "—",
+                 "final": f"{fm['f1'] * 100:.1f}%"},
             ]
             (out_dir / "harness_results.json").write_text(json.dumps(
-                {"base": base_res, "tuned": tuned_res}, ensure_ascii=False, indent=2), encoding="utf-8")
+                {"base": base_res, "best": best_res, "final": final_res}, ensure_ascii=False, indent=2),
+                encoding="utf-8")
 
     write_losses_csv(log, out_dir / "losses.csv")
-    report = build_experiment_md(cfg, log, base_val, tuned_val, len(train_samples), len(val_samples),
-                                 badcases, eval_table, time.time() - t_start, adapter_dir)
+    report = build_experiment_md(cfg, log, base_val, best_val, tuned_val, len(train_samples),
+                                 len(val_samples), badcases, eval_table,
+                                 time.time() - t_start, out_dir)
     (out_dir / "experiment.md").write_text(report, encoding="utf-8")
     print(report)
-    print(f"产物：{out_dir}/adapter/、losses.csv、badcases.jsonl、experiment.md")
+    print(f"产物：{out_dir}/adapter_best/、adapter_final/、losses.csv、badcases.jsonl、experiment.md")
     return 0
 
 

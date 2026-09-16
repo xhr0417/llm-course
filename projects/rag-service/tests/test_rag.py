@@ -9,6 +9,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from conftest import RUN_MODEL_TESTS
+
+requires_models = pytest.mark.skipif(not RUN_MODEL_TESTS,
+                                     reason="模型依赖测试（设置 RUN_MODEL_TESTS=1 运行）")
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -129,6 +134,7 @@ def embedder():
     return Embedder("BAAI/bge-small-zh-v1.5")
 
 
+@requires_models
 class TestEmbedderReal:
     def test_related_closer_than_unrelated(self, embedder):
         q = embedder.encode(["LoRA 怎么微调大模型"], is_query=True)[0]
@@ -142,6 +148,7 @@ def reranker():
     return CrossEncoderReranker("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1")
 
 
+@requires_models
 class TestRerankerReal:
     def test_relevant_pair_scores_higher(self, reranker):
         scores = reranker.score("什么是过拟合", [
@@ -163,6 +170,7 @@ def pipeline(tmp_path_factory, embedder, reranker):
     return p
 
 
+@requires_models
 class TestPipeline:
     def test_ingest_sample_corpus(self, pipeline):
         assert pipeline._doc_count == 3
@@ -203,6 +211,7 @@ class TestPipeline:
         assert len(p2.chunks) == len(p1.chunks)
 
 
+@requires_models
 class TestAPI:
     def test_health(self, pipeline):
         from fastapi.testclient import TestClient

@@ -1,8 +1,8 @@
 {
-  "eager_ms": 0.249,
-  "compiled_ms": 0.345,
-  "compile_time_s": 3.3,
-  "speedup": 0.721,
+  "eager_ms": 0.253,
+  "compiled_ms": 0.332,
+  "compile_time_s": 1.8,
+  "speedup": 0.762,
   "outputs_match": true,
   "note": "compiled 更慢（常见于小模型/CPU/形状多变的场景）"
 }

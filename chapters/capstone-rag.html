@@ -54,7 +54,7 @@
 </tr>
 <tr>
 <td>评测</td>
-<td>检索侧 4 组对照指标 + 生成侧失败分类</td>
+<td>检索侧 4 组对照（Hit@k / Recall@k / MRR / nDCG@k，doc 级）+ 生成侧失败分类</td>
 </tr>
 <tr>
 <td>服务</td>
@@ -78,6 +78,7 @@ query：   BM25 top-20  ┐
 <thead>
 <tr>
 <th>模式</th>
+<th>Hit@10</th>
 <th>Recall@10</th>
 <th>MRR</th>
 <th>nDCG@10</th>
@@ -86,23 +87,27 @@ query：   BM25 top-20  ┐
 <tbody><tr>
 <td>BM25</td>
 <td>100.0%</td>
-<td>0.8977</td>
-<td>0.9238</td>
+<td>100.0%</td>
+<td>0.9091</td>
+<td>0.9329</td>
 </tr>
 <tr>
 <td>Dense</td>
 <td>86.4%</td>
-<td>0.6333</td>
-<td>0.6889</td>
+<td>86.4%</td>
+<td>0.6417</td>
+<td>0.6991</td>
 </tr>
 <tr>
 <td>Hybrid（RRF）</td>
 <td>100.0%</td>
-<td>0.8447</td>
-<td>0.8843</td>
+<td>100.0%</td>
+<td>0.8485</td>
+<td>0.8884</td>
 </tr>
 <tr>
 <td><strong>Hybrid + Reranker</strong></td>
+<td><strong>100.0%</strong></td>
 <td><strong>100.0%</strong></td>
 <td><strong>0.9318</strong></td>
 <td><strong>0.9497</strong></td>
@@ -209,7 +214,7 @@ Dockerfile 内容为标准 <code>python:3.9-slim</code> + requirements + uvicorn
 </tr>
 <tr>
 <td>实测</td>
-<td>reranker 收益最大（MRR 0.845→0.932）；检索 6/6、生成 4/6</td>
+<td>reranker 收益最大（MRR 0.849→0.932，超越 BM25 的 0.909）；检索 6/6、生成 4/6</td>
 </tr>
 <tr>
 <td>服务</td>

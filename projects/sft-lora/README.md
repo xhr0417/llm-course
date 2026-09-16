@@ -26,27 +26,30 @@ pytest -q   # 14 passed
 
 ## 真实实验结果（本机 CPU，Qwen2.5-0.5B-Instruct）
 
-**训练**（48 train / 12 val，response-only loss，150 步，用时 469s）：
+**训练**（48 train / 12 val，response-only loss，150 步，CPU）：
 
 ```
-train loss：3.8878 → 1.4638
+train loss：3.8878 → 1.4638（本 run）
 LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%
 
-val loss 曲线：
-  step  30：2.8671
-  step  60：2.7344   ← 最佳（best checkpoint 应存这里）
-  step  90：2.9813
-  step 120：3.2416
-  step 150：3.2923   ← 最终（已过拟合）
+val loss 曲线（本次运行）：
+  step  30：2.8677
+  step  60：2.7301   ← best（已保存为 adapter_best/）
+  step  90：2.9822
+  step 120：3.2427
+  step 150：3.2947   ← final（adapter_final/，过拟合反例）
 ```
 
-**评测对比**（同一 held-out 集 + 同一 harness）：
+**评测对比**（同一 held-out + 同一 harness，Base / Best / Final 三路）：
 
-| 指标 | Base | SFT (LoRA) | Δ |
+| 指标 | Base | Best (step 60) | Final (step 150) |
 | --- | --- | --- | --- |
-| held-out response-only loss | 3.7565 | 3.2923 | **-0.4641** |
-| QA F1（Capstone 1 harness，20 题） | 20.2% | **24.0%** | **+3.8pt** |
-| QA EM | 0.0% | 0.0% | +0.0pt |
+| held-out response-only loss | 3.7565 | **2.7301** | 3.2947 |
+| QA F1（Capstone 1 harness，20 题） | 20.2% | **24.4%** | 22.5% |
+| QA EM | 0.0% | 0.0% | 0.0% |
+
+**本 run 的观察**：best val loss 的 checkpoint 同时也是 QA F1 最高点（24.4%）。
+注意这只是**单次运行的经验观察**——val loss 与 downstream 指标不一致是常见现象，不能假设二者永远一致（报告脚本会同时打印三者，就是为了检查这一点）。
 
 **生成风格对比**（真实输出）：
 
@@ -58,11 +61,15 @@ Q: 用一句话解释什么是早停。
 
 tuned 输出明显更接近训练数据的「一句话、直接回答」风格——但**内容仍然经常错误**（上例中把早停解释错了）。
 
-## 三个关键结论（真实数据支持的）
+## 四个关键结论（真实数据支持的）
 
-1. **train loss ↓ ≠ 模型变好**：val loss 从 step 60 起持续上升——过拟合。正确做法是保存 best checkpoint / early stopping；本实验保存了**最终** checkpoint，是一个刻意保留的反例（见 experiment.md 的 Limitations）；
-2. **SFT 教格式，不教知识**：48 条样本让回答更简洁（风格迁移成功，F1 +3.8pt），但内容正确性没有保障——知识注入需要数据规模或 RAG/更大模型；
-3. **公平对比的三个前提**（本项目全部满足）：同一 held-out、同一 prompt 模板、**干净加载的 base**（PEFT 就地注入陷阱：用训练时那个 model 变量当 base 会得到 Δ=0 的假结论）。
+1. **train loss ↓ ≠ 模型变好**：val loss 从 step 60 起持续上升（2.73 → 3.29）——过拟合；
+   本轮已实现 **best checkpoint 保存**（`adapter_best/`），final 作为反例保留（`adapter_final/`）；
+2. **val 最优 ≠ 必然 downstream 最优**（但本次运行一致）：best@60 的 QA F1（24.4%）> final@150（22.5%）。
+   这是单次运行的结果，不作为普遍规律——正确做法是每次都三路对比；
+3. **+4.2pt 是描述性结果**：在这 20 条 QA 上 best 相对 base 观察到 +4.2pt 的 F1 提升，但 **n=20 太小，
+   不足以单独证明稳定的能力提升**；能确定的是：train loss 下降、val 曲线过拟合、输出风格改变；
+4. **公平对比三前提**：同一 held-out / 同一 prompt 模板 / **干净加载的 base**（PEFT 就地注入陷阱）。
 
 ## 项目结构
 
@@ -82,7 +89,7 @@ sft-lora/
 │   ├── metrics_shim.py         # 与 llm-eval 同口径的 F1
 │   └── report.py               # experiment.md + losses.csv 自动生成
 ├── scripts/run_experiment.py   # 端到端（含调用 llm-eval harness）
-└── tests/test_sft.py           # 14 个测试
+└── tests/test_sft.py           # 14 个测试函数
 ```
 
 ## 与课程对应
@@ -96,4 +103,4 @@ sft-lora/
 
 ## 产物
 
-`outputs/sft_run/`：`adapter/`（LoRA 权重）、`losses.csv`、`badcases.jsonl`、`experiment.md`（自动报告）、`harness_results.json`（前后对比原始结果）。
+`outputs/sft_run/`：`adapter_best/`、`adapter_final/`（两份 LoRA 权重）、`losses.csv`、`badcases.jsonl`、`experiment.md`（自动报告）、`harness_results.json`（Base/Best/Final 三路原始结果 + eval_base/eval_best/eval_final 报告）。

@@ -103,6 +103,7 @@ async def _generate_missing(adapter: ModelAdapter, prompts: list[str], cfg: Eval
 async def evaluate_task(adapter: ModelAdapter, task: EvalTask, cfg: EvalConfig,
                         cache: ResponseCache | None) -> TaskReport:
     t0 = time.time()
+    hits_before = cache.hits if cache else 0
     report = TaskReport(task=task.name, n=0)
     items = task.load()[: cfg.limit]
     report.n = len(items)
@@ -163,7 +164,7 @@ async def evaluate_task(adapter: ModelAdapter, task: EvalTask, cfg: EvalConfig,
     for k in report.metrics:
         report.metrics[k] = report.metrics[k] / len(items) if items else float("nan")
     if cache:
-        report.cache_hits = cache.hits
+        report.cache_hits = cache.hits - hits_before  # 只统计本 task 的命中（多 task 顺序评测不串账）
     report.duration_s = time.time() - t0
     primary = report.metrics.get(task.primary_metric, float("nan"))
     logger.info("[%s] 完成：%s", task.name,
@@ -185,7 +186,11 @@ async def evaluate_tasks(adapter: ModelAdapter, tasks: list[EvalTask], cfg: Eval
     finally:
         if cache:
             cache.close()
-        adapter.close()
+        aclose = getattr(adapter, "aclose", None)
+        if aclose is not None:
+            await aclose()          # 异步适配器：在事件循环内正确关闭连接池
+        else:
+            adapter.close()         # 同步适配器：普通 close
     run.duration_s = time.time() - t0
     run.finished_at = datetime.now().isoformat(timespec="seconds")
     return run

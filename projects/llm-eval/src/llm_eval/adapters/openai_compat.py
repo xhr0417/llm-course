@@ -63,11 +63,12 @@ class OpenAICompatibleAdapter(ModelAdapter):
         import asyncio
         return asyncio.run(self.agenerate(prompts))
 
-    def close(self) -> None:
+    async def aclose(self) -> None:
+        """在事件循环内关闭 AsyncClient（runner 会 await 本方法）。"""
         if self._client is not None:
-            import asyncio
-            try:
-                asyncio.get_event_loop().run_until_complete(self._client.aclose())
-            except RuntimeError:
-                pass
+            await self._client.aclose()
             self._client = None
+
+    def close(self) -> None:
+        """同步兜底：无事件循环可用时不残留未关闭连接（进程退出时由 GC 回收）。"""
+        self._client = None

@@ -32,8 +32,8 @@ def hardware_info() -> str:
     return f"{platform.system()} {platform.machine()} | Python {sys.version.split()[0]} | torch {torch.__version__} | {gpu}"
 
 
-def build_experiment_md(cfg: SFTConfig, log: TrainLog, base_val: float, tuned_val: float,
-                        n_train: int, n_val: int, badcases: list[dict],
+def build_experiment_md(cfg: SFTConfig, log: TrainLog, base_val: float, best_val: float,
+                        final_val: float, n_train: int, n_val: int, badcases: list[dict],
                         eval_table: list[dict] | None, elapsed_s: float,
                         adapter_dir: Path) -> str:
     lines = [
@@ -59,17 +59,25 @@ def build_experiment_md(cfg: SFTConfig, log: TrainLog, base_val: float, tuned_va
         "",
         "完整曲线见 `losses.csv`。",
         "",
-        "## 3. 评测对比（同一套 held-out）",
+        f"best checkpoint：val loss {log.best_val_loss:.4f} @step {log.best_step}（adapter_best/）；"
+        f"final checkpoint：val loss {final_val:.4f} @step {cfg.max_steps}（adapter_final/）。",
         "",
-        "| 指标 | Base | SFT (LoRA) | Δ |",
+        "## 3. 评测对比（同一套 held-out；Base / Best / Final 三路）",
+        "",
+        "| 指标 | Base | Best (step " + str(log.best_step) + ") | Final (step " + str(cfg.max_steps) + ") |",
         "| --- | --- | --- | --- |",
-        f"| held-out response-only loss | {base_val:.4f} | {tuned_val:.4f} | {tuned_val - base_val:+.4f} |",
+        f"| held-out response-only loss | {base_val:.4f} | {best_val:.4f} | {final_val:.4f} |",
     ]
     if eval_table:
         for row in eval_table:
-            lines.append(f"| {row['metric']} | {row['base']} | {row['tuned']} | {row['delta']} |")
+            lines.append(f"| {row['metric']} | {row['base']} | {row['best']} | {row['final']} |")
     else:
         lines.append("| QA harness（EM/F1） | — | — | 未运行（--run-harness 开启） |")
+    lines += [
+        "",
+        "> **注意**：best val loss 的 checkpoint **不保证**同时是 downstream 指标（QA F1/EM）的最佳点——"
+        "本表就是用来检验这一点的；如果出现不一致，如实记录（这本身就是 experiment design 的常见现象）。",
+    ]
     lines += [
         "",
         "## 4. Bad cases（生成侧）",

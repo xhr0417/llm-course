@@ -38,7 +38,7 @@
 <div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>Infra 岗的面试从「你用过什么工具」开始，但你真正要证明的是：<strong>给你一个慢的系统，你能定位到哪一行代码、为什么慢、怎么证明改了之后更快</strong>。这一章交付一整套可复现的 profiling / benchmark 工具箱。</p>
 </div></div>
 <p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a>
-<strong>运行状态</strong>：CPU 实验全部实测 ✅；<strong>CUDA / vLLM 部分 NOT EXECUTED ON CUDA</strong> ⚠️（命令与模板齐全）。</p>
+<strong>运行状态</strong>：CPU 实验全部实测 ✅（latency/理论 footprint/子进程 RSS 三口径分离）；<strong>CUDA / vLLM 部分 NOT EXECUTED ON CUDA</strong> ⚠️（命令与模板齐全）。</p>
 <div class="box box-warning"><div class="box-title">⚠️ AI Infra Track 说明</div><div class="box-body"><p>本章属于 <strong>AI Infra / ML Systems 方向</strong>（Track C）。Track A/B 的同学了解即可——面试问到 profiling 与 serving 指标时，至少能讲清原理与指标含义。</p>
 </div></div>
 <h2>31.1 工具链与验收</h2>
@@ -63,7 +63,7 @@
 <tr>
 <td>Attention benchmark</td>
 <td>naive vs SDPA 差多少？</td>
-<td>✅ CPU 实测（含内存）</td>
+<td>✅ CPU 实测（延迟 + 理论 footprint + 子进程 RSS）</td>
 </tr>
 <tr>
 <td><code>torch.compile</code></td>
@@ -129,44 +129,55 @@ dt_ms = start.elapsed_time(end)</code></pre>
 <th>naive</th>
 <th>SDPA</th>
 <th>加速比</th>
-<th>峰值内存（naive → SDPA）</th>
+<th>naive 理论中间张量</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>128</td>
-<td>0.22 ms</td>
-<td>0.11 ms</td>
-<td>2.0×</td>
-<td>2.7 → 0.3 MB</td>
+<td>0.23 ms</td>
+<td>0.09 ms</td>
+<td>2.6×</td>
+<td>0.5 MB</td>
 </tr>
 <tr>
 <td>512</td>
-<td>3.03 ms</td>
-<td>1.16 ms</td>
-<td>2.6×</td>
-<td>29.0 → 1.8 MB</td>
+<td>2.35 ms</td>
+<td>0.77 ms</td>
+<td>3.1×</td>
+<td>8.0 MB</td>
 </tr>
 <tr>
 <td>1024</td>
-<td>8.29 ms</td>
-<td>5.20 ms</td>
-<td>1.6×</td>
-<td>32.0 → 9.0 MB</td>
+<td>5.77 ms</td>
+<td>2.02 ms</td>
+<td>2.9×</td>
+<td>32.0 MB</td>
 </tr>
 <tr>
 <td>2048</td>
-<td><strong>29.24 ms</strong></td>
-<td><strong>10.89 ms</strong></td>
+<td><strong>19.57 ms</strong></td>
+<td><strong>7.20 ms</strong></td>
 <td><strong>2.7×</strong></td>
-<td><strong>128.2 → 3.5 MB</strong></td>
+<td><strong>128.0 MB</strong></td>
 </tr>
 </tbody></table>
 <p>两个可验证的事实：</p>
 <ol>
-<li><strong>伸缩性</strong>：naive 1024→2048 延迟 ×3.53（理论 O(n²) = ×4），SDPA ×2.09；</li>
-<li><strong>内存</strong>：seq=2048 时 naive 物化 <code>[B,H,S,S]</code> 用了 128 MB，SDPA 只用 3.5 MB（≈37×）——这就是第 19 章「IO-aware」在数字上的样子。</li>
+<li><strong>伸缩性</strong>：naive 1024→2048 延迟 ×3.39（纯 attention 理论 O(n²) ⇒ 接近 ×4），SDPA ×3.56；</li>
+<li><strong>两种内存口径，互相印证</strong>：<ul>
+<li>「理论中间张量」= naive 的 scores+probs 同时存活的估算 <code>2×B×H×S²×bytes</code>（seq=2048 时 <strong>128.0 MB</strong>），SDPA 不物化 S×S（估计 0）；</li>
+<li>「进程 peak RSS」用<strong>独立子进程</strong>测量（<code>python -m ibench.mem_worker</code>，含 Python/PyTorch 运行时开销）：seq=2048 时 sdpa <strong>185.4 MB</strong> vs naive <strong>310.3 MB</strong>，差值 ≈ 125 MB ≈ 理论 footprint。</li>
+</ul>
+</li>
 </ol>
-<p>⚠️ 这是 <strong>CPU 数字</strong>：GPU 上 SDPA 会 dispatch 到 FlashAttention 类后端，差距通常更大，但必须<strong>在你的目标硬件上用本仓库脚本实测</strong>后再引用。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 口径纪律（本轮修正）</div><div class="box-body"><p><code>resource.getrusage().ru_maxrss</code> 是<strong>整个进程生命周期的 high-water mark</strong>，不能拿「跑前跑后相减」当作单个 case 的 peak memory。本轮已修正：</p>
+<ul>
+<li>CPU 只报告 <strong>实测 latency + 理论中间张量 footprint</strong>，外加<strong>独立子进程</strong>的进程 peak RSS（含运行时开销，明确标注）；</li>
+<li>CUDA 显存必须用 <code>reset_peak_memory_stats → max_memory_allocated</code>，且区分 allocated / reserved——本机无 GPU，<strong>NOT EXECUTED ON CUDA</strong>；</li>
+<li>旧的「37× 省内存」表述已删除（它来自不可靠的 ru_maxrss delta）。</li>
+</ul>
+</div></div>
+<p>⚠️ 这是 <strong>CPU 数字</strong>：GPU 上 SDPA 会 dispatch 到 FlashAttention 类后端，通常更快，但必须<strong>在你的目标硬件上用本仓库脚本实测</strong>后再引用（<code>--device cuda</code> 会在无 CUDA 时直接报错退出，不静默回退）。</p>
 <h2>31.5 torch.compile：不是「一开就快」</h2>
 <p>真实结果（CPU，256×256 MLP 融合场景）：</p>
 <pre><code class="lang-">eager 0.249 ms → compiled 0.345 ms（0.72×，更慢）
@@ -218,14 +229,14 @@ dt_ms = start.elapsed_time(end)</code></pre>
 <li><p><strong>为什么 batch ↑ → 吞吐 ↑ 但延迟可能 ↑？</strong>
 批量共享权重读取（吞吐↑），每步计算量与排队增加（延迟↑）——用本仓库 serving bench 在不同并发下验证。</p>
 </li>
-<li><p><strong>为什么长 prompt → TTFT ↑？</strong>
-prefill 计算量随 prompt 长度近似线性（第 20 章）；实验：固定输出长度、扫 prompt 长度。</p>
+<li><p><strong>为什么长 prompt → TTFT 通常 ↑？</strong>
+dense Transformer 的 prefill 同时包含随 S 近似线性增长的投影/MLP 项与随 S² 增长的 attention 项；在具体模型、硬件与长度区间内常观察到近似线性的 wall-clock 区间，但<strong>不要把 prefill 复杂度简化成 O(S)</strong>。实验：固定输出长度、扫 prompt 长度。</p>
 </li>
 <li><p><strong>为什么 output length 影响 decode 总时长？</strong>
-decode 每步成本近似固定（带宽受限），总时长正比输出长度；TPOT 应大致不随 output length 变化。</p>
+上下文长度变化不大的区间内，decode 单步成本可近似看作稳定（TPOT 近似不随 output length 变化），总时长正比输出长度；从更大尺度看，单步 attention / KV 读取成本会随当前 context length 增长。</p>
 </li>
 <li><p><strong>naive vs SDPA 差距为什么随 seq_len 拉大？</strong>
-naive 物化 <code>[B,H,S,S]</code>，HBM 流量 O(n²)；SDPA/FlashAttention 分块 + online softmax，流量降到 O(n²/M)。本仓库的延迟与内存数据（37×）就是量化证据。</p>
+naive 物化完整 <code>[B,H,S,S]</code> 中间矩阵（本机 seq=2048 理论 128 MB）；SDPA/FlashAttention 通过 tiling + online softmax 避免把完整 attention 矩阵写回 HBM、显著减少 HBM↔on-chip memory traffic。严格的 I/O 复杂度分析留给第 19 章；本章用延迟与两种内存口径做量化验证。</p>
 </li>
 </ol>
 <h2>31.8 报告的诚实标准</h2>
@@ -242,7 +253,7 @@ naive 物化 <code>[B,H,S,S]</code>，HBM 流量 O(n²)；SDPA/FlashAttention �
 <ol>
 <li>为什么 CUDA 计时必须 synchronize？不等会测到什么？</li>
 <li><code>torch.profiler</code> 报告里你会先看哪几列？发现 bmm 占比 66% 后你怎么优化？</li>
-<li>naive attention 和 SDPA 的本质差异是什么？为什么内存差 37 倍？</li>
+<li>naive attention 和 SDPA 的本质差异是什么？「理论中间张量」和「进程 peak RSS」两种内存口径分别说明什么？</li>
 <li>为什么 seq_len 翻倍延迟约 ×4？什么时候会偏离这个规律？</li>
 <li>torch.compile 什么时候有用、什么时候有害？怎么验证？</li>
 <li>TTFT 和 TPOT 分别由什么决定？并发上去之后哪个先恶化？</li>
@@ -266,7 +277,7 @@ naive 物化 <code>[B,H,S,S]</code>，HBM 流量 O(n²)；SDPA/FlashAttention �
 </tr>
 <tr>
 <td>Attention</td>
-<td>naive vs SDPA：实测 2.7× 延迟、37× 内存（CPU）</td>
+<td>naive vs SDPA：实测 2.7× 延迟；内存用理论 footprint + 子进程 RSS 双口径</td>
 </tr>
 <tr>
 <td>compile</td>

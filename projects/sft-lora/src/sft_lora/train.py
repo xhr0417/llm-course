@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import torch
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 class TrainLog:
     steps: list[dict] = field(default_factory=list)   # {step, loss, grad_norm, lr, t}
     val_losses: list[dict] = field(default_factory=list)  # {step, val_loss}
+    best_step: int | None = None
+    best_val_loss: float = float("inf")
 
     @property
     def first_loss(self) -> float:
@@ -37,7 +40,12 @@ def lr_at(step: int, cfg: SFTConfig) -> float:
 
 
 def train(tokenizer, model, train_samples: list[list[dict]], val_samples: list[list[dict]],
-          cfg: SFTConfig) -> TrainLog:
+          cfg: SFTConfig, checkpoint_dir=None) -> TrainLog:
+    """训练循环。
+
+    checkpoint_dir 提供时：每次 val loss 改善都会把当前 adapter 保存到
+    `<checkpoint_dir>/adapter_best`（best checkpoint），并在 TrainLog 记录 best_step。
+    """
     torch.manual_seed(cfg.seed)
     collate = make_collate(tokenizer, cfg.max_length)
     params = [p for p in model.parameters() if p.requires_grad]
@@ -75,6 +83,13 @@ def train(tokenizer, model, train_samples: list[list[dict]], val_samples: list[l
             vl = eval_loss(model, tokenizer, val_samples, cfg.max_length)
             log.val_losses.append({"step": step, "val_loss": vl})
             logger.info("step %d | val_loss %.4f", step, vl)
+            if vl < log.best_val_loss:
+                log.best_val_loss = vl
+                log.best_step = step
+                if checkpoint_dir is not None:
+                    best_dir = Path(checkpoint_dir) / "adapter_best"
+                    model.save_pretrained(best_dir)
+                    logger.info("✓ 新 best（val %.4f @step %d）→ %s", vl, step, best_dir)
 
     model.eval()
     logger.info("训练完成：%d 步，用时 %.1fs，loss %.4f → %.4f",

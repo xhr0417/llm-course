@@ -6,11 +6,11 @@
 {"messages": [{"role": "user", "content": "用一句话解释什么是权重衰减。"}, {"role": "assistant", "content": "权重衰减在损失中加入参数范数惩罚，抑制参数过大。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 batch size。"}, {"role": "assistant", "content": "batch size 是一次前向传播处理的样本数，影响显存与梯度噪声。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是梯度累积。"}, {"role": "assistant", "content": "梯度累积用小 batch 多次累积再更新一次，等效更大 batch。"}]}
-{"messages": [{"role": "user", "content": "用一句话解释什么是混合精度训练。"}, {"role": "assistant", "content": "混合精度用 FP16/BF16 做计算、FP32 做关键状态，省显存提速。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是混合精度训练。"}, {"role": "assistant", "content": "混合精度混合使用低精度与高精度：具体保留哪些高精度状态（master weights、optimizer states、scaler 等）取决于 AMP / optimizer / 分布式策略等实现。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是激活检查点。"}, {"role": "assistant", "content": "激活检查点不保存全部中间激活，反向时重算以省显存。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 LoRA。"}, {"role": "assistant", "content": "LoRA 冻结原权重，只训练一对低秩矩阵，用极少参数完成微调。"}]}
-{"messages": [{"role": "user", "content": "LoRA 的 rank 和 alpha 分别是什么？"}, {"role": "assistant", "content": "rank 决定低秩矩阵的秩，alpha 是缩放系数，通常取两倍 rank。"}]}
-{"messages": [{"role": "user", "content": "用一句话解释什么是量化。"}, {"role": "assistant", "content": "量化用更低比特表示权重或激活，省显存提速，代价是少量精度。"}]}
+{"messages": [{"role": "user", "content": "LoRA 的 rank 和 alpha 分别是什么？"}, {"role": "assistant", "content": "rank 决定低秩矩阵的秩；alpha 是缩放超参数，常见配置取 rank、2×rank 或其它值，需实验选择，没有统一固定比例。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是量化。"}, {"role": "assistant", "content": "量化用更低比特表示权重或激活以降低显存与带宽需求；精度影响取决于 bit width、算法、校准、模型与任务，可能很小也可能明显。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是知识蒸馏。"}, {"role": "assistant", "content": "知识蒸馏让小模型学习大模型的输出分布，迁移能力。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 KV Cache。"}, {"role": "assistant", "content": "KV Cache 缓存历史 token 的 K/V，避免解码时重复计算前缀。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 GQA。"}, {"role": "assistant", "content": "GQA 让多个查询头共享一组 KV 头，压缩 KV Cache 显存。"}]}
@@ -22,9 +22,9 @@
 {"messages": [{"role": "user", "content": "用一句话解释什么是 prefill。"}, {"role": "assistant", "content": "prefill 一次处理整个 prompt，产出首 token 的 logits 与全部 KV。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 Attention。"}, {"role": "assistant", "content": "Attention 让每个位置按相关性对其它位置加权求和，聚合上下文。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是多头注意力。"}, {"role": "assistant", "content": "多头注意力并行做多组注意力，从不同子空间捕捉关系。"}]}
-{"messages": [{"role": "user", "content": "用一句话解释什么是 RoPE。"}, {"role": "assistant", "content": "RoPE 用旋转把绝对位置编码为相对位置信息，支持外推。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 RoPE。"}, {"role": "assistant", "content": "RoPE 用旋转把位置编码成相对位置信息；原始模型超过训练上下文长度时并不天然保证可靠外推，长上下文通常配合位置插值/缩放等方法。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 RMSNorm。"}, {"role": "assistant", "content": "RMSNorm 只用均方根做归一化，比 LayerNorm 更省计算。"}]}
-{"messages": [{"role": "user", "content": "用一句话解释什么是 SwiGLU。"}, {"role": "assistant", "content": "SwiGLU 是带门控的 FFN 激活结构，比 ReLU 效果更好。"}]}
+{"messages": [{"role": "user", "content": "用一句话解释什么是 SwiGLU。"}, {"role": "assistant", "content": "SwiGLU 是带门控的 FFN 结构，在现代 Transformer 中被广泛采用；其参数配置与 ReLU MLP 不同，不能抽象成对所有任务必然更优。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是残差连接。"}, {"role": "assistant", "content": "残差连接把输入加到输出上，让梯度更容易回传。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是 Softmax。"}, {"role": "assistant", "content": "Softmax 把一组实数变成概率分布，指数放大大值并归一化。"}]}
 {"messages": [{"role": "user", "content": "用一句话解释什么是交叉熵损失。"}, {"role": "assistant", "content": "交叉熵衡量预测分布与真实分布的差距，是分类的标准损失。"}]}

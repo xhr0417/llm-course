@@ -42,24 +42,33 @@ curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
   -d '{"question": "LoRA 的优势是什么", "top_n": 3}'
 
 # ⑥ 测试
-pytest -q   # 27 passed
+pytest -q   # 39 个测试函数（39 个用例：test_rag 27 + test_eval_metrics 12）
 ```
 
 ## 真实运行记录（本机 CPU，课程内容语料：28 篇 / 841 chunks）
 
-### 检索评测（22 条人工标注查询，doc 级 ground truth）
+### 检索评测（22 条人工标注查询，doc 级 ground truth；指标定义已修正并重跑）
 
-| 模式 | Recall@10 | MRR | nDCG@10 |
-| --- | --- | --- | --- |
-| BM25（关键词） | **100.0%** | 0.8977 | 0.9238 |
-| Dense（bge-small-zh） | 86.4% | 0.6333 | 0.6889 |
-| Hybrid（RRF 融合） | **100.0%** | 0.8447 | 0.8843 |
-| Hybrid + Reranker（cross-encoder） | **100.0%** | **0.9318** | **0.9497** |
+指标定义（doc 级二值相关；chunk 排名先按 doc_id 去重）：
+
+- **Hit@k**：top-k 有没有命中至少一个相关文档；
+- **Recall@k**：top-k 命中的相关文档数 / 相关文档总数（多 gold 查询按分式计）；
+- **MRR**：第一条相关文档排名倒数；
+- **nDCG@k**：计入 top-k 中**所有**相关文档（不是只看第一条）。
+
+| 模式 | Hit@10 | Recall@10 | MRR | nDCG@10 |
+| --- | --- | --- | --- | --- |
+| BM25（关键词） | **100.0%** | **100.0%** | **0.9091** | 0.9329 |
+| Dense（bge-small-zh） | 86.4% | 86.4% | 0.6417 | 0.6991 |
+| Hybrid（RRF 融合） | **100.0%** | **100.0%** | 0.8485 | 0.8884 |
+| Hybrid + Reranker（cross-encoder） | **100.0%** | **100.0%** | **0.9318** | **0.9497** |
 
 **结论（真实数据）**：
-- 这个语料术语密集（GQA、loss mask、decontamination……），**BM25 不输向量**——这正是「dense retrieval 不是万能」的实证；
-- 单独 RRF 融合的 MRR 反而低于 BM25（向量结果把部分正确文档挤后了）；
-- **cross-encoder 精排把 MRR 从 0.845 提到 0.932**，是整条 pipeline 提升最大的一步。
+- 这个语料术语密集（GQA、loss mask、decontamination……），**BM25 不输向量**——「dense retrieval 不是万能」的实证；
+- 单独 RRF 融合的 MRR 低于 BM25（0.8485 < 0.9091：向量结果把部分正确文档挤后了）；
+- **cross-encoder 精排把 MRR 提到 0.9318**（超过 BM25），是整条 pipeline 提升最大的一步。
+
+> 修正记录：早期版本误将「命中即 1」的 **Hit@k** 标为 Recall@k，且用 chunk 级排名直接计算。本轮 Correctness Pass 已修正为 doc 级 + 标准定义并重跑（`eval/retrieval_results*.json` 为最新结果）。
 
 ### RAG 回答侧（Qwen2.5-0.5B-Instruct，6 题）
 
@@ -103,7 +112,9 @@ rag-service/
 │   ├── llm.py                 # Qwen 生成（含 token 流式）
 │   ├── pipeline.py            # 检索→融合→精排→生成 + 引用解析
 │   └── service_api.py         # FastAPI：/health /retrieve /chat /chat/stream(SSE)
-└── tests/test_rag.py          # 27 个测试用例
+├── src/rag_service/eval_metrics.py  # Hit@k / Recall@k / MRR / nDCG（标准定义）
+├── tests/test_rag.py                # RAG 主流程测试（27 个用例）
+└── tests/test_eval_metrics.py       # 指标定义测试（12 个用例）
 ```
 
 ## API 一览

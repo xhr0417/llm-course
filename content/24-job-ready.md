@@ -133,11 +133,13 @@ HuggingFace（26）
    ↓
 LLM Evaluation（23）
    ↓
-Retrieval / RAG（下一批）
+Retrieval / RAG（第 28 章 ✅）
    ↓
-FastAPI / Docker（下一批）
+FastAPI / Docker（第 29 章 ✅）
    ↓
-Capstone 1（第 27 章 ✅）/ Capstone 2（下一批）
+Capstone 1（第 27 章 ✅）
+   ↓
+Capstone 2：RAG Service（第 29 章 ✅）
    ↓
 开始投递
 ```
@@ -194,7 +196,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）
 | **27 Capstone 1 · Eval Harness** | [`projects/llm-eval/`](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval) | 128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；29 个测试用例通过 |
 | **28-29 Retrieval/RAG + Capstone 2** | [`projects/rag-service/`](https://github.com/xhr0417/llm-course/tree/main/projects/rag-service) | 841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；27 个测试用例通过 |
 | **30 Capstone 3 · SFT/LoRA** | [`projects/sft-lora/`](https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora) | 真实 SFT：train loss 3.89→1.46；val loss 过拟合曲线（best@60）；harness QA F1 20.2%→24.0%；14 个测试 |
-| **31 Capstone 4 · Profiling Lab** | [`projects/inference-benchmark/`](https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark) | CPU 实测：SDPA 快 2.7×/省内存 37×；compile 反例 0.72×；算子表 bmm 66%；10 个测试；CUDA 部分 NOT EXECUTED |
+| **31 Capstone 4 · Profiling Lab** | [`projects/inference-benchmark/`](https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark) | CPU 实测：SDPA 快 2.7×、理论中间张量 128MB→0、子进程 RSS 差值≈125MB；compile 反例 0.76×；算子表 bmm 72%；15 个测试；CUDA NOT EXECUTED |
 
 :::warning 数据纪律（对你自己的项目同样适用）
 只把**真实运行得到**的 loss / accuracy / latency / 显存写成「实验结果」。

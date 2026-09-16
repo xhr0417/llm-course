@@ -19,23 +19,28 @@ python scripts/run_serving_bench.py --mock
 python scripts/run_serving_bench.py --base-url http://localhost:8000 \
     --model Qwen/Qwen2.5-0.5B-Instruct --concurrency 1 8 32 --num-prompts 64
 
-pytest -q   # 10 passed
+pytest -q   # 15 passed
 ```
 
 ## 真实运行记录（CPU；`results/` 下有完整 CSV）
 
-### 1. Attention：naive vs SDPA（batch=1, heads=4, head_dim=64, fp32）
+### 1. Attention：naive vs SDPA（batch=1, heads=4, head_dim=64, fp32, device=cpu）
 
-| seq_len | naive | SDPA | 加速比 |
-| --- | --- | --- | --- |
-| 128 | 0.22 ms | 0.11 ms | 2.0× |
-| 512 | 3.03 ms | 1.16 ms | 2.6× |
-| 1024 | 8.29 ms | 5.20 ms | 1.6× |
-| 2048 | **29.24 ms** | **10.89 ms** | **2.7×** |
+| seq_len | naive 延迟 | SDPA 延迟 | naive 理论中间张量 | SDPA 理论中间张量 |
+| --- | --- | --- | --- | --- |
+| 128 | 0.23 ms | 0.09 ms | 0.5 MB | 0（不物化 S×S） |
+| 512 | 2.35 ms | 0.77 ms | 8.0 MB | 0 |
+| 1024 | 5.77 ms | 2.02 ms | 32.0 MB | 0 |
+| 2048 | **19.57 ms** | **7.20 ms** | **128.0 MB** | 0 |
 
-峰值内存（近似）差异更夸张：seq=2048 时 naive **128.2 MB** vs SDPA **3.5 MB**（约 37×）——naive 物化 `[B,H,S,S]`，SDPA 不物化（第 19 章 IO-aware 的直接证据）。
+**口径（重要）**：
+- 延迟为真实实测（device-aware 计时）；
+- 「理论中间张量」= naive 的 scores+probs 同时存活的估算 `2×B×H×S²×bytes`，**不是进程 peak memory**；
+- 独立子进程（`python -m ibench.mem_worker`）测得的**进程 peak RSS**（含 Python/PyTorch 运行时开销）：
+  seq=2048 时 sdpa **185.4 MB** vs naive **310.3 MB**，差值 ≈ 125 MB ≈ 理论 footprint 128 MB —— 两种口径相互印证；
+- CPU 不再声称「37× peak memory」；CUDA 显存只有真机执行 `reset_peak_memory_stats → max_memory_allocated` 后才会报告（本机 **NOT EXECUTED**）。
 
-伸缩性：naive 1024→2048 延迟 ×3.53（理论 O(n²) 为 ×4）；SDPA ×2.09。
+伸缩性：naive 1024→2048 延迟 ×3.39（纯 attention 理论 O(n²) ⇒ 接近 4×）。
 
 ### 2. Profiler（CPU 算子表，naive attention, seq=512）
 
@@ -72,16 +77,18 @@ eager 0.249 ms → compiled 0.345 ms（0.72×，更慢）
 inference-benchmark/
 ├── src/ibench/
 │   ├── timer.py            # CUDA Event / synchronize 的正确计时（含 CPU 回退）
-│   ├── attention_bench.py  # naive vs SDPA 伸缩曲线 + 峰值内存
+│   ├── attention_bench.py  # naive vs SDPA：延迟 + 理论 footprint（device-aware）
+│   ├── mem_worker.py       # 独立子进程 peak RSS 测量（口径分离）
 │   ├── profiler_lab.py     # torch.profiler → Top 算子表
 │   ├── compile_lab.py      # eager vs compiled（含编译耗时与输出一致性）
 │   ├── serving_bench.py    # OpenAI-compatible 流式客户端：TTFT/TPOT/tok/s/req/s
 │   └── report.py           # analysis.md 自动生成（含「GPU 预期行为（待验证）」）
 ├── scripts/run_cpu_labs.py        # CPU 三件套 → results/
+├── scripts/run_attention_bench.py # --device cpu|cuda 显式指定（cuda 不可用即报错）
 ├── scripts/run_serving_bench.py   # vLLM/Ollama/网关通用 + --mock 自检
 ├── docs/vllm_runbook.md           # vLLM 命令 + 必答分析问题 + 记录模板
 ├── results/                       # attention_bench.csv / profile_top_ops.csv / compile.json / serving_bench.csv / analysis.md
-└── tests/test_ibench.py           # 10 个测试
+└── tests/test_ibench.py           # 15 个测试函数
 ```
 
 ## 必答分析问题（第 31 章 10.7 的四问）
@@ -89,7 +96,7 @@ inference-benchmark/
 1. **batch ↑ → 吞吐 ↑ 但延迟可能 ↑**：共享权重读取提升吞吐，计算量与排队增加抬高延迟；
 2. **长 prompt → TTFT ↑**：prefill 计算随长度近似线性；
 3. **output 越长总时长越长**：decode 每步成本近似固定；
-4. **naive vs SDPA 差距随 seq 拉大**：naive 的 HBM 流量 O(n²)，SDPA/FA 降到 O(n²/M)——本仓库 CPU 实测比例与内存数据（37×）就是这个原理的量化证据。
+4. **naive vs SDPA 差距随 seq 拉大**：naive 物化 S×S 中间矩阵（本机 seq=2048 理论 128 MB），SDPA 通过 tiling + online softmax 避免写回完整矩阵——本仓库 CPU 的延迟与两种内存口径（理论 footprint / 子进程 RSS）互为印证。
 
 ## 与课程对应
 

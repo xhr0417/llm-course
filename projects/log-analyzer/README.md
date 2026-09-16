@@ -50,7 +50,7 @@ log-analyzer/
 | pathlib | 文件输入一律 `Path` |
 | logging | `cli.py` 中 `logger.info/error`，不用 print 调试 |
 | argparse | `--json / --warnings / --verbose` |
-| pytest | 14 个测试覆盖正常与失败路径 |
+| pytest | 14 个测试函数（14 个用例）覆盖正常与失败路径 |
 | 异常处理 | 文件不存在返回退出码 2；空日志返回 1 |
 
 ## 环境

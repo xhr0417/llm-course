@@ -7,3 +7,7 @@
 import os
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+# 模型依赖测试开关：CI 默认设置 RUN_MODEL_TESTS=0（不下载 bge/reranker）；
+# 本地默认 1（完整验证）。用法：RUN_MODEL_TESTS=0 pytest -q
+RUN_MODEL_TESTS = os.environ.get("RUN_MODEL_TESTS", "1") == "1"

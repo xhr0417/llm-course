@@ -3,65 +3,70 @@
     "mode": "bm25",
     "k": 10,
     "n": 22,
+    "hit@k": 1.0,
     "recall@k": 1.0,
-    "mrr": 0.8977272727272727,
-    "ndcg@k": 0.9237939008539894,
+    "mrr": 0.9090909090909091,
+    "ndcg@k": 0.9328963188311742,
     "per_query": [
       {
         "query": "online softmax 的分块修正公式是怎么推导的",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "24-job-ready.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md",
           "19-flash-attention.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "PagedAttention 是怎么解决显存碎片的",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "00-map.md"
-        ]
+          "00-map.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "GQA 和 MQA 的区别是什么",
         "gold": [
           "10-modern-llm.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "07-transformer.md",
-          "10-modern-llm.md",
-          "10-modern-llm.md",
-          "10-modern-llm.md",
           "10-modern-llm.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "pass@k 的无偏估计公式怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "23-llm-eval.md",
+        "ranked_docs": [
           "23-llm-eval.md",
           "12-rl-grpo.md",
-          "23-llm-eval.md",
-          "18-data-pipeline.md"
-        ]
+          "18-data-pipeline.md",
+          "27-capstone-eval.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chat Template 为什么会影响模型输出",
@@ -69,252 +74,277 @@
           "11-pretrain-sft.md",
           "26-huggingface.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "26-huggingface.md",
           "11-pretrain-sft.md",
-          "26-huggingface.md",
-          "11-pretrain-sft.md",
-          "26-huggingface.md"
-        ]
+          "27-capstone-eval.md",
+          "09-gpt.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "MinHash 怎么估计 Jaccard 相似度",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "18-data-pipeline.md",
-          "18-data-pipeline.md",
-          "18-data-pipeline.md",
-          "11-pretrain-sft.md",
           "11-pretrain-sft.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Ring AllReduce 的通信量怎么算",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md",
+        "ranked_docs": [
           "16-distributed.md",
           "00-map.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "什么是算术强度和 Roofline 模型",
         "gold": [
           "15-gpu.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "15-gpu.md",
-          "15-gpu.md",
+        "ranked_docs": [
           "15-gpu.md",
           "19-flash-attention.md",
-          "15-gpu.md"
-        ]
+          "26-huggingface.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "激活检查点为什么能节省显存",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md"
-        ]
+          "24-job-ready.md",
+          "12-build-llm-1.md",
+          "11-pytorch.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chinchilla 的最优参数与 token 配比是多少",
         "gold": [
           "14-scaling-laws.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "14-scaling-laws.md",
-          "14-scaling-laws.md",
-          "14-scaling-laws.md",
-          "14-scaling-laws.md",
+        "ranked_docs": [
           "14-scaling-laws.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "GRPO 的组相对优势是怎么计算的",
         "gold": [
           "12-rl-grpo.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "10-modern-llm.md"
-        ]
+          "10-modern-llm.md",
+          "13-build-llm-2.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "梯度消失和梯度爆炸的解决方法",
         "gold": [
           "04-stability.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "04-stability.md",
-          "04-stability.md",
-          "04-stability.md",
-          "04-stability.md",
-          "05-rnn.md"
-        ]
+          "05-rnn.md",
+          "26-huggingface.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "LoRA 的 rank 和 alpha 是什么含义",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "13-efficient.md",
           "26-huggingface.md",
-          "26-huggingface.md",
-          "13-efficient.md",
-          "14-scaling-laws.md"
-        ]
+          "14-scaling-laws.md",
+          "19-flash-attention.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "speculative decoding 的接受率怎么理解",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "20-inference.md",
-          "20-inference.md",
+        "ranked_docs": [
           "20-inference.md",
           "13-efficient.md",
-          "20-inference.md"
-        ]
+          "11-pretrain-sft.md",
+          "18-data-pipeline.md",
+          "07-transformer.md",
+          "15-gpu.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "训练数据去污染 decontamination 怎么做",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "18-data-pipeline.md",
+        "ranked_docs": [
           "18-data-pipeline.md",
           "23-llm-eval.md",
-          "18-data-pipeline.md",
-          "11-pretrain-sft.md"
-        ]
+          "11-pretrain-sft.md",
+          "07-transformer.md",
+          "26-huggingface.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "数据配比 mixture 怎么决定",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "18-data-pipeline.md",
           "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "18-data-pipeline.md",
-          "18-data-pipeline.md"
-        ]
+          "14-scaling-laws.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "ZeRO 的三个阶段分别切分了什么",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "26-huggingface.md",
           "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md"
-        ]
+          "11-pretrain-sft.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "warmup 学习率为什么需要",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "13-build-llm-2.md"
-        ]
+          "13-build-llm-2.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "SFT 训练中的 loss mask 怎么用",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "11-pretrain-sft.md",
           "13-build-llm-2.md",
-          "13-build-llm-2.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md"
-        ]
+          "26-huggingface.md",
+          "08-bert.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "评测结果的置信区间怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 4,
-        "top_docs": [
-          "27-capstone-eval.md",
-          "27-capstone-eval.md",
+        "ranked_docs": [
           "27-capstone-eval.md",
           "23-llm-eval.md",
-          "23-llm-eval.md"
-        ]
+          "10-modern-llm.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "Triton 怎么实现 fused softmax",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "19-flash-attention.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md"
-        ]
+          "20-inference.md",
+          "10-modern-llm.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "continuous batching 和 static batching 的区别",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "20-inference.md"
-        ]
+          "00-map.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       }
     ]
   },
@@ -322,65 +352,83 @@
     "mode": "dense",
     "k": 10,
     "n": 22,
+    "hit@k": 0.8636363636363636,
     "recall@k": 0.8636363636363636,
-    "mrr": 0.6333333333333333,
-    "ndcg@k": 0.6889149076541464,
+    "mrr": 0.6416666666666666,
+    "ndcg@k": 0.6990992873450277,
     "per_query": [
       {
         "query": "online softmax 的分块修正公式是怎么推导的",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "24-job-ready.md",
           "19-flash-attention.md",
           "10-modern-llm.md",
           "07-transformer.md",
-          "09-gpt.md"
-        ]
+          "09-gpt.md",
+          "12-rl-grpo.md",
+          "18-data-pipeline.md",
+          "04-stability.md",
+          "00-map.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "PagedAttention 是怎么解决显存碎片的",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "07-transformer.md",
           "20-inference.md",
           "16-distributed.md",
-          "07-transformer.md",
-          "13-build-llm-2.md"
-        ]
+          "13-build-llm-2.md",
+          "10-modern-llm.md",
+          "13-efficient.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "GQA 和 MQA 的区别是什么",
         "gold": [
           "10-modern-llm.md"
         ],
-        "hit_rank": null,
-        "top_docs": [
+        "ranked_docs": [
           "13-build-llm-2.md",
           "07-transformer.md",
           "12-rl-grpo.md",
-          "07-transformer.md",
           "08-bert.md"
-        ]
+        ],
+        "hit@k": 0.0,
+        "recall@k": 0.0,
+        "mrr": 0.0,
+        "ndcg@k": 0.0
       },
       {
         "query": "pass@k 的无偏估计公式怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "23-llm-eval.md",
+        "ranked_docs": [
           "23-llm-eval.md",
           "07-transformer.md",
           "14-scaling-laws.md",
-          "05-rnn.md"
-        ]
+          "05-rnn.md",
+          "08-bert.md",
+          "27-capstone-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chat Template 为什么会影响模型输出",
@@ -388,252 +436,320 @@
           "11-pretrain-sft.md",
           "26-huggingface.md"
         ],
-        "hit_rank": 6,
-        "top_docs": [
+        "ranked_docs": [
           "12-rl-grpo.md",
           "07-transformer.md",
           "09-gpt.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md"
-        ]
+          "11-pretrain-sft.md",
+          "23-llm-eval.md",
+          "26-huggingface.md",
+          "08-bert.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.25,
+        "ndcg@k": 0.48247555939075504
       },
       {
         "query": "MinHash 怎么估计 Jaccard 相似度",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "11-pretrain-sft.md",
           "18-data-pipeline.md",
           "27-capstone-eval.md",
           "23-llm-eval.md",
-          "23-llm-eval.md"
-        ]
+          "12-rl-grpo.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "Ring AllReduce 的通信量怎么算",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "16-distributed.md",
+        "ranked_docs": [
           "16-distributed.md",
           "23-llm-eval.md",
           "12-rl-grpo.md",
-          "16-distributed.md"
-        ]
+          "06-nlp.md",
+          "14-scaling-laws.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "什么是算术强度和 Roofline 模型",
         "gold": [
           "15-gpu.md"
         ],
-        "hit_rank": 6,
-        "top_docs": [
+        "ranked_docs": [
           "12-rl-grpo.md",
           "11-pretrain-sft.md",
           "24-job-ready.md",
-          "12-rl-grpo.md",
-          "23-llm-eval.md"
-        ]
+          "23-llm-eval.md",
+          "15-gpu.md",
+          "14-scaling-laws.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.2,
+        "ndcg@k": 0.38685280723454163
       },
       {
         "query": "激活检查点为什么能节省显存",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md"
-        ]
+          "12-build-llm-1.md",
+          "16-distributed.md",
+          "12-rl-grpo.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chinchilla 的最优参数与 token 配比是多少",
         "gold": [
           "14-scaling-laws.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "14-scaling-laws.md",
+        "ranked_docs": [
           "14-scaling-laws.md",
           "23-llm-eval.md",
-          "14-scaling-laws.md",
-          "11-pretrain-sft.md"
-        ]
+          "11-pretrain-sft.md",
+          "06-nlp.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "GRPO 的组相对优势是怎么计算的",
         "gold": [
           "12-rl-grpo.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "12-rl-grpo.md",
+        "ranked_docs": [
           "12-rl-grpo.md",
           "09-gpt.md",
           "07-transformer.md",
-          "12-rl-grpo.md"
-        ]
+          "15-gpu.md",
+          "13-efficient.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "梯度消失和梯度爆炸的解决方法",
         "gold": [
           "04-stability.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "04-stability.md",
           "02-optimizers.md",
-          "04-stability.md",
-          "04-stability.md",
-          "05-rnn.md"
-        ]
+          "05-rnn.md",
+          "01-basics.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "LoRA 的 rank 和 alpha 是什么含义",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": null,
-        "top_docs": [
+        "ranked_docs": [
           "12-rl-grpo.md",
           "08-bert.md",
           "05-rnn.md",
-          "05-rnn.md",
-          "12-rl-grpo.md"
-        ]
+          "10-modern-llm.md",
+          "14-scaling-laws.md",
+          "13-build-llm-2.md",
+          "15-gpu.md"
+        ],
+        "hit@k": 0.0,
+        "recall@k": 0.0,
+        "mrr": 0.0,
+        "ndcg@k": 0.0
       },
       {
         "query": "speculative decoding 的接受率怎么理解",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
           "27-capstone-eval.md",
           "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "23-llm-eval.md"
-        ]
+          "23-llm-eval.md",
+          "08-bert.md",
+          "11-pytorch.md",
+          "09-gpt.md",
+          "16-distributed.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "训练数据去污染 decontamination 怎么做",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": null,
-        "top_docs": [
+        "ranked_docs": [
           "23-llm-eval.md",
           "13-build-llm-2.md",
           "12-rl-grpo.md",
           "11-pretrain-sft.md",
-          "11-pretrain-sft.md"
-        ]
+          "01-basics.md",
+          "14-scaling-laws.md",
+          "08-bert.md"
+        ],
+        "hit@k": 0.0,
+        "recall@k": 0.0,
+        "mrr": 0.0,
+        "ndcg@k": 0.0
       },
       {
         "query": "数据配比 mixture 怎么决定",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 10,
-        "top_docs": [
+        "ranked_docs": [
           "14-scaling-laws.md",
           "11-pretrain-sft.md",
-          "14-scaling-laws.md",
           "23-llm-eval.md",
-          "23-llm-eval.md"
-        ]
+          "12-rl-grpo.md",
+          "27-capstone-eval.md",
+          "18-data-pipeline.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.16666666666666666,
+        "ndcg@k": 0.3562071871080222
       },
       {
         "query": "ZeRO 的三个阶段分别切分了什么",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "16-distributed.md",
           "06-nlp.md",
           "07-transformer.md",
-          "07-transformer.md",
-          "11-pytorch.md"
-        ]
+          "11-pytorch.md",
+          "13-build-llm-2.md",
+          "00-map.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "warmup 学习率为什么需要",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "11-pretrain-sft.md",
+        "ranked_docs": [
           "11-pretrain-sft.md",
           "07-transformer.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md"
-        ]
+          "19-flash-attention.md",
+          "12-rl-grpo.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "SFT 训练中的 loss mask 怎么用",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "07-transformer.md",
           "11-pretrain-sft.md",
           "26-huggingface.md",
           "09-gpt.md",
-          "26-huggingface.md"
-        ]
+          "08-bert.md",
+          "13-build-llm-2.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "评测结果的置信区间怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "27-capstone-eval.md",
           "23-llm-eval.md",
           "00-map.md",
-          "23-llm-eval.md",
-          "23-llm-eval.md"
-        ]
+          "03-evaluation.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "Triton 怎么实现 fused softmax",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "19-flash-attention.md",
+        "ranked_docs": [
           "19-flash-attention.md",
           "12-rl-grpo.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md"
-        ]
+          "07-transformer.md",
+          "13-build-llm-2.md",
+          "24-job-ready.md",
+          "11-pretrain-sft.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "continuous batching 和 static batching 的区别",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
           "09-gpt.md",
-          "20-inference.md",
-          "20-inference.md",
-          "18-data-pipeline.md"
-        ]
+          "18-data-pipeline.md",
+          "07-transformer.md",
+          "24-job-ready.md",
+          "08-bert.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       }
     ]
   },
@@ -641,65 +757,80 @@
     "mode": "hybrid",
     "k": 10,
     "n": 22,
+    "hit@k": 1.0,
     "recall@k": 1.0,
-    "mrr": 0.8446969696969698,
-    "ndcg@k": 0.8842907078345102,
+    "mrr": 0.8484848484848484,
+    "ndcg@k": 0.8883504632055229,
     "per_query": [
       {
         "query": "online softmax 的分块修正公式是怎么推导的",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "24-job-ready.md",
           "19-flash-attention.md",
-          "19-flash-attention.md",
           "10-modern-llm.md",
-          "19-flash-attention.md"
-        ]
+          "07-transformer.md",
+          "09-gpt.md",
+          "12-rl-grpo.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "PagedAttention 是怎么解决显存碎片的",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
           "07-transformer.md",
-          "20-inference.md",
-          "07-transformer.md",
-          "20-inference.md"
-        ]
+          "16-distributed.md",
+          "00-map.md",
+          "13-build-llm-2.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "GQA 和 MQA 的区别是什么",
         "gold": [
           "10-modern-llm.md"
         ],
-        "hit_rank": 4,
-        "top_docs": [
-          "07-transformer.md",
+        "ranked_docs": [
           "07-transformer.md",
           "13-build-llm-2.md",
           "10-modern-llm.md",
-          "07-transformer.md"
-        ]
+          "12-rl-grpo.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.3333333333333333,
+        "ndcg@k": 0.5
       },
       {
         "query": "pass@k 的无偏估计公式怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "23-llm-eval.md",
-          "23-llm-eval.md",
+        "ranked_docs": [
           "23-llm-eval.md",
           "12-rl-grpo.md",
-          "07-transformer.md"
-        ]
+          "07-transformer.md",
+          "14-scaling-laws.md",
+          "18-data-pipeline.md",
+          "05-rnn.md",
+          "27-capstone-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chat Template 为什么会影响模型输出",
@@ -707,252 +838,297 @@
           "11-pretrain-sft.md",
           "26-huggingface.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "09-gpt.md",
           "26-huggingface.md",
           "12-rl-grpo.md",
           "11-pretrain-sft.md",
           "07-transformer.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6509209298071326
       },
       {
         "query": "MinHash 怎么估计 Jaccard 相似度",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "18-data-pipeline.md",
           "11-pretrain-sft.md",
-          "18-data-pipeline.md",
-          "18-data-pipeline.md",
-          "27-capstone-eval.md"
-        ]
+          "27-capstone-eval.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Ring AllReduce 的通信量怎么算",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md",
-          "16-distributed.md"
-        ]
+          "23-llm-eval.md",
+          "12-rl-grpo.md",
+          "00-map.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "什么是算术强度和 Roofline 模型",
         "gold": [
           "15-gpu.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "15-gpu.md",
+        "ranked_docs": [
           "15-gpu.md",
           "12-rl-grpo.md",
           "11-pretrain-sft.md",
-          "15-gpu.md"
-        ]
+          "24-job-ready.md",
+          "19-flash-attention.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "激活检查点为什么能节省显存",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md",
-          "13-efficient.md"
-        ]
+          "12-build-llm-1.md",
+          "24-job-ready.md",
+          "16-distributed.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Chinchilla 的最优参数与 token 配比是多少",
         "gold": [
           "14-scaling-laws.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "14-scaling-laws.md",
-          "14-scaling-laws.md",
-          "14-scaling-laws.md",
-          "14-scaling-laws.md",
-          "14-scaling-laws.md"
-        ]
+          "23-llm-eval.md",
+          "11-pretrain-sft.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "GRPO 的组相对优势是怎么计算的",
         "gold": [
           "12-rl-grpo.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md",
-          "12-rl-grpo.md"
-        ]
+          "09-gpt.md",
+          "07-transformer.md",
+          "10-modern-llm.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "梯度消失和梯度爆炸的解决方法",
         "gold": [
           "04-stability.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "04-stability.md",
-          "04-stability.md",
+        "ranked_docs": [
           "04-stability.md",
           "05-rnn.md",
-          "05-rnn.md"
-        ]
+          "02-optimizers.md",
+          "01-basics.md",
+          "26-huggingface.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "LoRA 的 rank 和 alpha 是什么含义",
         "gold": [
           "13-efficient.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "13-efficient.md",
           "12-rl-grpo.md",
           "26-huggingface.md",
           "08-bert.md",
-          "26-huggingface.md"
-        ]
+          "05-rnn.md",
+          "14-scaling-laws.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "speculative decoding 的接受率怎么理解",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "20-inference.md",
+        "ranked_docs": [
           "20-inference.md",
           "27-capstone-eval.md",
-          "20-inference.md",
-          "11-pretrain-sft.md"
-        ]
+          "11-pretrain-sft.md",
+          "13-efficient.md",
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "训练数据去污染 decontamination 怎么做",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "23-llm-eval.md",
           "18-data-pipeline.md",
-          "18-data-pipeline.md",
           "13-build-llm-2.md",
-          "12-rl-grpo.md"
-        ]
+          "12-rl-grpo.md",
+          "11-pretrain-sft.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "数据配比 mixture 怎么决定",
         "gold": [
           "18-data-pipeline.md"
         ],
-        "hit_rank": 2,
-        "top_docs": [
+        "ranked_docs": [
           "11-pretrain-sft.md",
           "18-data-pipeline.md",
           "14-scaling-laws.md",
-          "11-pretrain-sft.md",
-          "14-scaling-laws.md"
-        ]
+          "23-llm-eval.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.5,
+        "ndcg@k": 0.6309297535714575
       },
       {
         "query": "ZeRO 的三个阶段分别切分了什么",
         "gold": [
           "16-distributed.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "16-distributed.md",
           "26-huggingface.md",
-          "16-distributed.md",
           "06-nlp.md",
-          "16-distributed.md"
-        ]
+          "07-transformer.md",
+          "11-pytorch.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "warmup 学习率为什么需要",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md",
-          "11-pretrain-sft.md"
-        ]
+          "07-transformer.md",
+          "13-build-llm-2.md",
+          "19-flash-attention.md",
+          "12-rl-grpo.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "SFT 训练中的 loss mask 怎么用",
         "gold": [
           "11-pretrain-sft.md"
         ],
-        "hit_rank": 3,
-        "top_docs": [
+        "ranked_docs": [
           "26-huggingface.md",
           "08-bert.md",
           "11-pretrain-sft.md",
           "07-transformer.md",
-          "13-build-llm-2.md"
-        ]
+          "13-build-llm-2.md",
+          "09-gpt.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 0.3333333333333333,
+        "ndcg@k": 0.5
       },
       {
         "query": "评测结果的置信区间怎么计算",
         "gold": [
           "23-llm-eval.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "23-llm-eval.md",
           "27-capstone-eval.md",
-          "27-capstone-eval.md",
-          "23-llm-eval.md",
-          "23-llm-eval.md"
-        ]
+          "00-map.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "Triton 怎么实现 fused softmax",
         "gold": [
           "19-flash-attention.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
-          "19-flash-attention.md",
-          "19-flash-attention.md",
-          "19-flash-attention.md",
+        "ranked_docs": [
           "19-flash-attention.md",
           "12-rl-grpo.md"
-        ]
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       },
       {
         "query": "continuous batching 和 static batching 的区别",
         "gold": [
           "20-inference.md"
         ],
-        "hit_rank": 1,
-        "top_docs": [
+        "ranked_docs": [
           "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "20-inference.md",
-          "09-gpt.md"
-        ]
+          "09-gpt.md",
+          "18-data-pipeline.md",
+          "00-map.md",
+          "07-transformer.md"
+        ],
+        "hit@k": 1.0,
+        "recall@k": 1.0,
+        "mrr": 1.0,
+        "ndcg@k": 1.0
       }
     ]
   }

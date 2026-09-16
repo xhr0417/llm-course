@@ -70,12 +70,28 @@ const manifest = JSON.parse(fs.readFileSync(path.join(CONTENT, "manifest.json"),
 const byId = {};
 manifest.chapters.forEach(c => { byId[c.id] = c; });
 const jobChapters = manifest.chapters.filter(c => (c.group || "").indexOf("Job-Ready") !== -1);
-mustHave("manifest 缺少 Job-Ready 分组章节（应为 3 章）", jobChapters.length >= 3);
-["job-ready", "python-engineering", "huggingface"].forEach(id => {
-  mustHave(`manifest 缺少章节 ${id}`, !!byId[id]);
+const REQUIRED_CHAPTERS = ["job-ready", "python-engineering", "huggingface", "capstone-eval",
+                           "rag-engineering", "capstone-rag", "capstone-sft", "capstone-infra"];
+mustHave(`manifest Job-Ready 分组章节数不足（应有 ${REQUIRED_CHAPTERS.length} 章，实际 ${jobChapters.length}）`,
+         jobChapters.length >= REQUIRED_CHAPTERS.length);
+REQUIRED_CHAPTERS.forEach(id => mustHave(`manifest 缺少章节 ${id}`, !!byId[id]));
+// 章节 → 项目目录 映射必须真实存在
+const CHAPTER_PROJECT = {
+  "python-engineering": "log-analyzer",
+  "huggingface": "hf-mini-lab",
+  "capstone-eval": "llm-eval",
+  "capstone-rag": "rag-service",
+  "capstone-sft": "sft-lora",
+  "capstone-infra": "inference-benchmark",
+};
+Object.entries(CHAPTER_PROJECT).forEach(([chapterId, projectName]) => {
+  mustHave(`章节 ${chapterId} 对应的项目 projects/${projectName} 不存在`,
+           fs.existsSync(path.join(PROJECTS_DIR, projectName)));
 });
-if (byId["python-engineering"]) mustHave("python-engineering 应标记 lab+project", byId["python-engineering"].lab === true && byId["python-engineering"].project === true);
-if (byId["huggingface"]) mustHave("huggingface 应标记 lab+project", byId["huggingface"].lab === true && byId["huggingface"].project === true);
+["python-engineering", "huggingface", "capstone-eval", "rag-engineering",
+ "capstone-rag", "capstone-sft", "capstone-infra"].forEach(id => {
+  if (byId[id]) mustHave(`${id} 应标记 lab+project`, byId[id].lab === true && byId[id].project === true);
+});
 
 /* ---------- C. 章节引用的 projects/<slug> 必须存在 ---------- */
 const projectSlugs = fs.existsSync(PROJECTS_DIR)
@@ -100,13 +116,15 @@ function countTests(dir) {
     .map(f => (fs.readFileSync(path.join(testsDir, f), "utf8").match(/def test_/g) || []).length)
     .reduce((a, b) => a + b, 0);
 }
+// 统一口径：README 必须写「N 个测试函数」；N 与 tests/ 下 def test_ 数量一致。
+// （参数化会让一个函数生成多个 pytest case——README 里同时写明“M 个用例”即可，不混用。）
 const claims = [
-  { project: "log-analyzer", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
-  { project: "hf-mini-lab", pattern: /(\d+)[ \t]*(?:个[ \t]*)?pytest|(\d+)[ \t]*(?:个[ \t]*)?测试/ },
-  { project: "llm-eval", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试|(\d+)[ \t]*(?:个[ \t]*)?pytest/ },
-  { project: "rag-service", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
-  { project: "sft-lora", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ },
-  { project: "inference-benchmark", pattern: /(\d+)[ \t]*(?:个[ \t]*)?测试/ }
+  { project: "log-analyzer", pattern: /(\d+)[ \t]*个测试函数/ },
+  { project: "hf-mini-lab", pattern: /(\d+)[ \t]*个测试函数/ },
+  { project: "llm-eval", pattern: /(\d+)[ \t]*个测试函数/ },
+  { project: "rag-service", pattern: /(\d+)[ \t]*个测试函数/ },
+  { project: "sft-lora", pattern: /(\d+)[ \t]*个测试函数/ },
+  { project: "inference-benchmark", pattern: /(\d+)[ \t]*个测试函数/ }
 ];
 claims.forEach(({ project, pattern }) => {
   const dir = path.join(PROJECTS_DIR, project);
@@ -114,7 +132,7 @@ claims.forEach(({ project, pattern }) => {
   if (!fs.existsSync(readmePath)) return;
   const readme = fs.readFileSync(readmePath, "utf8");
   const m = readme.match(pattern);
-  if (!m) { fail(`projects/${project}/README.md 未声明测试数量（应写明“N 个测试/N 个 pytest”以便核对）`); return; }
+  if (!m) { fail(`projects/${project}/README.md 未声明测试数量（应写明“N 个测试函数”以便核对）`); return; }
   const claimed = parseInt(m[1] || m[2], 10);
   const actual = countTests(dir);
   mustHave(`projects/${project} README 声明 ${claimed} 个测试，实际 def test_ = ${actual}`, claimed === actual);

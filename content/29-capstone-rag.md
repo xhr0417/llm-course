@@ -14,7 +14,7 @@ Checkpoint D 的验收标准：
 | 能力 | 验收物 |
 | --- | --- |
 | 完整管线 | documents → chunk → BM25+向量 → hybrid → rerank → LLM → answer+citations |
-| 评测 | 检索侧 4 组对照指标 + 生成侧失败分类 |
+| 评测 | 检索侧 4 组对照（Hit@k / Recall@k / MRR / nDCG@k，doc 级）+ 生成侧失败分类 |
 | 服务 | FastAPI：`/health` `/retrieve` `/chat` `/chat/stream(SSE)` |
 | 工程 | Pydantic schema、超时保护（504）、并发线程池、pytest 27 用例 |
 | 部署 | Dockerfile（本机无 Docker，标注 NOT EXECUTED） |
@@ -29,12 +29,12 @@ query：   BM25 top-20  ┐
 
 **真实评测结果**（22 条标注查询，全部可复现）：
 
-| 模式 | Recall@10 | MRR | nDCG@10 |
-| --- | --- | --- | --- |
-| BM25 | 100.0% | 0.8977 | 0.9238 |
-| Dense | 86.4% | 0.6333 | 0.6889 |
-| Hybrid（RRF） | 100.0% | 0.8447 | 0.8843 |
-| **Hybrid + Reranker** | **100.0%** | **0.9318** | **0.9497** |
+| 模式 | Hit@10 | Recall@10 | MRR | nDCG@10 |
+| --- | --- | --- | --- | --- |
+| BM25 | 100.0% | 100.0% | 0.9091 | 0.9329 |
+| Dense | 86.4% | 86.4% | 0.6417 | 0.6991 |
+| Hybrid（RRF） | 100.0% | 100.0% | 0.8485 | 0.8884 |
+| **Hybrid + Reranker** | **100.0%** | **100.0%** | **0.9318** | **0.9497** |
 
 调用链路的服务端耗时拆解（每个回答都返回）：
 
@@ -141,7 +141,7 @@ D. prompt 写错了
 | 站点 | 核心结论 |
 | --- | --- |
 | 管线 | chunk → BM25+向量 → RRF → rerank → LLM → answer+citations |
-| 实测 | reranker 收益最大（MRR 0.845→0.932）；检索 6/6、生成 4/6 |
+| 实测 | reranker 收益最大（MRR 0.849→0.932，超越 BM25 的 0.909）；检索 6/6、生成 4/6 |
 | 服务 | FastAPI + Pydantic + 线程池 + 超时 504 + SSE |
 | 坑 | async 里跑同步推理 = 阻塞事件循环 |
 | 部署 | Dockerfile 已提供；本机无 Docker → NOT EXECUTED |

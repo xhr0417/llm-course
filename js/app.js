@@ -625,6 +625,8 @@
         chLink("FlashAttention/Triton", "flash-attention") + " → " + chLink("Distributed", "distributed") + " → " +
         chLink("Inference", "inference") + " → " + chLink("Capstone 4 · Profiling Lab", "capstone-infra") + " → <span style='color:var(--text-soft)'>vLLM Benchmark（需 CUDA）</span>") +
       "</div>" +
+      '<div id="projectsCard" style="border:1px dashed var(--border);border-radius:12px;padding:12px 16px;margin:12px 0;font-size:13.5px">' +
+      '<span style="font-weight:800">可运行项目</span> · <span style="color:var(--text-soft)">加载中…</span></div>' +
       '<p style="font-size:13px;color:var(--text-soft)">完整能力矩阵、Checkpoint 验收标准与四级学习标准见 ' +
       '<a class="tag" href="#/job-ready">第 24 章 · Job-Ready Track</a>。</p>';
 
@@ -651,7 +653,7 @@
       "<li>按顺序读：从第 1 章开始，每章末尾有「下一章」。</li>" +
       "<li>每个核心知识点按「先懂直觉 → 再看数学 → 工程里怎么用」三级展开，先读直觉。</li>" +
       "<li>遇到 <strong>🎮 交互演示</strong> 一定要动手拖一拖滑块——这是这套课程区别于普通笔记的地方。</li>" +
-      "<li>Job-Ready 章节（25/26）配 <strong>projects/ 真实项目</strong>：clone 下来跑一遍、跑测试、改一处代码再跑——这才是「Ran」。</li>" +
+      "<li>Job-Ready 章节（24-31）配 <strong>projects/ 真实项目</strong>：clone 下来跑一遍、跑测试、改一处代码再跑——这才是「Ran」。</li>" +
       "<li>按 <strong>/</strong> 搜索任意知识点（如 GRPO、RoPE、Chat Template）。</li>" +
       "</ul></div>" +
       '<div class="chapter-footer"><span></span><a class="footer-link next" href="#/' + (state.chapters[0] ? state.chapters[0].id : "") + '"><span class="fl-label">开始学习 →</span><span class="fl-title">' + (state.chapters[0] ? escapeHtml(state.chapters[0].title) : "") + "</span></a></div>";
@@ -659,6 +661,22 @@
     els.content.innerHTML = html;
     els.tocNav.innerHTML = "";
     window.scrollTo({ top: 0 });
+
+    // 项目清单动态加载（数字来自 content/projects.json，构建时扫描 projects/ 生成）
+    fetch("content/projects.json").then(function (r) { return r.json(); }).then(function (data) {
+      var el = document.getElementById("projectsCard");
+      if (!el || !data || !data.projects) return;
+      var chips = data.projects.map(function (p) {
+        return '<span class="tag" style="margin:2px 4px 2px 0">' + escapeHtml(p.name) + "</span>";
+      }).join("");
+      el.innerHTML = '<span style="font-weight:800">' + data.count + " 个可运行项目</span>" +
+        '（<a class="tag" href="https://github.com/xhr0417/llm-course/tree/main/projects" target="_blank" rel="noopener">projects/</a>）：' +
+        chips +
+        '<div style="font-size:12.5px;color:var(--text-soft);margin-top:6px">每个项目都含 README + requirements + src + tests；CPU 实测数字写在各自 README 中，未在 CUDA 执行的实验明确标注。</div>';
+    }).catch(function () {
+      var el = document.getElementById("projectsCard");
+      if (el) el.innerHTML = '<span style="font-weight:800">可运行项目</span>：见仓库 projects/ 目录';
+    });
   }
 
   function route() {

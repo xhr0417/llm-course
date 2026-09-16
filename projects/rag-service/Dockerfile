@@ -3,6 +3,8 @@ FROM python:3.9-slim
 WORKDIR /app
 
 COPY requirements.txt .
+# CPU 版 torch（不含 CUDA 依赖，镜像更小、构建更快；GPU 部署请换官方 CUDA 镜像）
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .

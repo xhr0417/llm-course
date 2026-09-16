@@ -1,4 +1,4 @@
-> **本章对应课件**：全站总纲（第二批更新版）。建议先花 15 分钟读完本章，建立全局地图，再进入具体章节。本课程定位：**中文交互式 LLM 教材 + Stanford CS336 前置能力**。
+> **本章对应课件**：全站总纲（Job-Ready 更新版）。建议先花 15 分钟读完本章，建立全局地图。本课程定位：**中文交互式 LLM 教材 + 真实工程项目集**，由两条平行主线组成：**Knowledge Track（0-23，懂）** 与 **Job-Ready Track（24-31，能做）**。
 
 ## 0.1 完整学习路线（六段式）
 
@@ -33,6 +33,28 @@ $$
 \text{输入} \rightarrow \text{Tokenizer} \rightarrow \text{Embedding} \rightarrow \text{Transformer} \rightarrow \text{Logits} \rightarrow \text{Softmax} \rightarrow P(\text{next token})
 $$
 
+## 0.1b 两条平行主线
+
+上图的六段式是 **Knowledge Track（0-23 章）**。它解决「懂」。从第 24 章开始是 **Job-Ready Track（24-31 章）**，它解决「能做」——每一章绑定一个可运行项目：
+
+```
+Job-Ready Track 24-31
+Engineering（25 Python 工程）→ Framework（26 HuggingFace）
+→ Evaluation（27 Eval Harness）→ Retrieval（28 RAG 工程）→ Service（29 RAG Service）
+→ Fine-tuning（30 SFT/LoRA）→ Profiling（31 Infra Lab）
+
+六个真实项目在 projects/ 目录：
+log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-benchmark
+```
+
+三条岗位路线（完整版见第 24 章）：
+
+| Track | 面向岗位 | 主线 |
+| --- | --- | --- |
+| Track A · AI 应用 | 大模型应用开发 / 评测 / AI 平台 | Python → PyTorch → HF → Evaluation → Eval Harness → RAG → RAG Service |
+| Track B · 大模型算法 | 大模型算法 / 机器学习算法 / 后训练 | Transformer → Small LLM → Data → SFT/LoRA → Evaluation → Capstone 3 |
+| Track C · AI Infra | AI Infra / ML Systems / 推理框架 | GPU → FlashAttention → Distributed → Inference → Profiling Lab |
+
 ## 0.2 课程分层：哪些必须先学，哪些可以边学边补
 
 :::warning 重要：不要把 CS336 全部内容当成「前置」
@@ -43,7 +65,7 @@ $$
 | --- | --- | --- |
 | 🟢 **Core Prerequisite** | 1-10 章（数学/深度学习/Transformer/GPT/Tokenizer）+ 11-13 章（PyTorch + 从零搭 Small LM） | **真正的前置**：学完即可进入 CS336 级别的课程 |
 | 🔵 **CS336 Bridge** | 14 Scaling Laws · 15 GPU · 16 Distributed · 17 显存 · 18 Data Pipeline · 19 FlashAttention/Triton · 23 Evaluation | 让 CS336 学起来更顺：这些话题会在课程中反复用到 |
-| 🟣 **Systems Extension** | 20 Inference Systems（以及未来的 vLLM/SGLang/profiling 深入） | 走向工程/系统方向：**不是开始 CS336 的必要条件** |
+| 🟣 **Systems Extension** | 20 Inference Systems · 31 Profiling Lab（vLLM runbook 待 GPU 验证） | 走向工程/系统方向：**不是开始 CS336 的必要条件** |
 
 **阅读建议**：
 - 目标是「看懂训练与原理」→ 优先 1-17 章 + 18 章；
@@ -61,6 +83,9 @@ $$
 | ④ 服务 | 20 推理系统 | 解释 prefill/decode、PagedAttention、continuous batching |
 | ⑤ 对齐 | 21 Pretrain/SFT · 22 PPO/GRPO | 走完 Pretrain → SFT → DPO/GRPO |
 | ⑥ 评估 | 23 LLM Evaluation | 读懂 benchmark 分数、做失败分析、跑评测 Lab |
+| ⑦ 求职实战 | 24 Job-Ready 总览 · 25 Python 工程 · 26 HuggingFace | 定路线（A/B/C）、工程化 Python、工业生态跑模型 |
+| ⑦ 求职实战 | 27 Eval Harness · 28 RAG 工程 · 29 RAG Service | 评测系统、混合检索与精排、FastAPI/SSE 服务 |
+| ⑦ 求职实战 | 30 SFT/LoRA 实验 · 31 Profiling Lab | 训练闭环（best checkpoint + 三路评测）、profiling 与 serving benchmark |
 
 ## 0.4 学完能回答的问题（验收清单）
 
@@ -87,7 +112,7 @@ $$
 
 | 组件 | 形态 | 示例 |
 | --- | --- | --- |
-| 交互演示 | 可拖拽/点击的实时计算与动画 | 79 个（数据管线 / MinHash / 打包 / online softmax / serving 模拟器…） |
+| 交互演示 | 可拖拽/点击的实时计算与动画 | 90+（数据管线 / MinHash / 打包 / online softmax / serving 模拟器 / chunking / retrieval metrics…） |
 | 结构图 | HTML/CSS 静态图 | GPU 存储层次、并行布局、分页 KV |
 | 曲线图 | Canvas 绘制 | isoFLOP、Roofline、置信区间、GPU 时间线 |
 | 面试题 | 折叠答案 | 第 7 章 39 题速查 |
@@ -116,9 +141,10 @@ $$
 
 | 优先级 | 内容 | 状态 |
 | --- | --- | --- |
-| P0 | Transformer、手写实现、Scaling Laws、GPU、分布式、数据管线、FlashAttention、推理系统、评测 | ✅ 已上线 |
-| P1 | MoE、长上下文、推理模型（Reasoning）、系统化量化 | 规划中 |
-| P2（选修专题） | RAG、Agent、MCP、多模态、安全、Prompt 工程 | 暂不展开 |
+| P0 · Knowledge | Transformer、手写实现、Scaling Laws、GPU、分布式、数据管线、FlashAttention、推理系统、评测 | ✅ 已上线（0-23） |
+| P0 · Job-Ready | Python 工程、HuggingFace、Eval Harness、RAG 工程、RAG Service、SFT/LoRA、Profiling Lab（6 个项目） | ✅ 已上线（24-31） |
+| 后续深化 | MoE、长上下文、Reasoning、系统化量化、CUDA/Triton（需 GPU） | 不在当前范围 |
+| 明确不覆盖 | Agent / MCP / Multi-Agent / 多模态 / GraphRAG / Robotics / 安全大章 | 不属于本课程范围 |
 
 :::quiz
 本课程的分层中，下面哪一项**不是**开始 CS336 前的必要前置？

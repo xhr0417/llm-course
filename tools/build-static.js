@@ -415,6 +415,29 @@ if (indexHtml.indexOf(START) !== -1 && indexHtml.indexOf(END) !== -1) {
 }
 fs.writeFileSync(indexPath, indexHtml);
 
+/* content/projects.json —— 项目清单（首页/校验器共用，避免硬编码过期） */
+const projectsDir = path.join(ROOT, "projects");
+const projectEntries = [];
+if (fs.existsSync(projectsDir)) {
+  fs.readdirSync(projectsDir).filter(function (name) {
+    const full = path.join(projectsDir, name);
+    return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, "README.md"));
+  }).forEach(function (name) {
+    const testsDir = path.join(projectsDir, name, "tests");
+    let testFunctions = 0;
+    if (fs.existsSync(testsDir)) {
+      fs.readdirSync(testsDir).filter(function (f) { return f.endsWith(".py"); }).forEach(function (f) {
+        const src = fs.readFileSync(path.join(testsDir, f), "utf8");
+        testFunctions += (src.match(/def test_/g) || []).length;
+      });
+    }
+    projectEntries.push({ name: name, testFunctions: testFunctions });
+  });
+}
+fs.writeFileSync(path.join(ROOT, "content", "projects.json"),
+  JSON.stringify({ count: projectEntries.length, projects: projectEntries }, null, 2) + "\n");
+console.log("   项目清单：" + projectEntries.length + " 个 → content/projects.json");
+
 /* sitemap.xml */
 const today = new Date().toISOString().slice(0, 10);
 const urls = ['  <url><loc>' + SITE_URL + '/</loc><lastmod>' + today + "</lastmod><priority>1.0</priority></url>"]
