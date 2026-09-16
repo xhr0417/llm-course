@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模型评估与泛化：指标、过拟合与正则化 · 大模型知识体系</title>
+<meta name="description" content="混淆矩阵计算器、四大指标、不平衡数据陷阱、L2、Dropout。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/evaluation.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 3 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/evaluation">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="optimizers.html">← 优化器：SGD → Momentum → Adam</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="stability.html">数值稳定：梯度爆炸/消失、初始化、BN 与残差 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/evaluation">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 3 章 · 模型训练与稳定性</div><h1 class="chapter-title">模型评估与泛化：指标、过拟合与正则化</h1><p class="chapter-desc">混淆矩阵计算器、四大指标、不平衡数据陷阱、L2、Dropout。</p><p class="chapter-source">对应课件：1-2 模型评估和数值稳定</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章对应课件</strong>：《1-2 模型评估和数值稳定》。核心内容：训练/泛化误差、数据划分、混淆矩阵、Accuracy/Precision/Recall/F1、欠拟合与过拟合、L2 正则化、Dropout。</p>
+</blockquote>
+<h2>3.1 训练误差与泛化误差</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练集上做得好不代表真的学会了——可能只是把答案背下来了。真正重要的是模型在<strong>没见过的数据</strong>上的表现，这就是泛化。</p>
+</div></details>
+<ul>
+<li><strong>Training error</strong>：模型在训练集上的表现；</li>
+<li><strong>Generalization error</strong>：模型在<strong>没见过的数据</strong>上的表现。</li>
+</ul>
+<p>一个模型可能训练集准确率 100%、测试集准确率 60%——这不是优秀模型，而是<strong>过拟合</strong>。</p>
+<div class="box box-example"><div class="box-title">📌 一个直观类比</div><div class="box-body"><p>两个学生备考：</p>
+<ul>
+<li>学生 A 把练习册答案全背下来（训练误差 0），考试遇到新题就懵（泛化误差高）；</li>
+<li>学生 B 理解了方法，练习册上有几道错题（训练误差 &gt; 0），但新题基本都会（泛化误差低）。</li>
+</ul>
+<p>我们要的是学生 B。这也是为什么「训练 loss 降到 0」不是目标。</p>
+</div></div>
+<h2>3.2 数据划分</h2>
+<table>
+<thead>
+<tr>
+<th>数据集</th>
+<th>用途</th>
+<th>典型比例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Training set</td>
+<td>训练参数</td>
+<td>80%</td>
+</tr>
+<tr>
+<td>Validation set</td>
+<td>调超参数、选模型</td>
+<td>10%</td>
+</tr>
+<tr>
+<td>Test set</td>
+<td>最终评估（只测一次）</td>
+<td>10%</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区（数据泄漏）</div><div class="box-body"><p><strong>测试集不应该反复拿来调模型</strong>。如果你根据测试集分数反复调整超参数，测试集的信息就「泄漏」进了模型选择过程，最终报告的成绩不再客观。正确做法：用验证集调参，测试集只在最后评估一次。</p>
+</div></div>
+<h2>3.3 混淆矩阵</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>二分类的预测有四种结果：预测对/错 × 实际正/负。把这四种数量放进一个 2×2 表格，就是混淆矩阵——所有分类指标都从它算出来。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>实际正</th>
+<th>实际负</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>预测正</strong></td>
+<td>TP</td>
+<td>FP</td>
+</tr>
+<tr>
+<td><strong>预测负</strong></td>
+<td>FN</td>
+<td>TN</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>TP (True Positive)</strong>：真的有病，预测有病 ✅</li>
+<li><strong>FP (False Positive)</strong>：实际上没病，预测有病 ❌ 俗称<strong>误报</strong></li>
+<li><strong>FN (False Negative)</strong>：真的有病，却预测没病 ❌ 俗称<strong>漏报</strong></li>
+<li><strong>TN (True Negative)</strong>：没病，也预测没病 ✅</li>
+</ul>
+<h2>3.4 Accuracy、Precision、Recall、F1</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Accuracy 回答「总体对多少」；Precision 回答「你说是正的里面有多少真是正的」（怕误报）；Recall 回答「真正的正样本你找出来多少」（怕漏报）。F1 是两者的平衡。</p>
+</div></details>
+<h3>Accuracy（准确率）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Accuracy</mtext><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>T</mi><mi>N</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>T</mi><mi>N</mi><mo>+</mo><mi>F</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Accuracy</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">TN</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">FP</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">FN</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">TN</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p><strong>问题是类别不平衡时很危险</strong>。例如 1000 人只有 10 个患癌，模型全部预测健康：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Accuracy</mtext><mo>=</mo><mfrac><mn>990</mn><mn>1000</mn></mfrac><mo>=</mo><mn>99</mn><mi mathvariant="normal">%</mi></mrow><annotation encoding="application/x-tex">\text{Accuracy} = \frac{990}{1000} = 99\%</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Accuracy</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1000</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">990</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8056em;vertical-align:-0.0556em;"></span><span class="mord">99%</span></span></span></span></span></div>
+<p>但这个模型一个癌症都查不出来，完全没用。</p>
+<h3>Precision（精确率）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Precision</mtext><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>P</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Precision} = \frac{TP}{TP + FP}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">FP</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p>回答：<strong>我预测为正的人中，有多少真的为正？</strong> 强调「别误报」。比如垃圾邮件系统——把正常邮件判成垃圾的代价很高。</p>
+<h3>Recall（召回率）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Recall</mtext><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Recall} = \frac{TP}{TP + FN}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Recall</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">FN</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">TP</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p>回答：<strong>所有真正的正样本中，我找出来多少？</strong> 强调「别漏掉」。比如癌症筛查——漏掉一个患者代价极大。</p>
+<h3>F1</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>F</mi><mn>1</mn></msub><mo>=</mo><mn>2</mn><mo>⋅</mo><mfrac><mrow><mtext>Precision</mtext><mo>×</mo><mtext>Recall</mtext></mrow><mrow><mtext>Precision</mtext><mo>+</mo><mtext>Recall</mtext></mrow></mfrac></mrow><annotation encoding="application/x-tex">F_1 = 2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.1408em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">Recall</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">Recall</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p>它是<strong>调和平均数</strong>。如果 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo>=</mo><mn>1</mn><mo separator="true">,</mo><mi>R</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">P = 1, R = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.00773em;">R</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></span>，则 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mn>1</mn></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">F_1 = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></span>。所以只有 Precision 和 Recall 都较好，F1 才高。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：改数字看指标<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>修改 TP/FP/FN/TN 四个数字，实时观察 Accuracy、Precision、Recall、F1、Specificity 的变化。试试把 TP 调成 0，看 Accuracy 和 Recall 会发生什么。</p>
+<p><a class="static-link" href="../index.html#/evaluation">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-example"><div class="box-title">📌 具体算一遍（不平衡数据）</div><div class="box-body"><p>1000 人，10 个患癌：</p>
+<p><strong>模型 A：全部预测健康</strong></p>
+<ul>
+<li>TP=0, FP=0, FN=10, TN=990</li>
+<li>Accuracy = 99%</li>
+<li>Precision = 0/0（无定义，通常记 0）</li>
+<li>Recall = 0/10 = <strong>0%</strong> ← 一个都没查出来</li>
+</ul>
+<p><strong>模型 B：查出来 8 个，误报 50 个</strong></p>
+<ul>
+<li>TP=8, FP=50, FN=2, TN=940</li>
+<li>Accuracy = 94.8%（反而更低！）</li>
+<li>Precision = 8/58 ≈ 13.8%</li>
+<li>Recall = 8/10 = <strong>80%</strong></li>
+</ul>
+<p>结论：<strong>在不平衡数据上，Accuracy 会骗人</strong>。医疗场景宁可选 B（高 Recall），垃圾邮件场景则要高 Precision。</p>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：类别不平衡时为什么不能只看 Accuracy？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>多数类占比高时，模型只要全预测多数类就能拿到很高的 Accuracy（如 99%），但少数类（往往才是关注目标）Recall 为 0。应改用 Precision/Recall/F1、AUC 或按类加权的指标。</p>
+</div></details><p><strong>Q2：什么时候优化 Precision，什么时候优化 Recall？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>看错误的代价：误报代价高（垃圾邮件、推荐系统）→ 优先 Precision；漏报代价高（癌症筛查、欺诈检测、安全）→ 优先 Recall。F1 是两者兼顾的折中。</p>
+</div></details></div></div>
+<h2>3.5 欠拟合与过拟合</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>欠拟合是「学得太少」，过拟合是「学得太死」。前者训练集都做不好，后者训练集接近满分但新数据拉胯。</p>
+</div></details>
+<p><strong>欠拟合（Underfitting）</strong>：模型太简单，训练集都学不好，测试集当然也不好。例如真实关系是一条弯曲曲线，你硬用直线拟合。</p>
+<p><strong>过拟合（Overfitting）</strong>：模型复杂得过头，把训练数据每一个噪声都记住了，训练误差很低，但测试误差变高。</p>
+<p>课件中的典型曲线：</p>
+<pre><code class="lang-">误差
+ |  \                       训练误差持续下降
+ |   \______________________
+ |
+ |    ___
+ |   /   \___               测试误差：先下降后上升
+ |  /         \_____
+ +---------------------------→ 模型复杂度
+         ↑ 最佳复杂度</code></pre>
+<p>随着模型复杂度增加：</p>
+<ul>
+<li>训练误差：不断下降；</li>
+<li>测试误差：先下降，再上升；</li>
+<li>中间就是比较好的模型复杂度。</li>
+</ul>
+<details class="fold"><summary>工程里怎么用（判断与对策）</summary><div class="fold-body"><table>
+<thead>
+<tr>
+<th>现象</th>
+<th>训练误差</th>
+<th>测试误差</th>
+<th>对策</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>欠拟合</td>
+<td>高</td>
+<td>高</td>
+<td>增大模型、加特征、减小正则、多训练</td>
+</tr>
+<tr>
+<td>过拟合</td>
+<td>低</td>
+<td>高</td>
+<td>加数据、正则化（L2/Dropout）、早停、减小模型</td>
+</tr>
+</tbody></table>
+<p>大模型时代过拟合的形态不同：预训练通常还没「训够」（数据量太大），而 SFT 阶段数据少，容易过拟合（表现为背答案、泛化差）。</p>
+</div></details>
+<h2>3.6 L2 正则化 / Weight Decay</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>给「参数太大」加一个惩罚。模型为了降低总损失，会尽量用小权重——小权重意味着函数更平滑，更不容易过拟合。</p>
+</div></details>
+<p>为了防止过拟合，可以惩罚权重太大：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msup><mi>L</mi><mo mathvariant="normal" lspace="0em" rspace="0em">′</mo></msup><mo>=</mo><mi>L</mi><mo>+</mo><mfrac><mi>λ</mi><mn>2</mn></mfrac><mi mathvariant="normal">∥</mi><mi>W</mi><msup><mi mathvariant="normal">∥</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">L&#x27; = L + \frac{\lambda}{2}\|W\|^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8019em;"></span><span class="mord"><span class="mord mathnormal">L</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8019em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">′</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0574em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">λ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mord"><span class="mord">∥</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span></div>
+<p>这样模型不仅要拟合训练数据，还要尽量使用比较小的参数。</p>
+<p>梯度变成：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mi mathvariant="normal">∂</mi><msup><mi>L</mi><mo mathvariant="normal" lspace="0em" rspace="0em">′</mo></msup></mrow><mrow><mi mathvariant="normal">∂</mi><mi>W</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mi mathvariant="normal">∂</mi><mi>L</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>W</mi></mrow></mfrac><mo>+</mo><mi>λ</mi><mi>W</mi></mrow><annotation encoding="application/x-tex">\frac{\partial L&#x27;}{\partial W} = \frac{\partial L}{\partial W} + \lambda W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.1149em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4289em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord"><span class="mord mathnormal">L</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7519em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">′</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0574em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal">L</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">λW</span></span></span></span></span></div>
+<p>SGD 更新：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>W</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><msub><mi>W</mi><mi>t</mi></msub><mo>−</mo><mi>η</mi><mrow><mo fence="true">(</mo><mi mathvariant="normal">∇</mi><mi>L</mi><mo>+</mo><mi>λ</mi><mi>W</mi><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">W_{t+1} = W_t - \eta\left(\nabla L + \lambda W\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8917em;vertical-align:-0.2083em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">t</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2083em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2806em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;">(</span><span class="mord">∇</span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">λW</span><span class="mclose delimcenter" style="top:0em;">)</span></span></span></span></span></span></div>
+<p>整理：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>W</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>η</mi><mi>λ</mi><mo stretchy="false">)</mo><msub><mi>W</mi><mi>t</mi></msub><mo>−</mo><mi>η</mi><mi mathvariant="normal">∇</mi><mi>L</mi></mrow><annotation encoding="application/x-tex">W_{t+1} = (1 - \eta\lambda)W_t - \eta \nabla L</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8917em;vertical-align:-0.2083em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">t</span><span class="mbin mtight">+</span><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2083em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mord mathnormal">λ</span><span class="mclose">)</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2806em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mord">∇</span><span class="mord mathnormal">L</span></span></span></span></span></div>
+<p>所以 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span></span></span> 每一步都会先被乘上 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>η</mi><mi>λ</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(1-\eta\lambda)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mord mathnormal">λ</span><span class="mclose">)</span></span></span></span></span> 缩小一点，因此叫 <strong>Weight Decay</strong>。</p>
+<div class="box box-math"><div class="box-title">🧮 硬约束与软约束</div><div class="box-body"><p>原始形式是硬约束：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">∥</mi><mi>w</mi><msup><mi mathvariant="normal">∥</mi><mn>2</mn></msup><mo>≤</mo><mi>θ</mi></mrow><annotation encoding="application/x-tex">\|w\|^2 \le \theta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mord"><span class="mord">∥</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≤</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span></span></span></span></span>（参数必须在球内）。用拉格朗日乘子把约束转成惩罚项，就得到软约束 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>λ</mi><mi mathvariant="normal">∥</mi><mi>w</mi><msup><mi mathvariant="normal">∥</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">\lambda\|w\|^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal">λ</span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mord"><span class="mord">∥</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span>——课件正是用这个过渡说明正则化的本质是在限制模型容量。</p>
+</div></div>
+<h2>3.7 Dropout</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练时随机「关掉」一部分神经元，逼迫网络不依赖某一条特定路径。就像一个团队里随机有人请假，每个人都必须能独立工作。</p>
+</div></details>
+<p>训练时随机把部分神经元关掉。例如 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.2</mn></mrow><annotation encoding="application/x-tex">p = 0.2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.2</span></span></span></span></span> 表示随机 drop 20%。</p>
+<p><strong>直觉</strong>：如果一个神经元总能依赖另一个——</p>
+<blockquote>
+<p>A：「反正 B 会解决」</p>
+</blockquote>
+<p>就容易形成过拟合。Dropout 相当于：</p>
+<blockquote>
+<p>B 随机不来上班，所以 A 自己也必须学会工作。</p>
+</blockquote>
+<p>具体行为：</p>
+<ul>
+<li><strong>训练时</strong>：随机 mask（被 drop 的神经元输出置 0）；</li>
+<li><strong>推理时</strong>：不 Dropout（使用完整的网络）。</li>
+</ul>
+<div class="box box-math"><div class="box-title">🧮 训练与推理的期望一致</div><div class="box-body"><p>训练时神经元以概率 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi></mrow><annotation encoding="application/x-tex">p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span></span> 被保留，输出期望变成原来的 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi></mrow><annotation encoding="application/x-tex">p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span></span> 倍。所以：</p>
+<ul>
+<li>有的实现训练时除以 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi></mrow><annotation encoding="application/x-tex">p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span></span>（inverted dropout）；</li>
+<li>有的实现推理时乘以 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi></mrow><annotation encoding="application/x-tex">p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span></span>。</li>
+</ul>
+<p>PyTorch 的 <code>nn.Dropout</code> 采用 inverted dropout（训练时除以保留概率），推理时什么都不做。</p>
+</div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>Dropout 只在训练时开启</strong>：<code>model.eval()</code> 会自动关闭 Dropout 和 BatchNorm 的训练行为，忘记切换会导致推理结果随机。</li>
+<li><strong>Dropout 与 BatchNorm 可能冲突</strong>：两者都影响激活的统计量，同时大量使用要小心（现代 Transformer 常用 dropout=0.1 以下）。</li>
+</ul>
+</div></div>
+<div class="box box-key"><div class="box-title">🔑 本节必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>泛化误差</td>
+<td>真正重要的指标：模型在没见过的数据上的表现</td>
+</tr>
+<tr>
+<td>数据划分</td>
+<td>训练调参 / 验证选模型 / 测试只测一次</td>
+</tr>
+<tr>
+<td>混淆矩阵</td>
+<td>TP/FP/FN/TN，四个指标的来源</td>
+</tr>
+<tr>
+<td>Precision vs Recall</td>
+<td>别误报 vs 别漏报，F1 是调和平均</td>
+</tr>
+<tr>
+<td>过拟合 / 欠拟合</td>
+<td>太复杂记噪声 / 太简单学不动</td>
+</tr>
+<tr>
+<td>L2 / Weight Decay</td>
+<td>惩罚大权重，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>η</mi><mi>λ</mi><mo stretchy="false">)</mo><mi>W</mi></mrow><annotation encoding="application/x-tex">(1-\eta\lambda)W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mord mathnormal">λ</span><span class="mclose">)</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span></span></span> 每步缩小</td>
+</tr>
+<tr>
+<td>Dropout</td>
+<td>训练随机失活，防止神经元互相依赖</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">1000 个样本中只有 10 个正样本，模型全部预测为负，Accuracy 和 Recall 分别是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>99% 和 99%</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>99% 和 0%</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>50% 和 0%</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>1% 和 100%</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>TP=0, FN=10, TN=990, FP=0。Accuracy = (0+990)/1000 = 99%，但 Recall = TP/(TP+FN) = 0/10 = 0%。这展示了不平衡数据下 Accuracy 的欺骗性。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">癌症筛查任务应该优先优化哪个指标？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>Precision（别误报）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>Recall（别漏报）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>Accuracy</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>模型参数量</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>漏掉一个真实患者（FN）的代价远高于一次误报（FP），所以优先提高 Recall。垃圾邮件过滤则相反，优先 Precision。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">L2 正则化为什么又叫 Weight Decay？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>因为它随机丢弃权重</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>因为更新时权重会先被乘以 (1−ηλ) 而缩小</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>因为它把权重置零</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>因为它减少层数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>加入 λ‖W‖² 后梯度多出 λW 项，整理后 W ← (1−ηλ)W − η∇L，参数每步都被衰减一点，因此得名。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Dropout 在推理阶段的行为是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>继续随机失活</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>关闭失活，使用完整网络</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>随机失活一半</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>参数减半</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>Dropout 只在训练时使用（正则化手段），推理时使用完整网络。PyTorch 中 model.eval() 会自动关闭。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">损失函数</span><a class="tag" href="basics.html">梯度下降</a><span class="tag">正则化</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">模型选择</span><span class="tag">超参数调优</span><span class="tag">训练监控</span></div></div>
+</div>
+<div class="static-nav"><a href="optimizers.html">← 优化器：SGD → Momentum → Adam</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="stability.html">数值稳定：梯度爆炸/消失、初始化、BN 与残差 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/03-evaluation.md">content/03-evaluation.md</a></div>
+</main>
+</body>
+</html>

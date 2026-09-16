@@ -1,0 +1,19 @@
+{
+  "title": "大模型知识体系",
+  "chapters": [
+    { "id": "map", "num": "0", "file": "00-map.md", "title": "知识地图与学习主线", "desc": "全局脑图、6 层逻辑、优先级清单与学习方法。先读这一章。", "group": "总览", "source": "全部课件总纲" },
+    { "id": "basics", "num": "1", "file": "01-basics.md", "title": "深度学习基础：回归、Loss、梯度与 Softmax", "desc": "线性模型、MSE、梯度下降、反向传播、Softmax、交叉熵、MLP、激活函数——全套地基。", "group": "深度学习基础", "source": "1.1 深度学习基础概念" },
+    { "id": "optimizers", "num": "2", "file": "02-optimizers.md", "title": "优化器：SGD → Momentum → Adam", "desc": "SGD、Momentum、Adam 完整推导与算例，AdamW 解耦正则，优化器竞赛演示。", "group": "深度学习基础", "source": "2.1 自然语言处理" },
+    { "id": "evaluation", "num": "3", "file": "03-evaluation.md", "title": "模型评估与泛化：指标、过拟合与正则化", "desc": "混淆矩阵计算器、四大指标、不平衡数据陷阱、L2、Dropout。", "group": "模型训练与稳定性", "source": "1-2 模型评估和数值稳定" },
+    { "id": "stability", "num": "4", "file": "04-stability.md", "title": "数值稳定：梯度爆炸/消失、初始化、BN 与残差", "desc": "连乘的威力、Sigmoid 饱和、Kaiming 初始化、BatchNorm 算例、ResNet 残差。", "group": "模型训练与稳定性", "source": "1-2 模型评估和数值稳定" },
+    { "id": "rnn", "num": "5", "file": "05-rnn.md", "title": "循环神经网络：RNN → LSTM → GRU", "desc": "参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN。三个交互演示。", "group": "序列模型", "source": "1.5 循环神经网络" },
+    { "id": "nlp", "num": "6", "file": "06-nlp.md", "title": "NLP 基础：Tokenizer、BPE 与 Embedding", "desc": "BPE 真实训练器、训练与编码的区别、BBPE、Tokenizer 评估、Embedding 查表。", "group": "序列模型", "source": "2.1 自然语言处理" },
+    { "id": "transformer", "num": "7", "file": "07-transformer.md", "title": "Transformer：Attention 是全部的核心", "desc": "Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——6 个交互演示逐层拆解。", "group": "Transformer 与大模型架构", "source": "3.2 Transformer" },
+    { "id": "bert", "num": "8", "file": "08-bert.md", "title": "BERT：Encoder-only 与双向理解", "desc": "三种 Embedding、[CLS]/[SEP]、Attention Mask、MLM、80/10/10、NSP。", "group": "Transformer 与大模型架构", "source": "2-4 BERT&GPT&前沿大语言模型" },
+    { "id": "gpt", "num": "9", "file": "09-gpt.md", "title": "GPT：Decoder-only 与文本生成", "desc": "Next Token Prediction、训练并行、推理循环、Temperature、Top-K/Top-P。", "group": "Transformer 与大模型架构", "source": "2-4 BERT&GPT&前沿大语言模型" },
+    { "id": "modern-llm", "num": "10", "file": "10-modern-llm.md", "title": "现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU", "desc": "LLaMA/Qwen 骨架说明书，6 个交互演示 + 显存估算器。", "group": "Transformer 与大模型架构", "source": "2-4 BERT&GPT&前沿大语言模型" },
+    { "id": "pretrain-sft", "num": "11", "file": "11-pretrain-sft.md", "title": "大模型工程：Pretrain 与 SFT", "desc": "数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。", "group": "大模型训练工程", "source": "3.1 大模型工程专题" },
+    { "id": "rl-grpo", "num": "12", "file": "12-rl-grpo.md", "title": "强化学习：PPO 与 GRPO", "desc": "Group Relative Advantage、Policy Ratio、Clip、KL 惩罚——交互演示逐项拆解。", "group": "大模型训练工程", "source": "GRPO强化学习算法" },
+    { "id": "efficient", "num": "13", "file": "13-efficient.md", "title": "高效训练：混合精度与 LoRA", "desc": "位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。", "group": "大模型训练工程", "source": "3.1 大模型工程专题" }
+  ]
+}

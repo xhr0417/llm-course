@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高效训练：混合精度与 LoRA · 大模型知识体系</title>
+<meta name="description" content="位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/efficient.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 13 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/efficient">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/efficient">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 13 章 · 大模型训练工程</div><h1 class="chapter-title">高效训练：混合精度与 LoRA</h1><p class="chapter-desc">位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章对应课件</strong>：《3.1 大模型工程专题》后半部分。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
+</blockquote>
+<h2>13.1 FP32、FP16、BF16：数值格式 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>每个数字在计算机里占多少位，决定了它能表示多大范围、多高精度。位数越少越省显存、算得越快，但越容易溢出或精度不够。大模型训练就是在「省」和「稳」之间找平衡。</p>
+</div></details>
+<h3>数字算例（7B 模型的权重显存）</h3>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th>每参数字节</th>
+<th>7B 权重显存</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FP32</td>
+<td>4</td>
+<td>7×10⁹ × 4 ≈ <strong>28 GB</strong></td>
+</tr>
+<tr>
+<td>FP16 / BF16</td>
+<td>2</td>
+<td>7×10⁹ × 2 ≈ <strong>14 GB</strong></td>
+</tr>
+<tr>
+<td>INT8</td>
+<td>1</td>
+<td>约 <strong>7 GB</strong></td>
+</tr>
+<tr>
+<td>INT4</td>
+<td>0.5</td>
+<td>约 <strong>3.5 GB</strong></td>
+</tr>
+</tbody></table>
+<h3>逐项拆解（位分布）</h3>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th>总位数</th>
+<th>符号位</th>
+<th>指数位</th>
+<th>尾数位</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FP32</td>
+<td>32</td>
+<td>1</td>
+<td>8</td>
+<td>23</td>
+<td>基准精度，显存最贵</td>
+</tr>
+<tr>
+<td>FP16</td>
+<td>16</td>
+<td>1</td>
+<td>5</td>
+<td>10</td>
+<td>精度高，范围小，易 overflow</td>
+</tr>
+<tr>
+<td>BF16</td>
+<td>16</td>
+<td>1</td>
+<td>8</td>
+<td>7</td>
+<td>范围与 FP32 相同，精度略低</td>
+</tr>
+<tr>
+<td>INT8</td>
+<td>8</td>
+<td>1</td>
+<td>—</td>
+<td>7（整数）</td>
+<td>量化推理常用</td>
+</tr>
+<tr>
+<td>INT4</td>
+<td>4</td>
+<td>1</td>
+<td>—</td>
+<td>3（整数）</td>
+<td>更激进的量化，显存最省</td>
+</tr>
+</tbody></table>
+<h3>矩阵 shape</h3>
+<p>格式不影响张量形状，只影响每个元素的字节数：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>显存</mtext><mo>=</mo><mtext>参数量</mtext><mo>×</mo><mtext>bytes_per_elem</mtext></mrow><annotation encoding="application/x-tex">\text{显存} = \text{参数量} \times \text{bytes\_per\_elem}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">显存</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord cjk_fallback">参数量</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_elem</span></span></span></span></span></span></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：位分布 + 显存计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>上方用色块展示每种格式的位分布（红=符号、蓝=指数、绿=尾数）；下方选择参数量（7B/14B/32B/70B）和精度，实时计算权重显存与训练显存。</p>
+<p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-math"><div class="box-title">🧮 指数位决定「范围」，尾数位决定「精度」</div><div class="box-body"><ul>
+<li><strong>指数位</strong>：决定能表示多大/多小的数。FP16 的 5 位指数最大约 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mn>15</mn></msup></mrow><annotation encoding="application/x-tex">2^{15}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">15</span></span></span></span></span></span></span></span></span></span></span></span></span>，超出就溢出成 inf；</li>
+<li><strong>尾数位</strong>：决定有效数字的位数。BF16 只有 7 位尾数（约 2~3 位十进制有效数字），但动态范围与 FP32 相同（8 位指数）。</li>
+</ul>
+<p>所以：FP16 容易 overflow（指数范围小）；BF16 不容易 overflow，但精度粗一些。</p>
+</div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><p><strong>BF16 不是「低配 FP16」</strong>。FP16 尾数多、范围小；BF16 尾数少、范围大。训练时梯度的动态范围极大，范围比精度更重要，所以 BF16 是训练首选；推理时两者都常见。</p>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么训练用 BF16 而不是 FP16？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>训练中梯度动态范围极大，FP16 的 5 位指数范围小，容易上溢（inf）或下溢（0），需要 GradScaler 做损失缩放；BF16 的 8 位指数与 FP32 相同，几乎不会溢出，训练更稳，代价是尾数精度低（对训练影响很小）。</p>
+</div></details></div></div>
+<h2>13.2 为什么 BF16 很重要</h2>
+<p><strong>FP16</strong>：精度较高，但 exponent（指数）范围相对有限。</p>
+<p><strong>BF16</strong>：mantissa（尾数）精度低一些，但 exponent 范围更接近 FP32。</p>
+<p><strong>直觉对比</strong>：</p>
+<ul>
+<li>FP16 像「刻度很细但尺子很短」——精确但容易超出量程；</li>
+<li>BF16 像「刻度粗但尺子很长」——范围大，适合梯度这种动态范围极大的数值。</li>
+</ul>
+<p>现在很多 GPU（A100、H100、H800）上的大模型训练大量使用 BF16。</p>
+<h2>13.3 Mixed Precision：混合精度训练 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>前向反向用低精度（省显存、用 Tensor Core 加速），但参数更新必须用高精度（否则微小更新会被舍入成 0）。所以维护一份 FP32 的「主权重」，更新后再转回低精度使用。</p>
+</div></details>
+<h3>配置</h3>
+<pre><code class="lang-">Forward            → FP16 / BF16
+Backward           → FP16 / BF16
+Master weights     → FP32
+Optimizer states   → FP32</code></pre>
+<h3>逐项拆解（为什么需要 master weights）</h3>
+<p>假设学习率 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>η</mi><mo>=</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\eta = 10^{-5}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span></span></span></span>，某参数 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>=</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">w = 0.5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span></span>。更新量：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>w</mi><mo>=</mo><mi>η</mi><mo>⋅</mo><mi>g</mi><mo>≈</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\Delta w = \eta \cdot g \approx 10^{-5}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6389em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">η</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6776em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">g</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<p>FP16 在 0.5 附近的精度（最小间隔）约为 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mrow><mo>−</mo><mn>11</mn></mrow></msup><mo>≈</mo><mn>4.9</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow><annotation encoding="application/x-tex">2^{-11} \approx 4.9 \times 10^{-4}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">11</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">4.9</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">4</span></span></span></span></span></span></span></span></span></span></span></span></span>——<strong>比更新量大一个数量级</strong>。如果直接在 FP16 上更新，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>+</mo><mi mathvariant="normal">Δ</mi><mi>w</mi></mrow><annotation encoding="application/x-tex">w + \Delta w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span> 会被舍入回 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi></mrow><annotation encoding="application/x-tex">w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span></span></span>，模型「学不动」。</p>
+<h3>数字算例</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>精度</th>
+<th>能否表示 10⁻⁵ 的更新</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FP16 直接更新（w=0.5）</td>
+<td>约 5×10⁻⁴</td>
+<td>❌ 被舍入为 0</td>
+</tr>
+<tr>
+<td>FP32 主权重（w=0.5）</td>
+<td>约 6×10⁻⁸</td>
+<td>✅ 精确累加</td>
+</tr>
+<tr>
+<td>BF16 直接更新（w=0.5）</td>
+<td>约 4×10⁻³</td>
+<td>❌ 更糟</td>
+</tr>
+</tbody></table>
+<details class="fold"><summary>工程里怎么用（PyTorch AMP）</summary><div class="fold-body"><pre><code class="lang-python">scaler = torch.cuda.amp.GradScaler()   # FP16 需要，BF16 通常不需要
+
+for x, y in loader:
+    with torch.autocast(device_type=&quot;cuda&quot;, dtype=torch.bfloat16):
+        logits = model(x)
+        loss = loss_fn(logits, y)
+    scaler.scale(loss).backward()      # 放大 loss 防止梯度下溢
+    scaler.step(optimizer)
+    scaler.update()
+    optimizer.zero_grad()</code></pre>
+</div></details>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>混合精度不是「全部用低精度」</strong>：主权重和优化器状态保持 FP32。</li>
+<li><strong>BF16 通常不需要 GradScaler</strong>（范围够大）；FP16 必须用，否则梯度容易下溢成 0。</li>
+<li><strong>低精度计算 + 高精度更新</strong>才是完整方案，缺一不可。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：混合精度训练为什么需要 FP32 master weights？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>低精度格式在参数附近的表示精度有限，小学习率下更新量（如 1e-5）可能小于该格式的最小间隔，导致更新被舍入为 0、模型学不动。用 FP32 保存主权重做累加更新，再转成 BF16/FP16 供前向使用，兼顾显存效率与数值精度。</p>
+</div></details></div></div>
+<h2>13.4 训练显存估算 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练时显存里不只有权重，还有梯度、优化器状态（Adam 的 m 和 v）、激活值、临时缓冲。所以「模型文件 14GB」绝不等于「训练只要 14GB 显存」。</p>
+</div></details>
+<h3>公式（每参数）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>bytes/param</mtext><mo>=</mo><munder><munder><mn>2</mn><mo stretchy="true">⏟</mo></munder><mtext>BF16 权重</mtext></munder><mo>+</mo><munder><munder><mn>4</mn><mo stretchy="true">⏟</mo></munder><mtext>FP32 主权重</mtext></munder><mo>+</mo><munder><munder><mn>4</mn><mo stretchy="true">⏟</mo></munder><mtext>FP32 梯度</mtext></munder><mo>+</mo><munder><munder><mrow><mn>4</mn><mo>+</mo><mn>4</mn></mrow><mo stretchy="true">⏟</mo></munder><mrow><mtext>Adam </mtext><mi>m</mi><mo separator="true">,</mo><mi>v</mi></mrow></munder><mo>=</mo><mn>18</mn></mrow><annotation encoding="application/x-tex">\text{bytes/param} = \underbrace{2}_{\text{BF16 权重}} + \underbrace{4}_{\text{FP32 主权重}} + \underbrace{4}_{\text{FP32 梯度}} + \underbrace{4+4}_{\text{Adam } m, v} = 18</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">bytes/param</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.9708em;vertical-align:-1.3263em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.6737em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">BF16 </span><span class="mord cjk_fallback mtight">权重</span></span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.352em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.648em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3263em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.9708em;vertical-align:-1.3263em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.6737em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">FP32 </span><span class="mord cjk_fallback mtight">主权重</span></span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.352em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">4</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.648em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3263em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.9708em;vertical-align:-1.3263em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.6737em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">FP32 </span><span class="mord cjk_fallback mtight">梯度</span></span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.352em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">4</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.648em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3263em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.198em;vertical-align:-1.5535em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.5826em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">Adam </span></span><span class="mord mathnormal mtight">m</span><span class="mpunct mtight">,</span><span class="mord mathnormal mtight" style="margin-right:0.03588em;">v</span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.2687em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">4</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">4</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7313em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.5535em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">18</span></span></span></span></span></div>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>精度</th>
+<th>字节</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>BF16 weights</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>FP32 master weights</td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td>FP32 gradients</td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Adam m</td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Adam v</td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td></td>
+<td><strong>约 18 bytes/参数</strong></td>
+</tr>
+</tbody></table>
+<h3>数字算例</h3>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>权重（BF16）</th>
+<th>训练状态（18 B/param）</th>
+<th>加激活后的实际需求</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>7B</td>
+<td>14 GB</td>
+<td><strong>126 GB</strong></td>
+<td>&gt;140 GB</td>
+</tr>
+<tr>
+<td>14B</td>
+<td>28 GB</td>
+<td><strong>252 GB</strong></td>
+<td>&gt;280 GB</td>
+</tr>
+<tr>
+<td>70B</td>
+<td>140 GB</td>
+<td><strong>1260 GB</strong></td>
+<td>&gt;1.3 TB</td>
+</tr>
+</tbody></table>
+<p><strong>7B 训练就超过单卡 80GB</strong>——所以大模型训练必须用分布式技术：</p>
+<table>
+<thead>
+<tr>
+<th>技术</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ZeRO / FSDP</td>
+<td>分片优化器状态/梯度/参数到多卡</td>
+</tr>
+<tr>
+<td>张量并行</td>
+<td>把单层矩阵切到多卡</td>
+</tr>
+<tr>
+<td>流水线并行</td>
+<td>把不同层放到不同卡</td>
+</tr>
+<tr>
+<td>梯度检查点</td>
+<td>不存全部激活，反向时重算（时间换显存）</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：显存计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>选择参数量与精度，实时查看权重显存与训练显存（含 18 bytes/参数估算）。</p>
+<p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>参数文件大小 ≠ 训练显存</strong>：训练状态约为权重的 9 倍（18 vs 2 bytes/param）。</li>
+<li><strong>激活值经常是隐性大头</strong>：与 batch size、序列长度成正比，梯度检查点就是为它设计的。</li>
+<li><strong>推理显存 ≠ 训练显存</strong>：推理只需权重 + KV Cache，通常小得多。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么 7B 模型训练需要 100GB+ 显存？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>混合精度 + Adam 下每参数约 18 字节（BF16 权重 2 + FP32 主权重 4 + FP32 梯度 4 + Adam m/v 8），7×10⁹×18 ≈ 126 GB，再加上激活值（与 batch、序列长度成正比）。所以必须用 ZeRO/FSDP、张量并行、梯度检查点等分布式技术。</p>
+</div></details></div></div>
+<h2>13.5 LoRA：低秩微调 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>微调不需要改动整个大矩阵——模型只需要在一个「低维方向」上调整。LoRA 把权重更新分解成两个瘦长矩阵相乘（低秩分解），只训练这两个小矩阵，参数量降到 1% 以下。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>W</mi><mo>=</mo><msub><mi>W</mi><mn>0</mn></msub><mo>+</mo><mi mathvariant="normal">Δ</mi><mi>W</mi><mo separator="true">,</mo><mspace width="2em"/><mi mathvariant="normal">Δ</mi><mi>W</mi><mo>=</mo><mi>B</mi><mi>A</mi></mrow><annotation encoding="application/x-tex">W = W_0 + \Delta W, \qquad \Delta W = BA</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal">A</span></span></span></span></span></div>
+<p>其中：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>W</mi><mn>0</mn></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>d</mi><mo>×</mo><mi>k</mi></mrow></msup><mo separator="true">,</mo><mspace width="2em"/><mi>B</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>d</mi><mo>×</mo><mi>r</mi></mrow></msup><mo separator="true">,</mo><mspace width="2em"/><mi>A</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>r</mi><mo>×</mo><mi>k</mi></mrow></msup><mo separator="true">,</mo><mspace width="2em"/><mi>r</mi><mo>≪</mo><mi>d</mi><mo separator="true">,</mo><mi>k</mi></mrow><annotation encoding="application/x-tex">W_0 \in \mathbb R^{d \times k}, \qquad B \in \mathbb R^{d \times r}, \qquad A \in \mathbb R^{r \times k}, \qquad r \ll d, k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0935em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8991em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mbin mtight">×</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0935em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8991em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mbin mtight">×</span><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0935em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8991em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span><span class="mbin mtight">×</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≪</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">d</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span></span></span></span></span></div>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+<th>是否训练</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>W</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">W_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></td>
+<td>预训练权重</td>
+<td>❄️ 冻结</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span></span></span></span></span></td>
+<td>低秩矩阵（d×r）</td>
+<td>✅ 训练</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span></span></td>
+<td>低秩矩阵（r×k）</td>
+<td>✅ 训练</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi></mrow><annotation encoding="application/x-tex">r</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span></span></span></span></span></td>
+<td>秩（超参数）</td>
+<td>8~64 常用</td>
+</tr>
+</tbody></table>
+<h3>矩阵 shape</h3>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">W₀</span><span class="shape-dims">[d, k]</span><span class="shape-note">冻结 + B [d, r] </span></span><span class="shape-op">×</span><span class="shape-part"><span class="shape-name">A</span><span class="shape-dims">[r, k]</span></span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">ΔW</span><span class="shape-dims">[d, k]</span><span class="shape-note">低秩</span></span></div><div class="shape-row"><span class="shape-op">可训练参数：r</span><span class="shape-op">×</span><span class="shape-op">(d+k) 对比全量 d</span><span class="shape-op">×</span><span class="shape-op">k</span></div></div>
+<h3>数字算例（小矩阵，看得见的低秩）</h3>
+<p>设 d = k = 4，r = 1：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>B</mi><mo>=</mo><mrow><mo fence="true">(</mo><mtable rowspacing="0.16em" columnalign="center" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.5</mn></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.3</mn></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.2</mn></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.1</mn></mstyle></mtd></mtr></mtable><mo fence="true">)</mo></mrow><mo separator="true">,</mo><mspace width="2em"/><mi>A</mi><mo>=</mo><mrow><mo fence="true">(</mo><mtable rowspacing="0.16em" columnalign="center center center center" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.4</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.1</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.2</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.3</mn></mstyle></mtd></mtr></mtable><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">B = \begin{pmatrix}0.5\\-0.3\\0.2\\0.1\end{pmatrix}, \qquad A = \begin{pmatrix}0.4&amp;0.1&amp;-0.2&amp;0.3\end{pmatrix}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:4.8em;vertical-align:-2.15em;"></span><span class="minner"><span class="mopen"><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.65em;"><span class="pstrut" style="height:6.8em;"></span><span style="width:0.875em;height:4.800em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.875em" height="4.800em" viewBox="0 0 875 4800"><path d="M863,9c0,-2,-2,-5,-6,-9c0,0,-17,0,-17,0c-12.7,0,-19.3,0.3,-20,1
+c-5.3,5.3,-10.3,11,-15,17c-242.7,294.7,-395.3,682,-458,1162c-21.3,163.3,-33.3,349,
+-36,557 l0,1284c0.2,6,0,26,0,60c2,159.3,10,310.7,24,454c53.3,528,210,
+949.7,470,1265c4.7,6,9.7,11.7,15,17c0.7,0.7,7,1,19,1c0,0,18,0,18,0c4,-4,6,-7,6,-9
+c0,-2.7,-3.3,-8.7,-10,-18c-135.3,-192.7,-235.5,-414.3,-300.5,-665c-65,-250.7,-102.5,
+-544.7,-112.5,-882c-2,-104,-3,-167,-3,-189
+l0,-1292c0,-162.7,5.7,-314,17,-454c20.7,-272,63.7,-513,129,-723c65.3,
+-210,155.3,-396.3,270,-559c6.7,-9.3,10,-15.3,10,-18z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mtable"><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.81em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.5</span></span></span><span style="top:-3.61em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.3</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.2</span></span></span><span style="top:-1.21em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span></span><span class="mclose"><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.65em;"><span class="pstrut" style="height:6.8em;"></span><span style="width:0.875em;height:4.800em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.875em" height="4.800em" viewBox="0 0 875 4800"><path d="M76,0c-16.7,0,-25,3,-25,9c0,2,2,6.3,6,13c21.3,28.7,42.3,60.3,
+63,95c96.7,156.7,172.8,332.5,228.5,527.5c55.7,195,92.8,416.5,111.5,664.5
+c11.3,139.3,17,290.7,17,454c0,28,1.7,43,3.3,45l0,1209
+c-3,4,-3.3,16.7,-3.3,38c0,162,-5.7,313.7,-17,455c-18.7,248,-55.8,469.3,-111.5,664
+c-55.7,194.7,-131.8,370.3,-228.5,527c-20.7,34.7,-41.7,66.3,-63,95c-2,3.3,-4,7,-6,11
+c0,7.3,5.7,11,17,11c0,0,11,0,11,0c9.3,0,14.3,-0.3,15,-1c5.3,-5.3,10.3,-11,15,-17
+c242.7,-294.7,395.3,-681.7,458,-1161c21.3,-164.7,33.3,-350.7,36,-558
+l0,-1344c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
+-470,-1265c-4.7,-6,-9.7,-11.7,-15,-17c-0.7,-0.7,-6.7,-1,-18,-1z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.2em;vertical-align:-0.35em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mord"><span class="mtable"><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.85em;"><span style="top:-3.01em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.4</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.35em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.85em;"><span style="top:-3.01em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.35em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.85em;"><span style="top:-3.01em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.35em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.85em;"><span style="top:-3.01em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.35em;"><span></span></span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span></span></span></div>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>W</mi><mo>=</mo><mi>B</mi><mi>A</mi><mo>=</mo><mrow><mo fence="true">(</mo><mtable rowspacing="0.16em" columnalign="center center center center" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.20</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.05</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.10</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.15</mn></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.12</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.03</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.06</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.09</mn></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.08</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.02</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.04</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.06</mn></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.04</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.01</mn></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mn>0.02</mn></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mn>0.03</mn></mstyle></mtd></mtr></mtable><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Delta W = BA = \begin{pmatrix}0.20&amp;0.05&amp;-0.10&amp;0.15\\-0.12&amp;-0.03&amp;0.06&amp;-0.09\\0.08&amp;0.02&amp;-0.04&amp;0.06\\0.04&amp;0.01&amp;-0.02&amp;0.03\end{pmatrix}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:4.8em;vertical-align:-2.15em;"></span><span class="minner"><span class="mopen"><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.65em;"><span class="pstrut" style="height:6.8em;"></span><span style="width:0.875em;height:4.800em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.875em" height="4.800em" viewBox="0 0 875 4800"><path d="M863,9c0,-2,-2,-5,-6,-9c0,0,-17,0,-17,0c-12.7,0,-19.3,0.3,-20,1
+c-5.3,5.3,-10.3,11,-15,17c-242.7,294.7,-395.3,682,-458,1162c-21.3,163.3,-33.3,349,
+-36,557 l0,1284c0.2,6,0,26,0,60c2,159.3,10,310.7,24,454c53.3,528,210,
+949.7,470,1265c4.7,6,9.7,11.7,15,17c0.7,0.7,7,1,19,1c0,0,18,0,18,0c4,-4,6,-7,6,-9
+c0,-2.7,-3.3,-8.7,-10,-18c-135.3,-192.7,-235.5,-414.3,-300.5,-665c-65,-250.7,-102.5,
+-544.7,-112.5,-882c-2,-104,-3,-167,-3,-189
+l0,-1292c0,-162.7,5.7,-314,17,-454c20.7,-272,63.7,-513,129,-723c65.3,
+-210,155.3,-396.3,270,-559c6.7,-9.3,10,-15.3,10,-18z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mtable"><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.81em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.20</span></span></span><span style="top:-3.61em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.12</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.08</span></span></span><span style="top:-1.21em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.04</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.81em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.05</span></span></span><span style="top:-3.61em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.03</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.02</span></span></span><span style="top:-1.21em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.01</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.81em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.10</span></span></span><span style="top:-3.61em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.06</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.04</span></span></span><span style="top:-1.21em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.02</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:0.5em;"></span><span class="arraycolsep" style="width:0.5em;"></span><span class="col-align-c"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.81em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.15</span></span></span><span style="top:-3.61em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord">0.09</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.06</span></span></span><span style="top:-1.21em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0.03</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span></span><span class="mclose"><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.65em;"><span style="top:-4.65em;"><span class="pstrut" style="height:6.8em;"></span><span style="width:0.875em;height:4.800em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.875em" height="4.800em" viewBox="0 0 875 4800"><path d="M76,0c-16.7,0,-25,3,-25,9c0,2,2,6.3,6,13c21.3,28.7,42.3,60.3,
+63,95c96.7,156.7,172.8,332.5,228.5,527.5c55.7,195,92.8,416.5,111.5,664.5
+c11.3,139.3,17,290.7,17,454c0,28,1.7,43,3.3,45l0,1209
+c-3,4,-3.3,16.7,-3.3,38c0,162,-5.7,313.7,-17,455c-18.7,248,-55.8,469.3,-111.5,664
+c-55.7,194.7,-131.8,370.3,-228.5,527c-20.7,34.7,-41.7,66.3,-63,95c-2,3.3,-4,7,-6,11
+c0,7.3,5.7,11,17,11c0,0,11,0,11,0c9.3,0,14.3,-0.3,15,-1c5.3,-5.3,10.3,-11,15,-17
+c242.7,-294.7,395.3,-681.7,458,-1161c21.3,-164.7,33.3,-350.7,36,-558
+l0,-1344c-2,-159.3,-10,-310.7,-24,-454c-53.3,-528,-210,-949.7,
+-470,-1265c-4.7,-6,-9.7,-11.7,-15,-17c-0.7,-0.7,-6.7,-1,-18,-1z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.15em;"><span></span></span></span></span></span></span></span></span></span></span></span></div>
+<p>观察：<strong>ΔW 的每一行都是 A 的倍数</strong>（行之间线性相关）——这就是「低秩」：无论怎么训练，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi><mi>A</mi></mrow><annotation encoding="application/x-tex">BA</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal">A</span></span></span></span></span> 只能表示少数方向的组合。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：LoRA 矩阵运算<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换秩 r，看 B×A 如何生成 ΔW，以及 ΔW 的行如何保持线性相关；W = W₀ + ΔW 实时计算。</p>
+<p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：参数量对比<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动秩 r 滑块，实时看 LoRA 可训练参数量（r×(d+k)）与全量微调（d×k）的对比和百分比。</p>
+<p><a class="static-link" href="../index.html#/efficient">在交互版中打开这个演示 →</a></p></div></div>
+<h2>13.6 为什么 LoRA 省参数 ★</h2>
+<h3>公式与算例</h3>
+<p>假设 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>4096</mn><mo>×</mo><mn>4096</mn></mrow></msup></mrow><annotation encoding="application/x-tex">W \in \mathbb R^{4096 \times 4096}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">4096</span><span class="mbin mtight">×</span><span class="mord mtight">4096</span></span></span></span></span></span></span></span></span></span></span></span></span>：</p>
+<p><strong>全量微调</strong>：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mn>4096</mn><mo>×</mo><mn>4096</mn><mo>=</mo><mn>16</mn><mo separator="true" lspace="0em" rspace="0em">,</mo><mn>777</mn><mo separator="true" lspace="0em" rspace="0em">,</mo><mn>216</mn><mo>≈</mo><mn>16.8</mn><mtext>M</mtext></mrow><annotation encoding="application/x-tex">4096 \times 4096 = 16{,}777{,}216 \approx 16.8\text{M}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">4096</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">4096</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">16</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">777</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">216</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">16.8</span><span class="mord text"><span class="mord">M</span></span></span></span></span></span></div>
+<p><strong>LoRA（r = 8）</strong>：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><munder><munder><mrow><mn>4096</mn><mo>×</mo><mn>8</mn></mrow><mo stretchy="true">⏟</mo></munder><mi>B</mi></munder><mo>+</mo><munder><munder><mrow><mn>8</mn><mo>×</mo><mn>4096</mn></mrow><mo stretchy="true">⏟</mo></munder><mi>A</mi></munder><mo>=</mo><mn>65</mn><mo separator="true" lspace="0em" rspace="0em">,</mo><mn>536</mn><mo>≈</mo><mn>0.066</mn><mtext>M</mtext></mrow><annotation encoding="application/x-tex">\underbrace{4096 \times 8}_{B} + \underbrace{8 \times 4096}_{A} = 65{,}536 \approx 0.066\text{M}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.0541em;vertical-align:-1.4097em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.5903em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05017em;">B</span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.2687em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">4096</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">8</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7313em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.4097em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0541em;vertical-align:-1.4097em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span style="top:-1.5903em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">A</span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6444em;"><span class="svg-align" style="top:-2.2687em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">8</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">4096</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7313em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.4097em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">65</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">536</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">0.066</span><span class="mord text"><span class="mord">M</span></span></span></span></span></span></div>
+<p>占比：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mn>65536</mn><mn>16777216</mn></mfrac><mo>≈</mo><mn>0.39</mn><mi mathvariant="normal">%</mi></mrow><annotation encoding="application/x-tex">\frac{65536}{16777216} \approx 0.39\%</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">16777216</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">65536</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8056em;vertical-align:-0.0556em;"></span><span class="mord">0.39%</span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>可训练参数</th>
+<th>优化器状态</th>
+<th>显存</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Full Fine-tuning</td>
+<td>100%（16.8M）</td>
+<td>全量 m/v</td>
+<td>极贵</td>
+</tr>
+<tr>
+<td>LoRA (r=8)</td>
+<td>0.39%（66K）</td>
+<td>只有 A/B 的</td>
+<td>大幅降低</td>
+</tr>
+<tr>
+<td>LoRA (r=64)</td>
+<td>约 3%</td>
+<td>只有 A/B 的</td>
+<td>仍远低于全量</td>
+</tr>
+</tbody></table>
+<p><strong>关键</strong>：省的不只是权重显存，更是<strong>优化器状态</strong>（Adam 的 m/v 是参数量的 8 字节/参数）——LoRA 只需为 A/B 保存优化器状态。</p>
+<details class="fold"><summary>工程里怎么用（HuggingFace PEFT）</summary><div class="fold-body"><pre><code class="lang-python">from peft import LoraConfig, get_peft_model
+
+config = LoraConfig(
+    r=8,                      # 秩
+    lora_alpha=16,            # 缩放系数（实际用 α/r · BA）
+    target_modules=[&quot;q_proj&quot;, &quot;k_proj&quot;, &quot;v_proj&quot;, &quot;o_proj&quot;],
+    lora_dropout=0.05,
+    task_type=&quot;CAUSAL_LM&quot;,
+)
+model = get_peft_model(base_model, config)
+model.print_trainable_parameters()
+# trainable params: 4,194,304 || all params: 6,742,609,920 || trainable%: 0.0622</code></pre>
+</div></details>
+<h2>13.7 LoRA 为什么可行</h2>
+<p>它背后的假设：</p>
+<blockquote>
+<p><strong>模型微调所需要的参数变化，并不一定占满整个高维参数空间，可能只需要在一个较低维的方向上调整。</strong></p>
+</blockquote>
+<p>所以 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>W</mi></mrow><annotation encoding="application/x-tex">\Delta W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span></span></span> 近似是 low rank。这是 LoRA 最核心的思想。</p>
+<h3>矩阵秩的直觉</h3>
+<div class="box box-math"><div class="box-title">🧮 秩是什么</div><div class="box-body"><p>一个 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi><mo>×</mo><mi>k</mi></mrow><annotation encoding="application/x-tex">d \times k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span></span></span></span></span> 的矩阵，秩 r 表示它实际能表达的「独立方向数」：</p>
+<ul>
+<li>满秩（r = min(d,k)）：每个方向都独立，能表达任意线性变换；</li>
+<li>低秩：所有行/列都是少数几个基向量的组合，表达能力受限。</li>
+</ul>
+<p><strong>关键假设</strong>：微调所需的变化不需要满秩——往往只需要调整少数几个语义方向（如「语气更正式」「更倾向拒绝」），低秩近似就够了。</p>
+</div></div>
+<p>实践细节：</p>
+<ul>
+<li><strong>初始化</strong>：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span></span> 用高斯随机，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span></span></span></span></span> 初始化为 0 → 训练开始时 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Δ</mi><mi>W</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\Delta W = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">Δ</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span></span>，不破坏原模型；</li>
+<li><strong>缩放</strong>：实际使用 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mi>α</mi><mi>r</mi></mfrac><mi>B</mi><mi>A</mi></mrow><annotation encoding="application/x-tex">\frac{\alpha}{r} BA</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0404em;vertical-align:-0.345em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6954em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0037em;">α</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal">A</span></span></span></span></span>，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi></mrow><annotation encoding="application/x-tex">\alpha</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span></span></span></span> 控制更新幅度；</li>
+<li><strong>作用位置</strong>：通常加在 Attention 的 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>W</mi><mi>Q</mi></msub><mo separator="true">,</mo><msub><mi>W</mi><mi>K</mi></msub><mo separator="true">,</mo><msub><mi>W</mi><mi>V</mi></msub><mo separator="true">,</mo><msub><mi>W</mi><mi>O</mi></msub></mrow><annotation encoding="application/x-tex">W_Q, W_K, W_V, W_O</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">Q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">K</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.22222em;">V</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">O</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span> 上；</li>
+<li><strong>r 的选择</strong>：8～64 常用，任务越复杂/数据越多可以越大。</li>
+</ul>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>LoRA ≠ 量化</strong>：LoRA 不改动原权重精度，只是额外挂一对低秩矩阵；量化（QLoRA 里的 4-bit）是另一回事。QLoRA = 4-bit 量化的基座 + LoRA 适配器。</li>
+<li><strong>LoRA 不是万能的</strong>：需要「学会新知识」的任务（继续预训练级别）低秩可能不够，需要全量或更大 r。</li>
+<li><strong>推理时可以合并</strong>：<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><msub><mi>W</mi><mn>0</mn></msub><mo>+</mo><mi>B</mi><mi>A</mi></mrow><annotation encoding="application/x-tex">W = W_0 + BA</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal">A</span></span></span></span></span> 可以离线合并成一个矩阵，推理零额外开销。</li>
+<li><strong>B 初始化为 0 不是随便选的</strong>：保证训练起点与原模型完全一致。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：LoRA 为什么有效？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>基于「微调更新矩阵是低秩的」经验假设：任务适配只需要少数方向的调整，因此 ΔW ≈ BA（r ≪ d,k）即可近似。参数从 d×k 降到 r×(d+k)，显存和存储成本大幅下降，效果接近全量微调。</p>
+</div></details><p><strong>Q2：为什么 B 初始化为 0？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>保证训练开始时 ΔW = BA = 0，模型行为与原始模型完全一致，训练从稳定起点开始；如果 A、B 都随机初始化，初始扰动可能破坏预训练知识。</p>
+</div></details><p><strong>Q3：LoRA 和全量微调怎么选？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>数据量小、任务适配（风格、格式、领域术语）→ LoRA 性价比最高；需要注入大量新知识或大幅改变行为 → 全量微调或继续预训练。LoRA 的另一个优势是可以为不同任务训练多个适配器，共享同一个基座。</p>
+</div></details></div></div>
+<h2>13.8 本章总结</h2>
+<div class="box box-key"><div class="box-title">🔑 本节必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FP32/FP16/BF16</td>
+<td>指数位决定范围，尾数位决定精度</td>
+</tr>
+<tr>
+<td>BF16</td>
+<td>范围同 FP32，训练不易 overflow</td>
+</tr>
+<tr>
+<td>Mixed Precision</td>
+<td>前向反向低精度 + master weights FP32</td>
+</tr>
+<tr>
+<td>训练显存</td>
+<td>≈18 bytes/参数（混合精度+Adam），7B 需 126GB</td>
+</tr>
+<tr>
+<td>LoRA</td>
+<td>ΔW = BA 低秩分解，只训 A/B</td>
+</tr>
+<tr>
+<td>参数量</td>
+<td>r×(d+k) vs d×k，可降到 0.39%</td>
+</tr>
+<tr>
+<td>可行性</td>
+<td>微调变化集中在低维子空间（秩的直觉）</td>
+</tr>
+<tr>
+<td>注意</td>
+<td>LoRA ≠ 量化；推理可合并；B 初始化为 0</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">BF16 相比 FP16 的主要优势是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>精度更高</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>指数位与 FP32 相同，动态范围大，训练时不易 overflow</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>占用显存更小</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>计算更快</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>BF16 有 8 位指数（与 FP32 相同）但只有 7 位尾数；FP16 有 10 位尾数但只有 5 位指数。训练时梯度动态范围大，范围比精度更重要，所以 BF16 更稳。两者都是 16 位。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">混合精度训练中 FP32 master weights 的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加速前向计算</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>避免小更新量在低精度下被舍入为 0</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>减少显存</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>替代优化器</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>学习率很小时，更新量可能小于低精度格式在该数量级的表示精度，导致参数「学不动」。FP32 主权重保留高精度累加，更新后再转低精度用于前向。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">7B 模型用混合精度 + Adam 训练，仅模型状态约占多少显存？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>14 GB</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>28 GB</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>约 126 GB</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>7 GB</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：C</strong></p>每参数约 18 字节（BF16 权重 2 + FP32 主权重 4 + FP32 梯度 4 + Adam m/v 8），7×10⁹×18 ≈ 126 GB。还不含激活值，所以必须用分布式训练。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">LoRA 的核心假设是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>模型参数量可以减半</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>微调的权重变化 ΔW 是低秩的，可用 BA 近似</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>所有权重都可以量化到 4-bit</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>不需要梯度</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>LoRA 假设任务适配所需的更新集中在低维子空间，因此 ΔW ≈ BA（r ≪ d,k）。它不改动原权重，也不等于量化（QLoRA 才是量化+LoRA）。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">LoRA 中 B 矩阵初始化为 0 的目的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加速训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>保证训练开始时 ΔW = 0，不破坏预训练模型</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>减少参数量</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>ΔW = BA，若 B 初始为 0 则初始更新为 0，模型从原始行为开始平稳训练。A 通常用高斯随机初始化。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="basics.html">梯度下降</a><span class="tag">优化器状态</span><a class="tag" href="efficient.html">显存估算</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">指令微调</span><span class="tag">QLoRA</span><span class="tag">多适配器部署</span><span class="tag">分布式训练</span></div></div>
+</div>
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-efficient.md">content/13-efficient.md</a></div>
+</main>
+</body>
+</html>

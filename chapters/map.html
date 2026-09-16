@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识地图与学习主线 · 大模型知识体系</title>
+<meta name="description" content="全局脑图、6 层逻辑、优先级清单与学习方法。先读这一章。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/map.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 0 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/map">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><span></span><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="basics.html">深度学习基础：回归、Loss、梯度与 Softmax →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/map">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 0 章 · 总览</div><h1 class="chapter-title">知识地图与学习主线</h1><p class="chapter-desc">全局脑图、6 层逻辑、优先级清单与学习方法。先读这一章。</p><p class="chapter-source">对应课件：全部课件总纲</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章对应课件</strong>：全部 9 份 PDF 的总纲。建议先花 15 分钟读完本章，建立全局地图，再进入具体章节。</p>
+</blockquote>
+<h2>0.1 整个大模型知识地图</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>这套课程本质上只讲一件事：<strong>如何把「输入文字」变成「下一个 token 的概率」</strong>，以及<strong>如何训练这个函数</strong>。所有的模型结构、训练技巧、工程优化，都是围绕这条主线展开的。</p>
+</div></details>
+<p>推理主线：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>输入数据</mtext><mo>→</mo><mtext>Tokenizer</mtext><mo>→</mo><mtext>Token ID</mtext><mo>→</mo><mtext>Embedding</mtext><mo>→</mo><mtext>Transformer</mtext><mo>→</mo><mtext>Logits</mtext><mo>→</mo><mtext>Softmax</mtext><mo>→</mo><mi>P</mi><mo stretchy="false">(</mo><mtext>next token</mtext><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{输入数据} \rightarrow \text{Tokenizer} \rightarrow \text{Token ID} \rightarrow \text{Embedding} \rightarrow \text{Transformer} \rightarrow \text{Logits} \rightarrow \text{Softmax} \rightarrow P(\text{next token})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">输入数据</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Tokenizer</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Token ID</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Embedding</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Transformer</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Logits</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Softmax</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord text"><span class="mord">next token</span></span><span class="mclose">)</span></span></span></span></span></div>
+<p>训练主线：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>模型预测</mtext><mspace width="1em"/><mtext>vs</mtext><mspace width="1em"/><mtext>正确答案</mtext><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mtext>Loss</mtext><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mfrac><mrow><mi mathvariant="normal">∂</mi><mi>L</mi><mi>o</mi><mi>s</mi><mi>s</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>W</mi></mrow></mfrac><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mtext>更新参数</mtext></mrow><annotation encoding="application/x-tex">\text{模型预测} \quad \text{vs} \quad \text{正确答案} \quad \Rightarrow \quad \text{Loss} \quad \Rightarrow \quad \frac{\partial Loss}{\partial W} \quad \Rightarrow \quad \text{更新参数}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">模型预测</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mord text"><span class="mord">vs</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mord text"><span class="mord cjk_fallback">正确答案</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">Loss</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0574em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal">L</span><span class="mord mathnormal">oss</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">更新参数</span></span></span></span></span></span></div>
+<div class="demo-block"><div class="demo-head">🎮 交互：完整训练流水线<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点击每个阶段查看它在做什么——从 Raw Data 到 Aligned Model，这条流水线就是整个大模型工业的缩影。</p>
+<p><a class="static-link" href="../index.html#/map">在交互版中打开这个演示 →</a></p></div></div>
+<p>所以课件前面的回归、分类、Loss、梯度下降、反向传播、Softmax、交叉熵，其实全部都是后面 GPT 训练的基础。</p>
+<p>现代 GPT 虽然有几百亿参数，看起来复杂，底层训练思想仍然是：</p>
+<p><strong>输入 → 前向传播 → 算 loss → 反向传播 → 算梯度 → optimizer 更新参数。</strong></p>
+<blockquote>
+<p><strong>一句话主线</strong>
+深度学习基础 → 模型训练与稳定性 → RNN/LSTM/GRU → NLP/Tokenizer/Embedding → Transformer → BERT/GPT → 现代 LLM 架构 → Pretrain/SFT/RL → GRPO/LoRA/混合精度。</p>
+</blockquote>
+<h2>0.2 112 个知识点压缩成 6 层逻辑</h2>
+<p>不要觉得「一下子要学一百多个知识点」。实际上它们只有 6 层逻辑：</p>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>你真正需要理解的东西</th>
+<th>对应章节</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>数学 / 深度学习</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mi>x</mi><mo>+</mo><mi>b</mi></mrow><annotation encoding="application/x-tex">Wx+b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span></span>、Loss、Softmax、交叉熵、梯度下降、反向传播</td>
+<td>第 1～2 章</td>
+</tr>
+<tr>
+<td>神经网络训练</td>
+<td>MLP、激活函数、过拟合、正则化、梯度稳定、Norm、Residual</td>
+<td>第 3～4 章</td>
+</tr>
+<tr>
+<td>序列模型</td>
+<td>RNN → LSTM → GRU</td>
+<td>第 5 章</td>
+</tr>
+<tr>
+<td>NLP</td>
+<td>Tokenizer → BPE/BBPE → Embedding → Word2Vec</td>
+<td>第 6 章</td>
+</tr>
+<tr>
+<td>LLM 架构</td>
+<td>Attention → Transformer → BERT/GPT → RoPE/GQA/KV Cache/RMSNorm/SwiGLU</td>
+<td>第 7～10 章</td>
+</tr>
+<tr>
+<td>LLM 训练</td>
+<td>Pretrain → SFT → RL/GRPO → LoRA/混合精度</td>
+<td>第 11～13 章</td>
+</tr>
+</tbody></table>
+<h2>0.3 必须真正会推的内容（优先级最高）</h2>
+<p>如果你以后想往 <strong>LLM / AI Infra / ML Systems</strong> 走，以下内容必须能自己推导或默写：</p>
+<ul>
+<li>Softmax 与数值稳定技巧</li>
+<li>Cross Entropy 与 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">∂</mi><mi>L</mi><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mi>z</mi><mo>=</mo><mi>p</mi><mo>−</mo><mi>y</mi></mrow><annotation encoding="application/x-tex">\partial L/\partial z = p - y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal">L</span><span class="mord">/</span><span class="mord" style="margin-right:0.05556em;">∂</span><span class="mord mathnormal" style="margin-right:0.04398em;">z</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span></span></span></span></span></li>
+<li>Gradient Descent 与学习率的影响</li>
+<li>Backpropagation（链式法则手算）</li>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>Attention</mtext><mo stretchy="false">(</mo><mi>Q</mi><mo separator="true">,</mo><mi>K</mi><mo separator="true">,</mo><mi>V</mi><mo stretchy="false">)</mo><mo>=</mo><mtext>softmax</mtext><mo stretchy="false">(</mo><mi>Q</mi><msup><mi>K</mi><mi mathvariant="normal">⊤</mi></msup><mi mathvariant="normal">/</mi><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt><mo stretchy="false">)</mo><mi>V</mi></mrow><annotation encoding="application/x-tex">\text{Attention}(Q,K,V) = \text{softmax}(QK^\top/\sqrt{d_k})V</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">Attention</span></span><span class="mopen">(</span><span class="mord mathnormal">Q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1072em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">softmax</span></span><span class="mopen">(</span><span class="mord mathnormal">Q</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">⊤</span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8572em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-2.8172em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1828em;"><span></span></span></span></span></span><span class="mclose">)</span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span></span></span></span></span></li>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Q</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>Q</mi></msub><mo separator="true">,</mo><mspace width="1em"/><mi>K</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>K</mi></msub><mo separator="true">,</mo><mspace width="1em"/><mi>V</mi><mo>=</mo><mi>X</mi><msub><mi>W</mi><mi>V</mi></msub></mrow><annotation encoding="application/x-tex">Q=XW_Q,\quad K=XW_K,\quad V=XW_V</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">Q</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">Q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">K</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.22222em;">V</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></li>
+<li>Causal Mask</li>
+<li>Residual + Norm</li>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><msub><mi>x</mi><mi>t</mi></msub><mo>∣</mo><msub><mi>x</mi><mrow><mo>&lt;</mo><mi>t</mi></mrow></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(x_t \mid x_{&lt;t})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2806em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2806em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mrel mtight">&lt;</span><span class="mord mathnormal mtight">t</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1774em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></li>
+</ul>
+<p>同时要搞明白这些组件<strong>分别解决什么问题</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>解决的问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tokenizer</td>
+<td>文本 → 数字，压缩率与多语言公平性</td>
+</tr>
+<tr>
+<td>Embedding</td>
+<td>离散 ID → 有语义的稠密向量</td>
+</tr>
+<tr>
+<td>KV Cache</td>
+<td>推理时避免重复计算历史 token</td>
+</tr>
+<tr>
+<td>GQA</td>
+<td>减少 KV Cache 显存占用</td>
+</tr>
+<tr>
+<td>RoPE</td>
+<td>让 Attention 感知相对位置</td>
+</tr>
+<tr>
+<td>RMSNorm / Pre-Norm</td>
+<td>更轻、更稳的深层训练</td>
+</tr>
+<tr>
+<td>Pretrain / SFT</td>
+<td>先学能力，再学「怎么回答」</td>
+</tr>
+<tr>
+<td>GRPO</td>
+<td>用相对优势做偏好优化，省掉 Value Model</td>
+</tr>
+<tr>
+<td>LoRA / 混合精度</td>
+<td>让微调与训练变得显存可行</td>
+</tr>
+</tbody></table>
+<h2>0.4 暂时不需要背到一字不差的内容</h2>
+<ul>
+<li>LSTM / GRU 的每一个矩阵公式（理解「门」的作用即可）</li>
+<li>RoPE 的复数证明（记住「旋转 Q/K」的直觉）</li>
+<li>GRPO 完整 objective（记住「策略改进 − KL 惩罚」的结构）</li>
+</ul>
+<h2>0.5 怎么用这套课程</h2>
+<p>每章的知识点按统一模板组织，遇到折叠块请按顺序读：</p>
+<div class="box box-note"><div class="box-title">📘 三级理解层级</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>折叠块</th>
+<th>什么时候读</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>💡 <strong>先懂直觉</strong>（默认展开）</td>
+<td>第一遍：先建立画面感，不纠结公式</td>
+</tr>
+<tr>
+<td>🧮 <strong>再看数学</strong></td>
+<td>第二遍：理解推导与 shape</td>
+</tr>
+<tr>
+<td>🔧 <strong>工程里怎么用</strong></td>
+<td>动手写代码时回来看</td>
+</tr>
+</tbody></table>
+</div></div>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>图标</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>直觉</td>
+<td>💡 绿色框</td>
+<td>一句话讲清「为什么」</td>
+</tr>
+<tr>
+<td>数学</td>
+<td>🧮 紫色框</td>
+<td>公式、推导、算例</td>
+</tr>
+<tr>
+<td>工程</td>
+<td>🔧 橙色框</td>
+<td>PyTorch 代码与工程实践</td>
+</tr>
+<tr>
+<td>误区</td>
+<td>⚠️ 红色框</td>
+<td>容易混淆的概念</td>
+</tr>
+<tr>
+<td>面试</td>
+<td>🎯 黄色框</td>
+<td>八股考点（答案默认折叠）</td>
+</tr>
+<tr>
+<td>交互演示</td>
+<td>🎮</td>
+<td>动手拖滑块，建立肌肉记忆</td>
+</tr>
+<tr>
+<td>小测验</td>
+<td>📝</td>
+<td>每章末尾自测，进度自动保存</td>
+</tr>
+</tbody></table>
+<h2>0.6 学习方法建议</h2>
+<p>这套课内容并不浅，已经从最基础的 MSE 一直讲到 LoRA、GQA、KV Cache 和 GRPO。最容易犯的错误反而是：<strong>一口气全听完，感觉每个词都见过，但自己讲不出来</strong>。</p>
+<p>建议的学习方式：</p>
+<ol>
+<li>按顺序逐章阅读，每章先看「先懂直觉」，再看数学。</li>
+<li>每个公式都问自己：它解决什么问题？输入输出 shape 是什么？</li>
+<li><strong>每个交互演示都要动手玩</strong>——特别是梯度下降、BPE、Attention、KV Cache、GRPO 这几个。</li>
+<li>每章读完做小测验，答错先看解析再回读对应小节。</li>
+<li>读完一章点「标记本章已读」，用左侧进度条管理节奏。</li>
+<li>面试前用右上角搜索快速回顾关键词（如 GRPO、RoPE、交叉熵）。</li>
+</ol>
+<div class="box box-key"><div class="box-title">🔑 掌握的标准</div><div class="box-body"><p>不是「每个词都见过」，而是<strong>能不看课件，用自己的话把这张 6 层逻辑表讲给别人听</strong>，并能在白板上写出 Q/K/V 的 shape 与 Attention 公式。</p>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">根据课程主线，下面哪个顺序是正确的？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>Tokenizer → Pretrain → Transformer → Embedding</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>深度学习基础 → 序列模型 → NLP → Transformer → LLM 训练</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>Transformer → 梯度下降 → Tokenizer → SFT</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>Embedding → 梯度下降 → Attention → BPE</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>课程的 6 层逻辑是：数学/深度学习 → 神经网络训练 → 序列模型 → NLP → LLM 架构 → LLM 训练。其余选项顺序都颠倒了。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">无（这是起点）</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">全部 13 章</span></div></div>
+</div>
+<div class="static-nav"><span></span><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="basics.html">深度学习基础：回归、Loss、梯度与 Softmax →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/00-map.md">content/00-map.md</a></div>
+</main>
+</body>
+</html>

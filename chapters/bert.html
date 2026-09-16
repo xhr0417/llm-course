@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BERT：Encoder-only 与双向理解 · 大模型知识体系</title>
+<meta name="description" content="三种 Embedding、[CLS]/[SEP]、Attention Mask、MLM、80/10/10、NSP。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/bert.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 8 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/bert">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="transformer.html">← Transformer：Attention 是全部的核心</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="gpt.html">GPT：Decoder-only 与文本生成 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/bert">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 8 章 · Transformer 与大模型架构</div><h1 class="chapter-title">BERT：Encoder-only 与双向理解</h1><p class="chapter-desc">三种 Embedding、[CLS]/[SEP]、Attention Mask、MLM、80/10/10、NSP。</p><p class="chapter-source">对应课件：2-4 BERT&amp;GPT&amp;前沿大语言模型</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章对应课件</strong>：《2-4 BERT&amp;GPT&amp;前沿大语言模型》。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
+</blockquote>
+<h2>8.1 BERT 的定位：Encoder-only Transformer</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>BERT 是一个「阅读理解型」模型：它同时看句子的左右两边，学习每个词的上下文相关表示。它不擅长从头生成文本，但非常适合分类、抽取、匹配这类「理解」任务。</p>
+</div></details>
+<p>BERT 擅长：</p>
+<ul>
+<li>文本分类（情感、主题）</li>
+<li>NER（命名实体识别）</li>
+<li>Question Answering（抽取式问答）</li>
+<li>语义匹配（句子相似度）</li>
+</ul>
+<p>而不是 GPT 那种从左到右持续生成。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：两者能看到哪些 token<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>选择要预测的位置，上方 BERT 面板显示整句可见（双向），下方 GPT 面板显示只有左侧可见（因果）。</p>
+<p><a class="static-link" href="../index.html#/bert">在交互版中打开这个演示 →</a></p></div></div>
+<p><strong>关键区别</strong>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>BERT</th>
+<th>GPT</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>结构</td>
+<td>Encoder-only</td>
+<td>Decoder-only</td>
+</tr>
+<tr>
+<td>注意力</td>
+<td>双向（全句可见）</td>
+<td>因果（只看左侧）</td>
+</tr>
+<tr>
+<td>预训练目标</td>
+<td>MLM（完形填空）</td>
+<td>next token prediction</td>
+</tr>
+<tr>
+<td>擅长</td>
+<td>理解类任务</td>
+<td>生成类任务</td>
+</tr>
+<tr>
+<td>能否直接生成</td>
+<td>不能（没有自回归训练）</td>
+<td>能</td>
+</tr>
+</tbody></table>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">输入</span><span class="shape-dims">[B, S]</span></span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">Embedding 相加</span><span class="shape-dims">[B, S, 768]</span></span><span class="shape-arrow">→</span><span class="shape-op">12</span><span class="shape-op">×</span><span class="shape-op">Encoder Block（双向注意力）</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">每层输出</span><span class="shape-dims">[B, S, 768]</span></span></div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><p><strong>BERT 不是 Decoder</strong>：它是 Encoder-only，没有 causal mask，每个位置可以看到全句。因此它不能像 GPT 那样直接做自回归生成。</p>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：BERT 和 GPT 的核心区别？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>BERT 是 Encoder-only、双向注意力、MLM 训练，擅长理解；GPT 是 Decoder-only、因果注意力、next token prediction 训练，擅长生成。前者每个位置能看到全句，后者只能看到左侧。</p>
+</div></details><p><strong>Q2：BERT 为什么不能直接做生成？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>两个原因：① 训练目标是完形填空（MLM），没有学过从左到右的生成模式；② 双向注意力在生成时会「看到未来」，无法用于自回归推理。要生成需改用 Decoder-only 或 Encoder-Decoder。</p>
+</div></details></div></div>
+<h2>8.2 BERT Base / Large</h2>
+<table>
+<thead>
+<tr>
+<th>规格</th>
+<th>层数 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">L</span></span></span></span></span></th>
+<th>hidden <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi></mrow><annotation encoding="application/x-tex">d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span></span></th>
+<th>heads <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi></mrow><annotation encoding="application/x-tex">h</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">h</span></span></span></span></span></th>
+<th>参数量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>BERT Base</td>
+<td>12</td>
+<td>768</td>
+<td>12</td>
+<td>约 110M</td>
+</tr>
+<tr>
+<td>BERT Large</td>
+<td>24</td>
+<td>1024</td>
+<td>16</td>
+<td>约 340M</td>
+</tr>
+</tbody></table>
+<div class="box box-math"><div class="box-title">🧮 参数量具体算一遍（Base）</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>部分</th>
+<th>计算</th>
+<th>参数量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token Embedding</td>
+<td>30522 × 768</td>
+<td>23.4M</td>
+</tr>
+<tr>
+<td>Position Embedding</td>
+<td>512 × 768</td>
+<td>0.4M</td>
+</tr>
+<tr>
+<td>Segment Embedding</td>
+<td>2 × 768</td>
+<td>0.002M</td>
+</tr>
+<tr>
+<td>每层 Attention（Q/K/V/O）</td>
+<td>4 × 768 × 768</td>
+<td>2.36M</td>
+</tr>
+<tr>
+<td>每层 FFN</td>
+<td>2 × 768 × 3072</td>
+<td>4.72M</td>
+</tr>
+<tr>
+<td>每层合计</td>
+<td>2.36 + 4.72</td>
+<td>7.08M</td>
+</tr>
+<tr>
+<td>12 层合计</td>
+<td>7.08 × 12</td>
+<td>85.0M</td>
+</tr>
+<tr>
+<td><strong>总计</strong></td>
+<td>85.0 + 23.8</td>
+<td><strong>约 108.8M ≈ 110M</strong> ✅</td>
+</tr>
+</tbody></table>
+</div></div>
+<p><strong>观察</strong>：Embedding 占了约 21%，12 层 Transformer 占约 79%。这也是「词表大小显著影响小模型参数量」的原因。</p>
+<h2>8.3 三种 Embedding 相加 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>BERT 的输入向量是三种信息逐元素相加：这个词是什么（token）、它在哪个位置（position）、它属于哪句话（segment）。加完再送进 Transformer。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mtext>Input</mtext><mi>i</mi></msub><mo>=</mo><mtext>TokenEmb</mtext><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false">)</mo><mo>+</mo><mtext>PositionEmb</mtext><mo stretchy="false">(</mo><mi>i</mi><mo stretchy="false">)</mo><mo>+</mo><mtext>SegmentEmb</mtext><mo stretchy="false">(</mo><msub><mi>s</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{Input}_i = \text{TokenEmb}(x_i) + \text{PositionEmb}(i) + \text{SegmentEmb}(s_i)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9275em;vertical-align:-0.2441em;"></span><span class="mord"><span class="mord text"><span class="mord">Input</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2175em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">TokenEmb</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">PositionEmb</span></span><span class="mopen">(</span><span class="mord mathnormal">i</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">SegmentEmb</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">s</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></div>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>Embedding</th>
+<th>回答的问题</th>
+<th>词表/大小</th>
+<th>是否可学习</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token Embedding</td>
+<td>词本身是什么</td>
+<td>30522 × 768</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Position Embedding</td>
+<td>词在什么位置</td>
+<td>512 × 768</td>
+<td>✅（不是 sinusoidal！）</td>
+</tr>
+<tr>
+<td>Segment Embedding</td>
+<td>属于句子 A 还是 B</td>
+<td>2 × 768</td>
+<td>✅</td>
+</tr>
+</tbody></table>
+<h3>矩阵 shape</h3>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part result"><span class="shape-name">input_ids</span><span class="shape-dims">[B, S]</span><span class="shape-note">+ position_ids [B, S] + segment_ids [B, S]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">三次查表</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">[B, S, 768] +</span><span class="shape-dims">[B, S, 768]</span><span class="shape-note">+ [B, S, 768]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">逐元素相加</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">输入</span><span class="shape-dims">[B, S, 768]</span></span></div></div>
+<h3>数字算例（4 维示意）</h3>
+<p>以 token <code>&quot;cute&quot;</code>（位置 5，Segment B）为例：</p>
+<table>
+<thead>
+<tr>
+<th>分量</th>
+<th>向量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token</td>
+<td>[0.6, −0.2, 0.3, 0.5]</td>
+</tr>
+<tr>
+<td>Position（pos=5）</td>
+<td>[0.25, −0.15, 0.20, 0.10]</td>
+</tr>
+<tr>
+<td>Segment（B）</td>
+<td>[−0.1, −0.1, −0.1, −0.1]</td>
+</tr>
+<tr>
+<td><strong>相加</strong></td>
+<td><strong>[0.75, −0.45, 0.40, 0.50]</strong></td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：三种 Embedding 相加<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点击任意 token，查看它的 Token/Position/Segment 向量如何逐元素相加得到输入向量。</p>
+<p><a class="static-link" href="../index.html#/bert">在交互版中打开这个演示 →</a></p></div></div>
+<details class="fold"><summary>工程里怎么用（HuggingFace）</summary><div class="fold-body"><pre><code class="lang-python">from transformers import BertTokenizer, BertModel
+
+tok = BertTokenizer.from_pretrained(&quot;bert-base-chinese&quot;)
+enc = tok(&quot;我喜欢机器学习&quot;, return_tensors=&quot;pt&quot;)
+# enc 里已经包含 input_ids、token_type_ids（segment）、attention_mask
+out = BertModel.from_pretrained(&quot;bert-base-chinese&quot;)(**enc)
+print(out.last_hidden_state.shape)   # [1, S, 768]</code></pre>
+</div></details>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>是相加不是拼接</strong>：输出维度仍是 768（拼接会变成 2304，权重矩阵对不上）。</li>
+<li><strong>Position Embedding 是可学习的</strong>，与原始 Transformer 的 sinusoidal 不同；上限 512。</li>
+<li><strong>Segment Embedding 只有 2 个</strong>（A/B），不是每句话一个。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：BERT 的三种 Embedding 怎么组合？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>逐元素相加：Token + Position + Segment，输出仍是 [B, S, d_model]。相加让每种信息都直接影响同一个向量；拼接会让维度翻倍且需要额外参数。</p>
+</div></details><p><strong>Q2：为什么 BERT 需要 Segment Embedding？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>NSP 和问答等任务需要区分「句子 A」和「句子 B」，segment embedding 给两个句子不同的可学习偏置，让模型知道每个 token 属于哪一句。</p>
+</div></details></div></div>
+<h2>8.4 [CLS] 与 [SEP]</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>BERT 需要两个特殊 token：一个放在句首当「整句摘要位」（[CLS]），一个用来分隔句子（[SEP]）。分类任务只用 [CLS] 的最终向量。</p>
+</div></details>
+<p><strong>[CLS]</strong>：放在序列开头。经过 12 层后：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>h</mi><mrow><mi>C</mi><mi>L</mi><mi>S</mi></mrow></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mn>768</mn></msup></mrow><annotation encoding="application/x-tex">h_{CLS} \in \mathbb R^{768}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">768</span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<p>被当作整句表示，接一个分类头：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>logits</mtext><mo>=</mo><msub><mi>W</mi><mrow><mi>c</mi><mi>l</mi><mi>s</mi></mrow></msub><mtext> </mtext><msub><mi>h</mi><mrow><mi>C</mi><mi>L</mi><mi>S</mi></mrow></msub><mo>+</mo><mi>b</mi><mo separator="true">,</mo><mspace width="2em"/><msub><mi>W</mi><mrow><mi>c</mi><mi>l</mi><mi>s</mi></mrow></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>C</mi><mo>×</mo><mn>768</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\text{logits} = W_{cls}\, h_{CLS} + b, \qquad W_{cls} \in \mathbb R^{C \times 768}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">logits</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">c</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">b</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">c</span><span class="mord mathnormal mtight" style="margin-right:0.01968em;">l</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8913em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mbin mtight">×</span><span class="mord mtight">768</span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<p><strong>[SEP]</strong>：分隔句子（问答的 question/context、NSP 的两句），也标记句尾。</p>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">[CLS] 我 喜欢 机器学习</span><span class="shape-dims">[SEP]</span></span><span class="shape-arrow">→</span><span class="shape-op">12 层</span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">h_CLS</span><span class="shape-dims">[768]</span></span><span class="shape-arrow">→</span><span class="shape-op">Linear(768, C)</span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">logits</span><span class="shape-dims">[C]</span></span><span class="shape-arrow">→</span><span class="shape-op">softmax</span></div></div>
+<details class="fold"><summary>工程里怎么用（分类微调）</summary><div class="fold-body"><pre><code class="lang-python">from transformers import BertForSequenceClassification
+
+model = BertForSequenceClassification.from_pretrained(&quot;bert-base-chinese&quot;, num_labels=2)
+batch = tok(&quot;这部电影很好看&quot;, return_tensors=&quot;pt&quot;, padding=True)
+logits = model(**batch).logits       # [1, 2]
+# 内部：h_CLS → Dropout → Linear(768, 2)</code></pre>
+</div></details>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：BERT 为什么用 [CLS] 做句表示？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>[CLS] 没有自身语义（不来自真实词），经过多层注意力后会「汇聚」整句信息（对所有 token 都有注意力），其最终 hidden state 可作为整句表示。也可以对全部 token 做 mean pooling，效果有时更好。</p>
+</div></details></div></div>
+<h2>8.5 Attention Mask（Padding Mask）★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>一个 batch 里句子长短不一，短的要用 PAD 补齐。这些 PAD 没有意义，不应该参与注意力计算，所以用 mask 把它们的注意力分数设为 −∞。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mtext>mask</mtext><mi>i</mi></msub><mo>=</mo><mrow><mo fence="true">{</mo><mtable rowspacing="0.36em" columnalign="left left" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mn>1</mn><mo separator="true">,</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mtext>真实 token</mtext></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mn>0</mn><mo separator="true">,</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mtext>PAD</mtext></mstyle></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">\text{mask}_i = \begin{cases} 1, &amp; \text{真实 token} \\ 0, &amp; \text{PAD} \end{cases}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord text"><span class="mord">mask</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:3em;vertical-align:-1.25em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size4">{</span></span><span class="mord"><span class="mtable"><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.69em;"><span style="top:-3.69em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord">1</span><span class="mpunct">,</span></span></span><span style="top:-2.25em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord">0</span><span class="mpunct">,</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.19em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:1em;"></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.69em;"><span style="top:-3.69em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord text"><span class="mord cjk_fallback">真实</span><span class="mord"> token</span></span></span></span><span style="top:-2.25em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord text"><span class="mord">PAD</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.19em;"><span></span></span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p>加到分数上：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Attention</mtext><mo>=</mo><mtext>Softmax</mtext><mrow><mo fence="true">(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi mathvariant="normal">⊤</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>+</mo><mi>M</mi><mo fence="true">)</mo></mrow><mi>V</mi><mo separator="true">,</mo><mspace width="2em"/><msub><mi>M</mi><mi>i</mi></msub><mo>=</mo><mrow><mo fence="true">{</mo><mtable rowspacing="0.36em" columnalign="left left" columnspacing="1em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mn>0</mn><mo separator="true">,</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><msub><mtext>mask</mtext><mi>i</mi></msub><mo>=</mo><mn>1</mn></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><mo>−</mo><mi mathvariant="normal">∞</mi><mo separator="true">,</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="false"><mrow><msub><mtext>mask</mtext><mi>i</mi></msub><mo>=</mo><mn>0</mn></mrow></mstyle></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">\text{Attention} = \text{Softmax}\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)V, \qquad M_i = \begin{cases} 0, &amp; \text{mask}_i = 1 \\ -\infty, &amp; \text{mask}_i = 0 \end{cases}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">Attention</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4761em;vertical-align:-0.95em;"></span><span class="mord text"><span class="mord">Softmax</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5261em;"><span style="top:-2.2528em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8572em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-2.8172em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1828em;"><span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">K</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">⊤</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.93em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">M</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:3em;vertical-align:-1.25em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size4">{</span></span><span class="mord"><span class="mtable"><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.69em;"><span style="top:-3.69em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord">0</span><span class="mpunct">,</span></span></span><span style="top:-2.25em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord">−</span><span class="mord">∞</span><span class="mpunct">,</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.19em;"><span></span></span></span></span></span><span class="arraycolsep" style="width:1em;"></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.69em;"><span style="top:-3.69em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord"><span class="mord text"><span class="mord">mask</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1</span></span></span><span style="top:-2.25em;"><span class="pstrut" style="height:3.008em;"></span><span class="mord"><span class="mord"><span class="mord text"><span class="mord">mask</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.19em;"><span></span></span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>mask</td>
+<td>形状 [B, S]，1 = 有效，0 = PAD</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">M</span></span></span></span></span></td>
+<td>广播到 [B, S, S]，被遮位置的分数变 −∞</td>
+</tr>
+<tr>
+<td>效果</td>
+<td>softmax 后 PAD 位置权重为 0，不参与信息混合</td>
+</tr>
+</tbody></table>
+<h3>矩阵 shape</h3>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">mask</span><span class="shape-dims">[B, S]</span></span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">广播成</span><span class="shape-dims">[B, 1, S]</span></span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">加到 scores</span><span class="shape-dims">[B, S, S]</span></span><span class="shape-arrow">→</span><span class="shape-op">softmax</span><span class="shape-arrow">→</span><span class="shape-op">PAD 列权重为 0</span></div></div>
+<h3>数字算例</h3>
+<p>序列 <code>[CLS] my dog [SEP] PAD PAD</code>（S=6）：</p>
+<pre><code class="lang-">mask = [1, 1, 1, 1, 0, 0]</code></pre>
+<p>某行原始分数 <code>[2, 1, 3, 2, 4, 5]</code>：</p>
+<ul>
+<li>不加 mask：softmax 后 PAD 位置（4、5）分别拿到约 21%、57% 的注意力——错误！模型会「关注空白」。</li>
+<li>加 mask 后：<code>[2, 1, 3, 2, −∞, −∞]</code> → softmax 只在真实 token 上分配权重，和仍为 1。</li>
+</ul>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区（高频考点）</div><div class="box-body"><p><strong>Attention Mask（padding mask）≠ Causal Mask</strong>：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Padding Mask</th>
+<th>Causal Mask</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>遮什么</td>
+<td>PAD 补齐位置</td>
+<td>未来位置</td>
+</tr>
+<tr>
+<td>形状</td>
+<td>[B, S]（可广播）</td>
+<td>[S, S]</td>
+</tr>
+<tr>
+<td>用在哪</td>
+<td>BERT / GPT 都需要</td>
+<td>仅自回归模型（GPT）</td>
+</tr>
+<tr>
+<td>目的</td>
+<td>排除无意义 token</td>
+<td>防止偷看答案</td>
+</tr>
+</tbody></table>
+<p>两者可以同时使用（GPT 的 batch 推理既有 padding 又需要 causal）。</p>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么 BERT 的 batch 需要 attention mask？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>同一 batch 的句子长度不同，短的用 PAD 补齐。如果不遮，PAD 会参与注意力计算并污染真实 token 的表示。mask 把 PAD 的分数设为 −∞，softmax 后权重为 0。</p>
+</div></details></div></div>
+<h2>8.6 MLM：Masked Language Modeling ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>MLM 就是「完形填空」：随机挖掉句中 15% 的词，让模型根据左右两边猜被挖掉的是什么。因为要猜的词位置未知，模型必须学习双向上下文表示。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi mathvariant="script">L</mi><mrow><mi>M</mi><mi>L</mi><mi>M</mi></mrow></msub><mo>=</mo><mo>−</mo><munder><mo>∑</mo><mrow><mi>i</mi><mo>∈</mo><mi mathvariant="script">M</mi></mrow></munder><mi>log</mi><mo>⁡</mo><msub><mi>P</mi><mi>θ</mi></msub><mrow><mo fence="true">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>∣</mo><mover accent="true"><mi>x</mi><mo>~</mo></mover><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal L_{MLM} = -\sum_{i \in \mathcal M} \log P_\theta\left(x_i \mid \tilde x\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">M</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">M</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.3717em;vertical-align:-1.3217em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8557em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">i</span><span class="mrel mtight">∈</span><span class="mord mathcal mtight">M</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3217em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6679em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">x</span></span><span style="top:-3.35em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">~</span></span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;">)</span></span></span></span></span></span></div>
+<p>其中 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="script">M</mi></mrow><annotation encoding="application/x-tex">\mathcal M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathcal">M</span></span></span></span></span> 是被选中的 token 集合，<span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>x</mi><mo>~</mo></mover></mrow><annotation encoding="application/x-tex">\tilde x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6679em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6679em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">x</span></span><span style="top:-3.35em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">~</span></span></span></span></span></span></span></span></span></span></span> 是被破坏后的输入。</p>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="script">M</mi></mrow><annotation encoding="application/x-tex">\mathcal M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathcal">M</span></span></span></span></span></td>
+<td>被选中做预测的位置（约 15%）</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>x</mi><mo>~</mo></mover></mrow><annotation encoding="application/x-tex">\tilde x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6679em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6679em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">x</span></span><span style="top:-3.35em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">~</span></span></span></span></span></span></span></span></span></span></span></td>
+<td>处理后的输入（含 [MASK]/随机词/原词）</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>P</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>∣</mo><mover accent="true"><mi>x</mi><mo>~</mo></mover><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P_\theta(x_i \mid \tilde x)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6679em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">x</span></span><span style="top:-3.35em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">~</span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></td>
+<td>模型对正确 token 的预测概率</td>
+</tr>
+<tr>
+<td>求和范围</td>
+<td><strong>只对被选中的 15% 位置求和</strong>（不是全句！）</td>
+</tr>
+</tbody></table>
+<h3>矩阵 shape</h3>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">输入</span><span class="shape-dims">[B, S]</span></span><span class="shape-arrow">→</span><span class="shape-op">BERT</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">每个位置输出</span><span class="shape-dims">[B, S, 768]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">MLM Head：Linear(768</span><span class="shape-arrow">→</span><span class="shape-op">768) + GELU + LayerNorm + Linear(768</span><span class="shape-arrow">→</span><span class="shape-op">30522)</span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">logits</span><span class="shape-dims">[B, S, 30522]</span></span><span class="shape-arrow">→</span><span class="shape-op">只取 mask 位置算交叉熵</span></div></div>
+<h3>数字算例</h3>
+<p>句子 <code>my dog is cute</code>，选中 <code>cute</code>（位置 3）：</p>
+<ul>
+<li>输入变为 <code>my dog is [MASK]</code></li>
+<li>模型输出该位置的概率分布：<code>P(cute) = 0.62</code></li>
+<li>该位置 loss：</li>
+</ul>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mo>−</mo><mi>ln</mi><mo>⁡</mo><mo stretchy="false">(</mo><mn>0.62</mn><mo stretchy="false">)</mo><mo>≈</mo><mn>0.478</mn></mrow><annotation encoding="application/x-tex">-\ln(0.62) \approx 0.478</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">ln</span><span class="mopen">(</span><span class="mord">0.62</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.478</span></span></span></span></span></div>
+<p>如果模型只给 <code>P(cute) = 0.01</code>，loss 就是 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mi>ln</mi><mo>⁡</mo><mo stretchy="false">(</mo><mn>0.01</mn><mo stretchy="false">)</mo><mo>≈</mo><mn>4.6</mn></mrow><annotation encoding="application/x-tex">-\ln(0.01) \approx 4.6</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">ln</span><span class="mopen">(</span><span class="mord">0.01</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">4.6</span></span></span></span></span>——重罚。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：完形填空全流程<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点击「下一步」经历：选 15% → 80/10/10 处理 → 模型预测。可以切换三种处理方式，观察输入如何变化。</p>
+<p><a class="static-link" href="../index.html#/bert">在交互版中打开这个演示 →</a></p></div></div>
+<details class="fold"><summary>工程里怎么用（MLM loss 计算）</summary><div class="fold-body"><pre><code class="lang-python">logits = model(input_ids, attention_mask=mask).logits      # [B, S, V]
+# labels 中，非选中位置设为 -100（忽略）
+loss = F.cross_entropy(
+    logits.view(-1, V),
+    labels.view(-1),          # 只有被遮位置有真实标签
+    ignore_index=-100,
+)</code></pre>
+</div></details>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>MLM loss 只算被选中的 15% 位置</strong>，不是全句——所以 BERT 的 loss 数值不能直接和 GPT（全位置）比较。</li>
+<li><strong>不是只有 [MASK] 位置才预测</strong>：80/10/10 里，随机词和原词位置同样参与预测（模型不知道哪个被改了）。</li>
+<li><strong>MLM 不是去噪自编码器</strong>：它预测的是被破坏位置的原词，不是重建整个输入。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q1：为什么 MLM 能让 BERT 学到双向表示？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>被遮位置的正确答案需要同时依赖左侧和右侧上下文（如「我 昨天 去了 ___」需要右侧「看病」才能确定是「医院」）。要降低 loss，模型必须学会利用两侧信息，从而形成双向表示。</p>
+</div></details><p><strong>Q2：MLM 和 GPT 的 next token prediction 有什么区别？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>MLM 是「挖空+双向」，每个位置都能看到全句（除自己），预测被选中的 15%；GPT 是「因果+单向」，每个位置只能看左侧，预测下一个 token（全部位置都算 loss）。前者适合理解，后者适合生成。</p>
+</div></details></div></div>
+<h2>8.7 15% 与 80/10/10 策略 ★</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>如果永远只用 [MASK] 替换，模型只在看到 [MASK] 时才认真预测，而真实文本里根本没有 [MASK]——训练和使用的输入分布不一致。80/10/10 就是为缓解这个问题设计的。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>处理方式</th>
+<th>比例</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>替换成 <code>[MASK]</code></td>
+<td>80%</td>
+<td><code>my dog is [MASK]</code></td>
+</tr>
+<tr>
+<td>替换成随机 token</td>
+<td>10%</td>
+<td><code>my dog is banana</code></td>
+</tr>
+<tr>
+<td>保持原 token 不变</td>
+<td>10%</td>
+<td><code>my dog is cute</code></td>
+</tr>
+</tbody></table>
+<h3>逐项拆解：为什么这样设计</h3>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>解决的问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>80% [MASK]</td>
+<td>提供明确的「要预测这里」信号</td>
+</tr>
+<tr>
+<td>10% 随机词</td>
+<td>迫使模型不能盲目信任输入（随机词可能是错的，也要保持编码能力）</td>
+</tr>
+<tr>
+<td>10% 保持原词</td>
+<td>让输入分布接近真实文本，模型对正常句子也要认真编码</td>
+</tr>
+</tbody></table>
+<div class="box box-math"><div class="box-title">🧮 为什么是 15%？</div><div class="box-body"><ul>
+<li>太小（1%）：每个 batch 的训练信号太少，收敛慢；</li>
+<li>太大（50%）：上下文破坏太严重，任务变得不可解，且与真实分布差距大。</li>
+<li>15% 是 BERT 论文通过对比实验确定的平衡点。</li>
+</ul>
+</div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>80/10/10 是「在被选中的 15% 内部」的比例</strong>，不是全句比例。</li>
+<li><strong>随机替换的 10% 也用原词做标签</strong>（模型仍要预测出原词）。</li>
+<li><strong>推理时没有 [MASK]</strong>：这也是 80/10/10 存在的原因。</li>
+</ul>
+</div></div>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：为什么 MLM 要用 80/10/10 而不是全用 [MASK]？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>全用 [MASK] 会让预训练与微调/推理的输入分布不一致（真实文本没有 [MASK]），模型会「只在看到 [MASK] 时才认真编码」。随机词迫使模型对任何输入保持警惕，原词保持真实分布，三者共同缓解 mismatch。</p>
+</div></details></div></div>
+<h2>8.8 NSP：Next Sentence Prediction</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>除了猜词，BERT 还想学会「句子之间的关系」。NSP 给模型两句话，让它判断第二句是不是真的接在第一句后面。</p>
+</div></details>
+<p>给：</p>
+<pre><code class="lang-">Sentence A
+Sentence B</code></pre>
+<p>判断 <code>IsNext</code>（真的相邻）或 <code>NotNext</code>（随机拼的）。数据构造：</p>
+<ul>
+<li>50% 保持原文相邻（IsNext）；</li>
+<li>50% 从别处随机抽一句（NotNext）。</li>
+</ul>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi mathvariant="script">L</mi><mrow><mi>N</mi><mi>S</mi><mi>P</mi></mrow></msub><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><msub><mi>P</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><msub><mi>h</mi><mrow><mi>C</mi><mi>L</mi><mi>S</mi></mrow></msub><mo stretchy="false">)</mo><mo separator="true">,</mo><mspace width="2em"/><mi>y</mi><mo>∈</mo><mo stretchy="false">{</mo><mtext>IsNext</mtext><mo separator="true">,</mo><mtext>NotNext</mtext><mo stretchy="false">}</mo></mrow><annotation encoding="application/x-tex">\mathcal L_{NSP} = -\log P_\theta(y \mid h_{CLS}), \qquad y \in \{\text{IsNext}, \text{NotNext}\}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.13889em;">NSP</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">{</span><span class="mord text"><span class="mord">IsNext</span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord">NotNext</span></span><span class="mclose">}</span></span></span></span></span></div>
+<h3>逐项拆解</h3>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>h</mi><mrow><mi>C</mi><mi>L</mi><mi>S</mi></mrow></msub></mrow><annotation encoding="application/x-tex">h_{CLS}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></td>
+<td>[CLS] 位置的输出向量（聚合两句信息）</td>
+</tr>
+<tr>
+<td>分类头</td>
+<td>Linear(768, 2)</td>
+</tr>
+<tr>
+<td>用途</td>
+<td>问答、自然语言推理等句间任务</td>
+</tr>
+</tbody></table>
+<p><strong>总预训练目标</strong>：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="script">L</mi><mo>=</mo><msub><mi mathvariant="script">L</mi><mrow><mi>M</mi><mi>L</mi><mi>M</mi></mrow></msub><mo>+</mo><msub><mi mathvariant="script">L</mi><mrow><mi>N</mi><mi>S</mi><mi>P</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\mathcal L = \mathcal L_{MLM} + \mathcal L_{NSP}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathcal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">M</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">M</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.13889em;">NSP</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></div>
+<p>课件也提到，后续工作（如 RoBERTa）发现 <strong>NSP 并非一定需要</strong>，所以不少后来的 BERT 类模型删掉了 NSP。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>NSP ≠ 判断两句是否语义相关</strong>：它判断的是「是否相邻」，不是「是否相关」。</li>
+<li><strong>NSP 用 [CLS] 的输出</strong>，不是 [SEP]。</li>
+<li><strong>现代 BERT 变体常去掉 NSP</strong>（RoBERTa、DeBERTa），改为更长的连续文本段或句子顺序预测（SOP）。</li>
+</ul>
+</div></div>
+<h2>8.9 微调：三类任务头</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>预训练好的 BERT 是一台「文本理解引擎」，微调就是在它上面接一个小小的任务头，用少量标注数据教会它做具体任务。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>任务类型</th>
+<th>任务头</th>
+<th>输入取哪个位置</th>
+<th>输出 shape</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>句分类</td>
+<td>Linear(768, C)</td>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>h</mi><mrow><mi>C</mi><mi>L</mi><mi>S</mi></mrow></msub></mrow><annotation encoding="application/x-tex">h_{CLS}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span><span class="mord mathnormal mtight">L</span><span class="mord mathnormal mtight" style="margin-right:0.05764em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></td>
+<td>[B, C]</td>
+</tr>
+<tr>
+<td>序列标注（NER）</td>
+<td>Linear(768, C) 逐位置</td>
+<td>每个 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>h</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">h_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></td>
+<td>[B, S, C]</td>
+</tr>
+<tr>
+<td>抽取式问答</td>
+<td>两个向量预测 start/end</td>
+<td>所有位置</td>
+<td>[B, 2, S]</td>
+</tr>
+</tbody></table>
+<details class="fold"><summary>工程里怎么用（三种任务的代码骨架）</summary><div class="fold-body"><pre><code class="lang-python"># ① 句分类
+logits = Linear(model(x).last_hidden_state[:, 0])       # 取 [CLS]
+
+# ② 序列标注
+logits = Linear(model(x).last_hidden_state)             # 每个位置
+
+# ③ 抽取式问答（SQuAD 风格）
+h = model(x).last_hidden_state
+start_logits = (h @ W_start).squeeze(-1)                # [B, S]
+end_logits   = (h @ W_end).squeeze(-1)                  # [B, S]</code></pre>
+</div></details>
+<div class="box box-interview"><div class="box-title">🎯 面试常问</div><div class="box-body"><p><strong>Q：BERT 微调时更新哪些参数？</strong></p>
+<details class="answer"><summary>查看答案</summary><div class="answer-body"><p>通常更新全部参数（全量微调），学习率比预训练小 1<del>2 个数量级（如 2e-5</del>5e-5）。也可以只训练任务头（frozen backbone，省显存但效果略差），或用 LoRA（第 13 章）做参数高效微调。</p>
+</div></details></div></div>
+<h2>8.10 本章总结</h2>
+<div class="box box-key"><div class="box-title">🔑 本节必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Encoder-only</td>
+<td>双向理解，不擅长自回归生成</td>
+</tr>
+<tr>
+<td>三种 Embedding</td>
+<td>token + segment + position <strong>相加</strong>，形状不变</td>
+</tr>
+<tr>
+<td>[CLS] / [SEP]</td>
+<td>整句表示 / 句子分隔</td>
+</tr>
+<tr>
+<td>Attention Mask</td>
+<td>遮 PAD（[B,S]），不是遮未来</td>
+</tr>
+<tr>
+<td>MLM</td>
+<td>挖空 15% 猜词，loss 只算被选中位置</td>
+</tr>
+<tr>
+<td>80/10/10</td>
+<td>缓解预训练与微调输入分布不一致</td>
+</tr>
+<tr>
+<td>NSP</td>
+<td>判断句对相邻，后被认为可去掉</td>
+</tr>
+<tr>
+<td>微调</td>
+<td>接任务头，小学习率全量更新</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">BERT 的三种 Embedding 是如何组合的？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>拼接成 3×768 维</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>相加</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只取 token embedding</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>取最大值</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>Token + Segment + Position 逐元素相加，输出仍是 [B, S, 768]。拼接会让维度变成 2304，与后续权重不匹配。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">BERT 的 MLM loss 在哪些位置计算？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>全部位置</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>只在被选中的 15% 位置</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只在 [MASK] 替换的 80% 位置</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只在 [CLS] 位置</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>loss 只对被选中的 15% 位置求和。注意 80/10/10 里随机词和原词位置也算（模型不知道哪些被改过），所以不是「只在 [MASK] 位置」。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Attention Mask（padding mask）的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>遮住未来位置</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>遮住 PAD 补齐位置</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>归一化注意力</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>加速训练</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>padding mask 让 PAD token 不参与注意力计算；遮未来的是 causal mask（GPT 使用）。两者形状与用途不同，可以同时出现。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 NSP，下列说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>它是 BERT 唯一的预训练目标</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>后续研究（RoBERTa）发现去掉 NSP 影响不大甚至更好</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>NSP 要求生成下一句</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>NSP 使用 causal mask</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>RoBERTa 等后续工作发现 NSP 任务过于简单、收益有限，去掉后效果不降反升。BERT 的主任务是 MLM。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">Transformer Encoder</span><a class="tag" href="transformer.html">位置编码</a><span class="tag">双向注意力</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">文本分类</span><span class="tag">NER</span><span class="tag">问答</span><span class="tag">语义匹配</span><span class="tag">检索</span></div></div>
+</div>
+<div class="static-nav"><a href="transformer.html">← Transformer：Attention 是全部的核心</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="gpt.html">GPT：Decoder-only 与文本生成 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/08-bert.md">content/08-bert.md</a></div>
+</main>
+</body>
+</html>
