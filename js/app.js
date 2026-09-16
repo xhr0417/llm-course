@@ -375,7 +375,9 @@
     "pathlib": "python-engineering", "CLI": "python-engineering", "类型注解": "python-engineering",
     "AutoTokenizer": "huggingface", "HuggingFace": "huggingface", "PEFT": "huggingface",
     "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
-    "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready"
+    "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready",
+    "Eval Harness": "capstone-eval", "评测工程": "capstone-eval", "bad case": "capstone-eval",
+    "ModelAdapter": "capstone-eval", "并发评测": "capstone-eval"
   };
   function renderRelated(content) {
     var rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); });
@@ -603,7 +605,7 @@
         "大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台 / LLM Engineer Intern",
         chLink("Python 工程", "python-engineering") + " → " + chLink("PyTorch", "pytorch") + " → " +
         chLink("Transformer", "transformer") + " → " + chLink("HuggingFace", "huggingface") + " → " +
-        chLink("Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI → Capstone 1/2（下一批）</span>") +
+        chLink("Evaluation", "llm-eval") + " → " + chLink("Capstone 1 · Eval Harness", "capstone-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI → Capstone 2（下一批）</span>") +
       trackCard("Track B · 大模型算法", "job-ready",
         "大模型算法 / 机器学习算法 / 模型训练与后训练实习",
         chLink("Transformer", "transformer") + " → " + chLink("Build Small LLM", "build-llm-1") + " → " +
@@ -624,7 +626,7 @@
       '<div style="font-size:13.5px;line-height:2.1">' +
       chLink("25 Python 工程", "python-engineering") + " → " + chLink("11 PyTorch", "pytorch") + " → " +
       chLink("07 Transformer", "transformer") + " → " + chLink("26 HuggingFace", "huggingface") + " → " +
-      chLink("23 Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI/Docker → Capstone 1/2（下一批）→ 开始投递</span>" +
+      chLink("23 Evaluation", "llm-eval") + " → " + chLink("27 Capstone 1 · Eval Harness", "capstone-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI/Docker → Capstone 2（下一批）→ 开始投递</span>" +
       "</div>" +
       '<p style="font-size:13px;color:var(--text-soft)">之后按方向分叉：算法方向走 SFT/Data/后训练；Infra 方向走 GPU/FlashAttention/Distributed/Inference/Profiling。' +
       "学习进度按「阅读 / Lab / 项目」三级分别记录——读完 Markdown 只点亮第一级。</p>";

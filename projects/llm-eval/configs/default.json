@@ -1,0 +1,12 @@
+{
+  "adapter": "hf",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "tasks": ["c3", "xcopa"],
+  "limit": 50,
+  "max_new_tokens": 16,
+  "temperature": 0.0,
+  "concurrency": 1,
+  "retries": 2,
+  "use_cache": true,
+  "output_dir": "outputs/run_001"
+}

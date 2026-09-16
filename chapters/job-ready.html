@@ -66,7 +66,7 @@ SFT / LoRA（第 17 + 26 章）
    ↓
 FastAPI / Docker         ← 下一批
    ↓
-Capstone 1：Eval Harness ← 下一批
+Capstone 1：Eval Harness ← 第 27 章 ✅
    ↓
 Capstone 2：RAG Service  ← 下一批
    ↓
@@ -220,7 +220,7 @@ Retrieval / RAG（下一批）
    ↓
 FastAPI / Docker（下一批）
    ↓
-Capstone 1 / 2（下一批）
+Capstone 1（第 27 章 ✅）/ Capstone 2（下一批）
    ↓
 开始投递</code></pre>
 <p>之后再按方向分叉：</p>
@@ -294,7 +294,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>C</strong></td>
 <td>写 Eval Harness（adapter/task/parser/metric/report）</td>
 <td>能对两个模型产出可比较的报告</td>
-<td>Capstone 1 · 下一批</td>
+<td>第 27 章 ✅ 本批</td>
 </tr>
 <tr>
 <td><strong>D</strong></td>
@@ -327,6 +327,11 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>26 HuggingFace</strong></td>
 <td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab"><code>projects/hf-mini-lab/</code></a></td>
 <td>Qwen2.5-0.5B-Instruct CPU 全程跑通：训练 loss 2.6364→1.3052；held-out loss 3.8168→3.6102；10 个测试通过</td>
+</tr>
+<tr>
+<td><strong>27 Capstone 1 · Eval Harness</strong></td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval"><code>projects/llm-eval/</code></a></td>
+<td>128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；29 个测试用例通过</td>
 </tr>
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对你自己的项目同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>

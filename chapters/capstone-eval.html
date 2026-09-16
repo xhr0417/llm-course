@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capstone 1 · Mini LLM Evaluation Harness · 大模型知识体系</title>
+<meta name="description" content="Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-eval.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 27 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/capstone-eval">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：用工业生态跑模型</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-eval">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 27 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 1 · Mini LLM Evaluation Harness</h1><p class="chapter-desc">Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="md">
+<h1>第 27 章 · Capstone 1：Mini LLM Evaluation Harness</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>评测岗的面试官不会问你「accuracy 怎么算」——他们会问「<strong>你做过评测系统吗？bad case 怎么分类？并发怎么控？缓存 key 怎么设计？</strong>」这一章交付一个真正能运行的评测框架：Checkpoint C。</p>
+</div></div>
+<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval"><code>projects/llm-eval/</code></a>
+<strong>真实运行</strong>：Qwen2.5-0.5B-Instruct，128 题（C3 60 + XCOPA 60 + QA 8），CPU 32.3 秒跑完。</p>
+<h2>27.1 目标：从「会用指标」到「做出评测系统」</h2>
+<p>第 23 章教会了你 PPL、pass@k、置信区间、LLM-as-a-Judge。但真实岗位要的是这个：</p>
+<pre><code class="lang-text">新模型训完了 → 它到底比上一版好还是坏？
+  ↑ 你需要一个能重复运行、能比较两个模型、能自动找出失败案例的系统</code></pre>
+<p>这个系统必须解决五个工程问题：</p>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>本项目的答案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>模型五花八门（本地 HF / API / 不同服务商）</td>
+<td><code>ModelAdapter</code> 统一接口</td>
+</tr>
+<tr>
+<td>任务五花八门（选择题 / 问答 / 生成）</td>
+<td><code>EvalTask</code> 统一四件套</td>
+</tr>
+<tr>
+<td>模型输出脏（&quot;答案是 C。&quot;）</td>
+<td>专门设计的 <code>parser.py</code></td>
+</tr>
+<tr>
+<td>API 会超时、限流、失败</td>
+<td>重试 + 退避 + 并发上限</td>
+</tr>
+<tr>
+<td>评测跑一次太贵太慢</td>
+<td>响应缓存</td>
+</tr>
+<tr>
+<td>跑完一堆数字看不懂</td>
+<td>自动报告 + bad case 分类</td>
+</tr>
+</tbody></table>
+<h2>27.2 架构：Adapter × Task × Runner × Reports</h2>
+<pre><code class="lang-">run_eval.py（CLI）
+    │
+    ▼
+Runner ──────────────────────────────────────────────
+    │  对每个 Task 的每个 Item：                        │
+    │  ① 查缓存 → ② 需要则调 Adapter（重试+限流）        │
+    │  ③ task.parse_answer → ④ task.score              │
+    │  ⑤ 收集 bad case                                 │
+    ▼
+Reports：results.json / summary.md / badcases.jsonl</code></pre>
+<p>四个模块各自独立、各自可测：</p>
+<pre><code class="lang-text">src/llm_eval/
+├── adapters/   ModelAdapter：怎么向模型要答案
+├── tasks/      EvalTask：怎么问、怎么判分
+├── runner.py   并发 + 重试 + 缓存 + badcase
+└── reports.py  结果落盘</code></pre>
+<div class="box box-warning"><div class="box-title">⚠️ 为什么这个拆法非常重要</div><div class="box-body"><p>eval harness 最容易被写成一坨：<code>for q in questions: answer = model.generate(q); if answer == gold: correct += 1</code>。</p>
+<p>一坨代码的问题是：换模型要改动核心逻辑、加并发会乱、缓存没处放、bad case 只能靠 print。</p>
+<p>拆成 Adapter/Task 之后：</p>
+<ul>
+<li>换模型 = 换 Adapter（HF → OpenAI 兼容 → 任何服务）；</li>
+<li>加任务 = 加 Task（C3 → XCOPA → 自研 QA → 以后加 GSM8K）；</li>
+<li>评测逻辑（并发/缓存/重试）只写一次。</li>
+</ul>
+</div></div>
+<h2>27.3 ModelAdapter：统一「要答案」的接口</h2>
+<pre><code class="lang-python">class ModelAdapter(ABC):
+    @abstractmethod
+    def generate(self, prompts: list[str]) -&gt; list[str]: ...
+
+    async def agenerate(self, prompts: list[str]) -&gt; list[str]:
+        return await asyncio.to_thread(self.generate, prompts)  # 默认：同步实现丢线程池</code></pre>
+<p>三种实现：</p>
+<table>
+<thead>
+<tr>
+<th>适配器</th>
+<th>用途</th>
+<th>关键细节</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>HuggingFaceAdapter</code></td>
+<td>本地模型（第 26 章）</td>
+<td>chat template + left padding + batch</td>
+</tr>
+<tr>
+<td><code>OpenAICompatibleAdapter</code></td>
+<td>任何 <code>/v1/chat/completions</code> 服务</td>
+<td>httpx 异步 + Bearer 鉴权 + 429/5xx 归类为可重试</td>
+</tr>
+<tr>
+<td><code>MockAdapter</code></td>
+<td>测试/冒烟</td>
+<td>确定性输出；可模拟「前 N 次失败」测重试</td>
+</tr>
+</tbody></table>
+<p><strong>只依赖通用接口，不绑定特定收费服务</strong>——本地 vLLM、Ollama、公司网关都是同一个适配器。</p>
+<h2>27.4 EvalTask：load / build_prompt / parse_answer / score</h2>
+<pre><code class="lang-python">class EvalTask(ABC):
+    def load(self) -&gt; list[EvalItem]: ...            # 读数据 → 已构造好的 prompt
+    def build_prompt(self, row) -&gt; str: ...          # 每种任务的提问格式
+    def parse_answer(self, raw) -&gt; Optional[str]: ...# 原始输出 → 规范答案
+    def score(self, prediction, item) -&gt; dict: ...   # 打分（支持多指标）</code></pre>
+<p>本项目的三个任务：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>数据</th>
+<th>问法</th>
+<th>判分</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>C3Task</code></td>
+<td>中文阅读理解（C3 dialog，4 选 1）</td>
+<td>「只回答一个字母」</td>
+<td>accuracy</td>
+</tr>
+<tr>
+<td><code>XCOPATask</code></td>
+<td>因果推理（XCOPA zh，2 选 1）</td>
+<td>cause/effect 转中文提问</td>
+<td>accuracy</td>
+</tr>
+<tr>
+<td><code>QATask</code></td>
+<td>自定义问答</td>
+<td>「尽量简洁」</td>
+<td>EM + F1</td>
+</tr>
+</tbody></table>
+<p>数据加载双通道：默认读仓库内的教学夹具（<code>data/mini_*.jsonl</code>），也可以 <code>--data c3=你的文件.jsonl</code> 换成任意数据。<strong>任务定义与数据解耦</strong>——这是能接真实数据集的关键。</p>
+<h2>27.5 Parser：accuracy 的隐形杀手</h2>
+<p>模型不会乖乖输出一个字母。它可能输出：</p>
+<pre><code class="lang-">&quot;C&quot;            &quot;c&quot;           &quot;C.&quot;          &quot;答案是 C&quot;
+&quot;我认为选 B&quot;    &quot;**D**&quot;       &quot;C) 因为……&quot;    &quot;The correct answer is C.&quot;</code></pre>
+<p>解析失败的题目会被判错——<strong>parser 的 bug 会伪装成「模型能力差」</strong>。所以 parser 是重点测试对象：29 个用例里有 12 条在测它。</p>
+<pre><code class="lang-python">def parse_choice(text: str, valid: str = &quot;ABCD&quot;) -&gt; Optional[str]:
+    cleaned = re.sub(r&quot;[*`_]&quot;, &quot;&quot;, text.strip()).upper()   # 去 markdown、统一大小写
+    for pattern in _COMPILED:                              # 多级模式，从严格到宽松
+        m = pattern.search(cleaned)
+        if m and m.group(1) in valid:
+            return m.group(1)
+    return None                                            # 无法解析 → parse_failure</code></pre>
+<p>无法解析的样本单独计为 <code>parse_failure</code>——它和「答错」是两种问题：前者修 parser / 改 prompt，后者修模型。</p>
+<h2>27.6 Runner：并发 + 重试 + 缓存</h2>
+<h3>并发（API 场景）</h3>
+<pre><code class="lang-python">sem = asyncio.Semaphore(cfg.concurrency)     # 例：8
+async def one(prompt):
+    async with sem:                          # 最多 8 个请求同时在飞
+        return await with_retry(prompt)
+await asyncio.gather(*(one(p) for p in prompts))</code></pre>
+<p>为什么不能 10000 个一起打出去？<strong>429 限流 → 重试风暴 → 更慢</strong>——第 25 章讲过原理，这里就是它的生产级实现。本地 HF 模型则是批量串行（<code>concurrency=1</code>），因为瓶颈是 CPU/GPU 而不是网络。</p>
+<h3>重试（指数退避）</h3>
+<pre><code class="lang-python">for attempt in range(cfg.retries + 1):
+    try: return call()
+    except AdapterError:
+        time.sleep(cfg.retry_backoff_s * (2 ** attempt))   # 1.5s → 3s → 6s</code></pre>
+<p>关键设计：适配器把「可重试」（超时、429、5xx）和「不可重试」（400 参数错、401 鉴权）分开了——后者重试多少次都没用。</p>
+<h3>缓存（key 的设计）</h3>
+<pre><code class="lang-python">key = sha256(model + prompt + max_new_tokens + temperature)   # 影响输出的参数必须全部进 key</code></pre>
+<p>实测效果：同一评测跑第二遍，<strong>评测阶段从 32.3s 降到 0.0s</strong>（128 条全部命中 SQLite 缓存）。调参重跑只重算变化的样本——评测迭代速度提升一个量级。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 缓存的三个坑</div><div class="box-body"><ol>
+<li><strong>key 少参</strong>：改了 <code>max_new_tokens</code> 却命中旧答案 → 结果错得毫无察觉（本章项目把全部生成参数写进 key）；</li>
+<li><strong>缓存永不失效</strong>：模型更新（比如你重训了 checkpoint）后如果路径/名字没变，会拿到旧响应——用版本号或按内容哈希命名 checkpoint；</li>
+<li><strong>失败也被缓存</strong>：本项目对空响应不写缓存，避免「一次网络抖动永久污染结果」。</li>
+</ol>
+</div></div>
+<h2>27.7 Bad case：从「错了几个」到「错在哪」</h2>
+<p>每个失败样本都落一条结构化记录：</p>
+<pre><code class="lang-json">{
+  &quot;task&quot;: &quot;c3&quot;, &quot;id&quot;: &quot;c3-dialog-m14-1-0&quot;,
+  &quot;gold&quot;: &quot;A&quot;, &quot;prediction&quot;: &quot;B&quot;, &quot;raw_output&quot;: &quot;B&quot;,
+  &quot;error_type&quot;: &quot;wrong_answer&quot;,
+  &quot;prompt&quot;: &quot;阅读下面的材料，回答问题。……&quot;
+}</code></pre>
+<p><code>error_type</code> 让失败可归类：</p>
+<table>
+<thead>
+<tr>
+<th>error_type</th>
+<th>含义</th>
+<th>该修什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>parse_failure</code></td>
+<td>无法从输出里提取答案</td>
+<td>parser / prompt 格式</td>
+</tr>
+<tr>
+<td><code>wrong_answer</code></td>
+<td>解析成功但答错</td>
+<td>模型 / 数据</td>
+</tr>
+<tr>
+<td><code>empty_output</code></td>
+<td>模型返回空</td>
+<td>服务 / 参数</td>
+</tr>
+<tr>
+<td><code>api_error</code></td>
+<td>请求最终失败（重试耗尽）</td>
+<td>并发 / 超时 / 限流配置</td>
+</tr>
+<tr>
+<td><code>low_f1</code></td>
+<td>问答 F1 &lt; 0.5</td>
+<td>回答风格 / 指标设计</td>
+</tr>
+</tbody></table>
+<p>报告自动生成三件套：<code>results.json</code>（机读）、<code>summary.md</code>（人读）、<code>badcases.jsonl</code>（逐条分析）。</p>
+<h2>27.8 真实运行结果（本机实测）</h2>
+<p>Qwen2.5-0.5B-Instruct，真实数据切片（<code>scripts/fetch_data.py</code> 从 HuggingFace 拉取）：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>数据</th>
+<th>n</th>
+<th>指标</th>
+<th>parse_failure</th>
+<th>api_error</th>
+<th>用时</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>c3</td>
+<td>C3 dialog 切片</td>
+<td>60</td>
+<td>accuracy <strong>55.0%</strong>（随机 25%）</td>
+<td>0</td>
+<td>0</td>
+<td>19.2s</td>
+</tr>
+<tr>
+<td>xcopa</td>
+<td>XCOPA zh 切片</td>
+<td>60</td>
+<td>accuracy <strong>55.0%</strong>（随机 50%）</td>
+<td>0</td>
+<td>0</td>
+<td>8.2s</td>
+</tr>
+<tr>
+<td>qa</td>
+<td>教学夹具</td>
+<td>8</td>
+<td>EM 0% / F1 <strong>21.9%</strong></td>
+<td>0</td>
+<td>0</td>
+<td>4.9s</td>
+</tr>
+</tbody></table>
+<p><strong>怎么读这些数字（第 23 章纪律）</strong>：</p>
+<ul>
+<li>C3 高于随机基线 25pt、XCOPA 高于随机 5pt——0.5B 小模型的合理水平；<strong>n=60 的置信区间很宽（±12pt 量级），不能下强结论</strong>；</li>
+<li>QA 的 F1 低不是因为「模型不会回答」，而是回答风格与指标不匹配：模型输出长句，标准答案是短语。做了一个对照实验——把 <code>max_new_tokens</code> 从 16 加到 64 后 F1 <strong>反而降到 17.6%</strong>（回答更长，不匹配的代价更大）→ 结论：<strong>瓶颈在指标与回答风格的匹配，不在生成长度</strong>。这是评测工程里典型的一课：<strong>先怀疑配置，再怀疑模型</strong>。</li>
+</ul>
+<p><strong>缓存实测</strong>：第二次同参数运行，评测阶段 0.0s，128 条全部命中缓存。</p>
+<h2>27.9 使用方式</h2>
+<pre><code class="lang-bash">cd projects/llm-eval
+pip install -r requirements.txt
+
+# 拉真实数据（可选）
+python scripts/fetch_data.py --task xcopa --n 60 --out data/xcopa_zh_60.jsonl
+python scripts/fetch_data.py --task c3   --n 60 --out data/c3_dialog_60.jsonl
+
+# 跑真实评测
+python run_eval.py --model Qwen/Qwen2.5-0.5B-Instruct --tasks c3 xcopa qa \
+  --data c3=data/c3_dialog_60.jsonl --data xcopa=data/xcopa_zh_60.jsonl \
+  --limit 60 --output outputs/run_001
+
+# 对 API 模型并发评测
+python run_eval.py --adapter openai --model qwen2.5 --base-url http://localhost:8000 \
+  --tasks c3 xcopa --concurrency 8
+
+# 测试
+pytest -q    # 29 passed</code></pre>
+<h2>27.10 面试复盘：Eval Harness</h2>
+<p>不能翻资料，逐条回答（对照 <code>projects/llm-eval/</code> 源码）：</p>
+<ol>
+<li>parser 为什么会影响 accuracy？你测过哪些输出格式？</li>
+<li>async 怎么控制并发？Semaphore 放在哪一层？</li>
+<li>retry 会不会导致重复请求？什么错误该重试、什么不该？</li>
+<li>cache key 怎么设计？缓存什么时候必须失效？</li>
+<li>bad case 怎么分类？分类之后各自的修法是什么？</li>
+<li>怎么保证评测两个模型时是公平比较？（同一数据、同一 prompt、同一解析、同一指标）</li>
+<li>评测结果里为什么必须报告 n 和 parse_failure 数？</li>
+<li>如果明天要加 GSM8K（生成式数学题），你的框架需要改哪几个文件？</li>
+</ol>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你的评测框架在 A 模型上 accuracy=72%，B 模型 71%，报告结论「A 比 B 好」。以下哪种做法最专业？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接写进简历：A 模型优于 B</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>报告 72% vs 71%，并给出样本量与置信区间（如 n=500 时 ±3.9pt），指出差异不显著</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>多跑几遍取最高的一次</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>换一个对 A 更有利的指标</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>评测工程的第一纪律是「分数必须带不确定性」。n=500 时 95% CI 约 ±3.9pt——1pt 的差异完全在噪声范围内。C 是 cherry-picking；D 是指标操纵。</div></details></div>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>站点</th>
+<th>核心结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>架构</td>
+<td>Adapter（要答案）× Task（问/判）× Runner（并发/重试/缓存）× Reports</td>
+</tr>
+<tr>
+<td>Parser</td>
+<td>解析失败会伪装成模型变差；parse_failure 要单独统计</td>
+</tr>
+<tr>
+<td>并发</td>
+<td>asyncio + Semaphore；全并发 = 429 重试风暴</td>
+</tr>
+<tr>
+<td>缓存</td>
+<td>key 必须包含全部影响输出的参数；失败不缓存</td>
+</tr>
+<tr>
+<td>Bad case</td>
+<td>五类 error_type，各有不同的修法</td>
+</tr>
+<tr>
+<td>纪律</td>
+<td>报告必须带 n 与不确定性；先怀疑配置再怀疑模型</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 23 章 LLM Evaluation</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 2（RAG 评测）</span><span class="tag">Capstone 3（SFT 前后对比）</span><span class="tag">大模型评测实习面试</span></div></div>
+</div>
+<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：用工业生态跑模型</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/27-capstone-eval.md">content/27-capstone-eval.md</a></div>
+</main>
+</body>
+</html>

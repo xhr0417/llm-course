@@ -1,0 +1,12 @@
+{"id": "mini-xcopa-1", "premise": "餐盘碎了。", "question": "cause", "choice1": "它从桌子上掉了下去。", "choice2": "它被擦得很干净。", "answer": "A"}
+{"id": "mini-xcopa-2", "premise": "我把冰淇淋放在太阳下。", "question": "effect", "choice1": "冰淇淋更冰了。", "choice2": "冰淇淋融化了。", "answer": "B"}
+{"id": "mini-xcopa-3", "premise": "他整晚没有睡觉。", "question": "effect", "choice1": "他第二天很精神。", "choice2": "他第二天很困。", "answer": "B"}
+{"id": "mini-xcopa-4", "premise": "路上的行人都撑着伞。", "question": "cause", "choice1": "外面正在下大雨。", "choice2": "外面是晴天。", "answer": "A"}
+{"id": "mini-xcopa-5", "premise": "花瓶里的花枯了。", "question": "cause", "choice1": "很久没有浇水。", "choice2": "花盆太大了。", "answer": "A"}
+{"id": "mini-xcopa-6", "premise": "她考试得了满分。", "question": "effect", "choice1": "她很高兴。", "choice2": "她很生气。", "answer": "A"}
+{"id": "mini-xcopa-7", "premise": "我把玻璃杯碰到了桌角。", "question": "effect", "choice1": "杯子变硬了。", "choice2": "杯子碎了。", "answer": "B"}
+{"id": "mini-xcopa-8", "premise": "他忘记给手机充电。", "question": "effect", "choice1": "手机没电关机了。", "choice2": "手机信号更好了。", "answer": "A"}
+{"id": "mini-xcopa-9", "premise": "房间里的人觉得很热。", "question": "cause", "choice1": "房间的空调坏了。", "choice2": "房间的窗户开着。", "answer": "A"}
+{"id": "mini-xcopa-10", "premise": "那家餐厅的食物不新鲜。", "question": "effect", "choice1": "顾客吃得很满意。", "choice2": "顾客吃坏了肚子。", "answer": "B"}
+{"id": "mini-xcopa-11", "premise": "他每天坚持跑步。", "question": "effect", "choice1": "他的体力变差了。", "choice2": "他的体力变好了。", "answer": "B"}
+{"id": "mini-xcopa-12", "premise": "车辆行驶得很慢。", "question": "cause", "choice1": "路面积了厚厚的雪。", "choice2": "路面刚刚修好。", "answer": "A"}

@@ -153,7 +153,9 @@ const TOPIC_LINKS = {
   "pathlib": "python-engineering", "CLI": "python-engineering", "类型注解": "python-engineering",
   "AutoTokenizer": "huggingface", "HuggingFace": "huggingface", "PEFT": "huggingface",
   "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
-  "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready"
+  "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready",
+  "Eval Harness": "capstone-eval", "评测工程": "capstone-eval", "bad case": "capstone-eval",
+  "ModelAdapter": "capstone-eval", "并发评测": "capstone-eval"
 };
 
 function renderContent(content, ctx, chapterId) {

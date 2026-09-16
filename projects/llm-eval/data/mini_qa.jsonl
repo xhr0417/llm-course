@@ -1,0 +1,8 @@
+{"id": "mini-qa-1", "question": "Python 中读取 JSONL 文件时，为什么推荐逐行读取？", "answers": ["避免把全部数据一次性读入内存，内存占用与文件大小解耦", "节省内存，支持大文件流式处理"]}
+{"id": "mini-qa-2", "question": "什么是过拟合？", "answers": ["模型记住了训练数据的噪声，在新数据上表现变差", "训练集表现好但泛化差"]}
+{"id": "mini-qa-3", "question": "LoRA 相比全量微调的主要优势是什么？", "answers": ["可训练参数极少、显存需求低、易于切换与分享 adapter", "只训练低秩矩阵，参数量极小"]}
+{"id": "mini-qa-4", "question": "KV Cache 为什么能加速解码？", "answers": ["缓存历史 token 的 K/V，避免每一步重复计算整个前缀", "避免重复计算历史键值对"]}
+{"id": "mini-qa-5", "question": "为什么评测 API 模型时要用 Semaphore 限制并发？", "answers": ["防止超出服务端限流导致 429 与重试风暴", "控制并发量，保护服务端与客户端资源"]}
+{"id": "mini-qa-6", "question": "SFT 训练中 response-only loss 是指什么？", "answers": ["只对 assistant 回复计算损失，prompt 部分的 labels 置 -100", "只有回答部分参与损失计算"]}
+{"id": "mini-qa-7", "question": "pass@k 的含义是什么？", "answers": ["对每题采样 k 个答案至少有一个正确的比例", "衡量采样多次时的通过概率"]}
+{"id": "mini-qa-8", "question": "评测系统里的 response cache 解决什么问题？", "answers": ["相同请求只调一次模型，节省成本与时间，失败重跑不重复消耗", "避免重复请求，降低成本"]}
