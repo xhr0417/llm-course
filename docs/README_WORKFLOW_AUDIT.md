@@ -210,9 +210,30 @@ cd starter → pwd → pip install → pytest`，结果见 §十一 发布记录
 
 ---
 
-## 十一、发布记录
+## 十一、发布记录与发布后验证（实测）
 
 - 发布方式：`bash tools/publish.sh "<commit message>"`（门禁 → rsync 自有服务器 → GitHub push；
   publish.sh 已同步纳入 `validate-guided.js` 门禁）；
-- 发布后验证：线上静态页 `box-where` 渲染、`llms.txt` / `sitemap.xml` / 首页目录同步、
-  从 GitHub 全新 clone 跑通新手路径、CI（含 `guided-starters` 的 hf 任务）全绿。
+- 发布 commit：`aedbf2f`（24 files changed, 1734 insertions, 145 deletions）。
+
+**发布后实测（真实执行）**：
+
+```text
+① 从 GitHub 全新 clone：
+   git clone https://github.com/xhr0417/llm-course.git  → 成功
+② clone 内包含：README.md / docs/ENVIRONMENT_AND_WORKFLOW.md / starter 全部文件 → OK
+③ 按 README Quick Start 进入 starter 并运行：
+   cd projects/log-analyzer/starter && pytest -q  →  41 failed in 0.17s（= 设计起点）✅
+④ 线上静态页：https://llm.xhr0417.cn/chapters/python-engineering.html → 含 box-where ✅
+⑤ 线上手册：https://llm.xhr0417.cn/docs/ENVIRONMENT_AND_WORKFLOW.md → HTTP 200 ✅
+⑥ CI（run 35081488111）全部 job 绿，含新增的：
+   - Guided starter must fail (hf-mini-lab) 58s —— 普通 push 验证结构 + 非模型红灯，0 模型下载
+   - Guided starter must fail (log-analyzer / llm-eval)
+   - Node validators（含 validate-guided 138 项）
+   - Python unit tests ×5 / Docker build
+   仅 workflow_dispatch 专属 job（Integration、guided-hf-full）按设计跳过
+```
+
+> 新用户路径结论：一个完全不知道项目在哪的人，按根 README 可以独立完成
+> GitHub → clone → cd → pwd → 打开网站 → 进入 starter → pytest（看到设计好的 41 failed），
+> 并理解 Mac repo ≠ Server repo ≠ GitHub repo。
