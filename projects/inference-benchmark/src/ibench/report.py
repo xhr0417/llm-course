@@ -98,7 +98,7 @@ NOT_EXECUTED = """本机未执行（如实标注）：
 - **CUDA 相关全部实验**：本机无 NVIDIA GPU（`cuda_available=False`）。`--device cuda` 会直接报错退出，不做静默回退；
 - **vLLM 服务端 benchmark**：vLLM 需要 CUDA 环境，见 `docs/vllm_runbook.md`（命令齐全，待有 GPU 机器验证）；
 - **Triton kernel**：同属 CUDA 环境（第 19 章代码标注 NOT EXECUTED ON CUDA）；
-- **Docker build**：本机未安装 Docker（由 CI 的 docker-build job 验证，见 `.github/workflows/ci.yml`）；
+- **Docker build**：本机未安装 Docker；由 CI 的 docker-build job 真实执行（当前状态：**通过**，见 `.github/workflows/ci.yml`）；
 - 已完成：CPU 上的 attention 伸缩（latency + 理论张量 footprint + 子进程 RSS）、profiler 算子表、torch.compile 对比、serving 客户端（对 mock 服务端验证）。"""
 
 

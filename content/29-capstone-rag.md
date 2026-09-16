@@ -95,9 +95,9 @@ docker run -p 8000:8000 \
   rag-service
 ```
 
-:::warning 诚实标注：本机没有 Docker
-开发机未安装 Docker（`docker --version` 不存在），因此 **Dockerfile 未实际构建（NOT EXECUTED）**。
-Dockerfile 内容为标准 `python:3.9-slim` + requirements + uvicorn，命令与挂载方式如上；有 Docker 的环境可直接验证。
+:::note Docker build：由 CI 真实验证
+开发机未安装 Docker；本仓库的 GitHub Actions `docker-build` job 会真实执行 `docker build`（**当前状态：通过**）。
+Dockerfile 使用 `python:3.11-slim` + CPU 版 torch 轮子 + uvicorn；本地构建与挂载方式如上（命令：`docker build -t rag-service .`）。
 :::
 
 ## 29.6 真实运行：6 题端到端

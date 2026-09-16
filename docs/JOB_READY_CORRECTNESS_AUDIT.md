@@ -110,14 +110,27 @@ CUDA 真机实验、vLLM serving benchmark、Triton kernel —— 代码/命令/
 | 第 24 章 | 清除全部「下一批」；Checkpoint A-E 全部标注已交付 |
 | 首页 | 「N 个可运行项目」动态读取 `content/projects.json`（构建时扫描，不硬编码） |
 | 环境快照 | `docs/environment.txt`（platform + pip freeze） |
-| CI | `.github/workflows/ci.yml`：validators + 5 项目轻量单测 + docker build；重模型 `workflow_dispatch` |
+| CI | `.github/workflows/ci.yml`：validators + 5 项目轻量单测 + docker build；重模型 `workflow_dispatch`。**首次运行抓出 2 个真实 bug（见 §七），修复后全绿** |
 | 门禁链 | build → validate-static → validate-content → validate-batch2 → **validate-jobs（165）** → **validate-portfolio（50）** → publish |
 
 测试口径统一：README 一律写 `N 个测试函数（M 个用例）`，validate-jobs 按 `def test_` 数量核对，不再混用。
 
 ---
 
-## 六、Known Limitations（本轮结束后仍存在）
+## 六、CI 实跑抓出的真实问题（修复后全绿）
+
+首次 CI（run 35072283533）结果：Node validators ✅ / log-analyzer ✅ / llm-eval ✅ / rag-service ✅ / inference-benchmark ✅；**sft-lora ❌ / docker-build ❌**。两个都是真实缺陷：
+
+| 问题 | 根因 | 修复 |
+| --- | --- | --- |
+| sft-lora 5 个测试失败（`BatchEncoding + list` TypeError） | CI 安装到**更新版 transformers**：`apply_chat_template(tokenize=True)` 返回 `BatchEncoding` 而非 list——本地旧版复现不到（版本漂移的真实案例） | `sft-lora/data.py` 与 `hf-mini-lab/data.py` 增加 `_as_ids()` 兼容层；两处各加**回归测试**（假 tokenizer 模拟 BatchEncoding） |
+| Docker build 失败（`flit_core` 无法安装） | `python:3.9-slim` + `pip install torch --index-url .../whl/cpu` 在旧 pip/旧基线组合下解析失败 | 基线改 `python:3.11-slim`、先升级 pip、CPU torch 轮子单独安装 |
+
+修复后（run 35072777413）：**7/7 job 全绿**——Node validators · log-analyzer · llm-eval · rag-service · sft-lora · inference-benchmark · **docker-build（真实构建成功）**；integration job 按设计跳过（手动触发）。
+
+> Docker 状态从此前的「本机 NOT EXECUTED」升级为「**CI 已真实构建通过**」。
+
+## 七、Known Limitations（本轮结束后仍存在）
 
 1. **CUDA / vLLM / Triton**：仍未执行（无 GPU）；标注 `NOT EXECUTED ON CUDA`；
 2. **SFT 单种子**：三路对比是单次运行，没有多 seed 均值与置信区间；

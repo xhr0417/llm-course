@@ -10,7 +10,7 @@
 | [`log-analyzer/`](log-analyzer/) | A · 基础工程 | argparse · dataclass · logging · pathlib · JSONL · pytest | 14 functions / 14 cases | ✅ CPU 实测（含 CLI 真实输出） |
 | [`hf-mini-lab/`](hf-mini-lab/) | A/B · 框架 | Tokenizer · Chat Template · generate · PEFT/LoRA · save/load | 11 functions / 11 cases | ✅ CPU 实测（Qwen2.5-0.5B 全流程）· 集成测试需联网下载模型 |
 | [`llm-eval/`](llm-eval/) | A · 评测 | Adapter × Task × Parser × Metrics · asyncio/Semaphore · 重试 · SQLite 缓存 · bad case | 21 functions / 32 cases | ✅ 真实 C3/XCOPA 评测（缓存复跑 0.0s）· API 路径用本地 mock 验证 |
-| [`rag-service/`](rag-service/) | A · 检索/服务 | BM25 · 向量 · RRF · cross-encoder 精排 · FastAPI/SSE · 检索评测 | 39 functions / 39 cases | ✅ 真实 22 查询评测 · 🐳 Docker build：CI 验证（docker-build job） |
+| [`rag-service/`](rag-service/) | A · 检索/服务 | BM25 · 向量 · RRF · cross-encoder 精排 · FastAPI/SSE · 检索评测 | 39 functions / 39 cases | ✅ 真实 22 查询评测 · 🐳 Docker build ✅（CI 已验证） |
 | [`sft-lora/`](sft-lora/) | B · 算法 | response-only loss · LoRA · best/final checkpoint · Base–Best–Final 评测 · 实验报告 | 15 functions / 15 cases | ✅ CPU 实测（真实训练与三路对比） |
 | [`inference-benchmark/`](inference-benchmark/) | C · Infra | torch.profiler · device-aware 计时 · SDPA 对比 · torch.compile · serving 压测 | 15 functions / 15 cases | ✅ CPU 实测 · ⚠️ CUDA / vLLM / Triton：**NOT EXECUTED ON CUDA** |
 

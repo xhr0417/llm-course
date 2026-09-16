@@ -131,7 +131,7 @@ rag-service/
 ## 已知问题
 
 1. **macOS + faiss-cpu + torch 的 OpenMP 冲突**：同一进程加载两者会 segfault。本项目的 `conftest.py` 与 `vector_index.py` 已内置 `KMP_DUPLICATE_LIB_OK=TRUE` 修复。
-2. **Dockerfile 未实际构建**：开发机没有安装 Docker（`NOT EXECUTED`）。构建命令为 `docker build -t rag-service .`，语料挂载方式见 Dockerfile 注释。
+2. **Docker build 已由 CI 验证**：本开发机没有安装 Docker；GitHub Actions 的 `docker-build` job 已真实执行 `docker build -t rag-service projects/rag-service` 并**通过**（连跑两次覆盖修复前后）。本地构建命令为 `docker build -t rag-service .`，语料挂载方式见 Dockerfile 注释。
 3. **生成模型是 0.5B**：回答质量受模型限制；检索与评测部分不受影响。
 
 ## 数据来源

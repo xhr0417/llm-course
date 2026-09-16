@@ -177,8 +177,8 @@ docker run -p 8000:8000 \
   -v $(pwd)/../../content:/corpus \
   -e RAG_CORPUS=/corpus \
   rag-service</code></pre>
-<div class="box box-warning"><div class="box-title">⚠️ 诚实标注：本机没有 Docker</div><div class="box-body"><p>开发机未安装 Docker（<code>docker --version</code> 不存在），因此 <strong>Dockerfile 未实际构建（NOT EXECUTED）</strong>。
-Dockerfile 内容为标准 <code>python:3.9-slim</code> + requirements + uvicorn，命令与挂载方式如上；有 Docker 的环境可直接验证。</p>
+<div class="box box-note"><div class="box-title">📘 Docker build：由 CI 真实验证</div><div class="box-body"><p>开发机未安装 Docker；本仓库的 GitHub Actions <code>docker-build</code> job 会真实执行 <code>docker build</code>（<strong>当前状态：通过</strong>）。
+Dockerfile 使用 <code>python:3.11-slim</code> + CPU 版 torch 轮子 + uvicorn；本地构建与挂载方式如上（命令：<code>docker build -t rag-service .</code>）。</p>
 </div></div>
 <h2>29.6 真实运行：6 题端到端</h2>
 <pre><code class="lang-">检索命中 6/6 | 引用规范 4/6 | 耗时中位数 19.1s（CPU，0.5B 模型）
