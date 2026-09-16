@@ -1,24 +1,54 @@
 # 内容审计报告（CONTENT_AUDIT）
 
-> 生成时间：网站升级完成后（Phase 1~4 + 第 7 章深度审查）。
-> Phase 2：第 1、5、6、7 章升级为教材级；Phase 3~4：第 8~13 章同一标准；最终审查：第 7 章按 40 个初学者问题逐条补齐。
-> 图例：✅ 有 ｜ 🎮 有交互演示 ｜ — 无 ｜ ★5 / ★4 / ★2 为课程深度分级
+> 生成时间：V2 升级（第一批）完成后。
+> V2 升级目标：CS336 前置 + 中文交互式 LLM Systems 教材。五段式主线：Understand → Build → Scale → Serve → Align。
+> 本批新增 6 章：PyTorch for LLM、Build Your Own Small LLM（上/下）、Scaling Laws、GPU Fundamentals、Distributed Training；新增 5 个系统级交互演示。
 
-## 总览统计
+## 总览统计（V2）
 
 | 指标 | 数值 |
 | --- | --- |
-| 章节数 | 14 |
-| 内容总量 | 约 7,890 行 / 289 KB |
-| 交互演示 | 58 个挂载点（51 个组件，含复用） |
-| 测验题 | 64 道（每章 1~8 道） |
-| 面试题模块 | 70 个（141 个折叠答案） |
-| 误区模块 | 69 个 |
-| 先懂直觉（unfold） | 102 个 |
-| 数学公式 | 约 2,929 处 KaTeX 渲染 |
-| Shape 流图 | 30 个 |
-| 代码块 | 98 个 |
-| 全站验证 | 14 章无控制台错误、测验可点击、答案可展开、搜索可用 |
+| 章节数 | 20（V1 为 14） |
+| 内容总量 | 约 10,300 行 / 380 KB |
+| 交互演示 | 65 个挂载点（56 个组件） |
+| 测验题 | 85 道（340 个选项） |
+| 面试题模块 | 90+ 个（折叠答案 180+） |
+| 数学公式 | 约 3,060 处 KaTeX 渲染 |
+| 静态阅读页 | 20 章（chapters/*.html） |
+| 全站验证 | 20 章无控制台错误、全部演示可交互 |
+
+## V2 第一批新增章节
+
+| 章节 | id | 内容 | 新演示 |
+| --- | --- | --- | --- |
+| 11 PyTorch for LLM | pytorch | shape 四件套、广播、einsum、nn.Module、autograd、训练循环、checkpoint、调试清单 | 复用 backprop |
+| 12 Build Small LLM（上） | build-llm-1 | Lab 1-7：Tokenizer→RMSNorm→RoPE→Attention→SwiGLU→Block→LM，全部可运行可验证 | 复用既有演示 |
+| 13 Build Small LLM（下） | build-llm-2 | Lab 8-14：数据→预训练→评估→生成→KV Cache→SFT→DPO/GRPO | 复用 next-token |
+| 14 Scaling Laws | scaling-laws | 参数量公式、6ND、Kaplan、Chinchilla、isoFLOP、MFU、过度训练 | `scaling-calculator`、`chinchilla-curve` |
+| 15 GPU Fundamentals | gpu | SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM、融合、Profiling | `roofline` |
+| 16 Distributed Training | distributed | DDP、Ring AllReduce、通信重叠、ZeRO 1-3、FSDP、TP、PP、3D 并行 | `allreduce-ring`、`zero-stages` |
+
+## 章节结构（V2 五段式）
+
+| 阶段 | 章节 |
+| --- | --- |
+| 准备 | 0 知识地图 |
+| ① 理解 | 1-4 基础 · 5-6 序列/NLP · 7-10 架构 |
+| ② 构建 | 11 PyTorch · 12-13 Build Small LLM |
+| ③ 扩展 | 14 Scaling Laws · 15 GPU · 16 分布式 · 17 显存与高效微调 |
+| ④ 服务 | （推理系统，第二批） |
+| ⑤ 对齐 | 18 Pretrain/SFT · 19 Post-training |
+
+## 原始章节覆盖审计（V1 内容，保持不变）
+
+### 总览统计
+
+| 指标 | 数值 |
+| --- | --- |
+| 章节数 | 20（含 V2 新增） |
+| 交互演示 | 65 个挂载点 |
+| 测验题 | 85 道 |
+| 静态阅读页 | 20 章 |
 
 ## 第 7 章最终审查记录（40 问覆盖）
 

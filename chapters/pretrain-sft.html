@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>大模型工程：Pretrain 与 SFT · 大模型知识体系</title>
+<title>训练生命周期：Pretrain 与 SFT · 大模型知识体系</title>
 <meta name="description" content="数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/pretrain-sft.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
@@ -26,13 +26,13 @@
 <body>
 <header class="static-top">
   <span class="crumb">大模型知识体系</span>
-  <span style="color:var(--text-faint);font-size:13px">第 11 章</span>
+  <span style="color:var(--text-faint);font-size:13px">第 18 章</span>
   <span class="spacer"></span>
   <a href="../index.html#/pretrain-sft">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="modern-llm.html">← 现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rl-grpo.html">强化学习：PPO 与 GRPO →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/pretrain-sft">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 11 章 · 大模型训练工程</div><h1 class="chapter-title">大模型工程：Pretrain 与 SFT</h1><p class="chapter-desc">数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
+<div class="static-nav"><a href="efficient.html">← 训练显存、混合精度与 LoRA</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rl-grpo.html">Post-training 与 GRPO：偏好优化全景 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/pretrain-sft">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 18 章 · 第四部分 · 训练与对齐 (Train &amp; Align)</div><h1 class="chapter-title">训练生命周期：Pretrain 与 SFT</h1><p class="chapter-desc">数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《3.1 大模型工程专题》。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
@@ -630,7 +630,7 @@ loss = F.cross_entropy(
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">MinHash 主要用于解决什么问题？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>数据清洗中的语言识别</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>海量文本中的近似重复检测（near-duplicate detection）</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>模型量化</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>学习率调度</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>MinHash 通过哈希签名估计集合的 Jaccard 相似度，配合 LSH 可以在超大规模语料中高效发现「高度相似但非完全相同」的文档，是去重的核心工具。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="nlp.html">Tokenizer</a><a class="tag" href="basics.html">交叉熵</a><span class="tag">优化器</span><span class="tag">数据工程</span></div><div class="related-row"><span class="related-label">用于</span><a class="tag" href="pretrain-sft.html">SFT</a><span class="tag">RLHF/GRPO</span><span class="tag">模型评估</span><span class="tag">部署</span></div></div>
 </div>
-<div class="static-nav"><a href="modern-llm.html">← 现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rl-grpo.html">强化学习：PPO 与 GRPO →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/11-pretrain-sft.md">content/11-pretrain-sft.md</a></div>
+<div class="static-nav"><a href="efficient.html">← 训练显存、混合精度与 LoRA</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rl-grpo.html">Post-training 与 GRPO：偏好优化全景 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/11-pretrain-sft.md">content/11-pretrain-sft.md</a></div>
 </main>
 </body>
 </html>

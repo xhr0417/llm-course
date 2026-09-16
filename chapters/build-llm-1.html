@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Your Own Small LLM（上）：组件篇 · 大模型知识体系</title>
+<meta name="description" content="Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM，每步可运行可验证。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/build-llm-1.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 12 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/build-llm-1">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="pytorch.html">← PyTorch for LLM：动手之前的必备工具箱</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="build-llm-2.html">Build Your Own Small LLM（下）：训练篇 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/build-llm-1">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 12 章 · 第二部分 · 构建 (Build)</div><h1 class="chapter-title">Build Your Own Small LLM（上）：组件篇</h1><p class="chapter-desc">Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM，每步可运行可验证。</p><p class="chapter-source">对应课件：工程实战（新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：Build 主线核心。7 个 Lab 从零搭出一个可运行的 decoder-only LM（约 10M 参数，单卡可训）。每个 Lab 都是<strong>小而完整</strong>的：有代码、有测试、有 shape 检查。做完本章，你已经手写过现代 LLM 的每一个零件。</p>
+</blockquote>
+<div class="box box-note"><div class="box-title">📘 项目目标（贯穿 12、13 章）</div><div class="box-body"><pre><code class="lang-">TinyLM 规格：vocab 32000 · d_model 256 · 6 层 · 8 头 · 上下文 512
+参数量 ≈ 12 · L · d² + V·d ≈ 12×6×256² + 32000×256 ≈ 12.9M
+单卡（8GB 显存）可训练，训练数据用任意中文/英文文本即可</code></pre>
+</div></div>
+<h2>Lab 1：训练一个 BPE Tokenizer</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把原始文本变成 token id 序列——这是模型的第一道工序。第 6 章讲过 BPE 原理（可回去看 <code>bpe</code> 演示），这里是工程落地。</p>
+</div></details>
+<h3>代码（用 HuggingFace tokenizers，工业标准实现）</h3>
+<pre><code class="lang-python">from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
+
+def train_tokenizer(text_file, vocab_size=32000, out=&quot;tokenizer.json&quot;):
+    tok = Tokenizer(models.BPE(unk_token=None))
+    tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    tok.decoder = decoders.ByteLevel()
+
+    trainer = trainers.BpeTrainer(
+        vocab_size=vocab_size,
+        special_tokens=[&quot;&lt;|endoftext|&gt;&quot;],     # 文档分隔符
+        initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),   # 256 字节起步（BBPE）
+    )
+    tok.train([text_file], trainer)
+    tok.save(out)
+    return tok
+
+tok = train_tokenizer(&quot;corpus.txt&quot;, vocab_size=32000)
+enc = tok.encode(&quot;大模型很有趣&quot;)
+print(enc.tokens)    # [&#39;大&#39;, &#39;模型&#39;, &#39;很&#39;, &#39;有趣&#39;] 之类（取决于语料）
+print(enc.ids)       # [1234, 5678, ...]</code></pre>
+<h3>验证清单</h3>
+<pre><code class="lang-python">assert tok.token_to_id(&quot;&lt;|endoftext|&gt;&quot;) == 0
+s = &quot;Hello 世界！&quot;
+assert tok.decode(tok.encode(s).ids) == s      # 编码再解码应无损
+print(&quot;压缩率:&quot;, len(s.encode(&quot;utf-8&quot;)) / len(tok.encode(s).ids), &quot;bytes/token&quot;)</code></pre>
+<table>
+<thead>
+<tr>
+<th>该检查什么</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>压缩率（bytes/token）</td>
+<td>越高越好，中文常见 2~4</td>
+</tr>
+<tr>
+<td>特殊 token 是否可用</td>
+<td>`&lt;</td>
+</tr>
+<tr>
+<td>无损往返</td>
+<td>BPE 必须能还原原文</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ 坑</div><div class="box-body"><p>语料太小会训出奇怪词表（比如把整句话当一个 token）。语料至少几 MB 才有意义；vocab_size 不是越大越好——它直接决定 embedding 参数量 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi><mo>×</mo><mi>d</mi></mrow><annotation encoding="application/x-tex">V \times d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span></span>。</p>
+</div></div>
+<h2>Lab 2：实现 RMSNorm</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>实现现代 LLM 的归一化层（第 10 章原理，<code>norm-compare</code> 演示可复习）。它比 LayerNorm 少一次归约。</p>
+</div></details>
+<pre><code class="lang-python">import torch, torch.nn as nn
+
+class RMSNorm(nn.Module):
+    def __init__(self, d_model, eps=1e-6):
+        super().__init__()
+        self.g = nn.Parameter(torch.ones(d_model))   # 可学习缩放
+        self.eps = eps
+
+    def forward(self, x):
+        # x: [..., d_model]
+        rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt()   # [..., 1]
+        return x / (rms + self.eps) * self.g
+
+# 验证
+x = torch.randn(2, 5, 256)
+out = RMSNorm(256)(x)
+assert out.shape == x.shape
+assert torch.allclose(out.pow(2).mean(-1), torch.ones(2, 5), atol=1e-3)  # RMS≈1</code></pre>
+<div class="box box-math"><div class="box-title">🧮 与 LayerNorm 的代码差异</div><div class="box-body"><pre><code class="lang-python"># LayerNorm 需要：减均值 → 除标准差
+x = (x - x.mean(-1, keepdim=True)) / x.std(-1, keepdim=True) * g + b
+# RMSNorm 只要：除均方根（省掉减均值、省掉 bias b）
+x = x / x.pow(2).mean(-1, keepdim=True).sqrt() * g</code></pre>
+</div></div>
+<h2>Lab 3：实现 RoPE（旋转位置编码）</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>给 Q/K 注入位置信息（第 10 章原理，<code>rope</code> 演示可复习）。这里实现 GPT-NeoX 风格的「半拆旋转」版本——LLaMA 系模型的标配写法。</p>
+</div></details>
+<pre><code class="lang-python">def build_rope_cache(seq_len, head_dim, base=10000.0, device=&quot;cpu&quot;):
+    &quot;&quot;&quot;预先算好每个位置的 cos/sin，训练时查表即可&quot;&quot;&quot;
+    half = head_dim // 2
+    freqs = 1.0 / (base ** (torch.arange(0, half, device=device).float() / half))
+    t = torch.arange(seq_len, device=device).float()
+    angles = torch.outer(t, freqs)            # [S, half]
+    return angles.cos(), angles.sin()          # 各 [S, half]
+
+def apply_rope(x, cos, sin):
+    &quot;&quot;&quot;x: [B, H, S, D]，cos/sin: [S, D/2]&quot;&quot;&quot;
+    cos = cos[None, None, :, :]                # [1, 1, S, D/2]
+    sin = sin[None, None, :, :]
+    x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+    return torch.cat([x1 * cos - x2 * sin,
+                      x1 * sin + x2 * cos], dim=-1)
+
+# 验证：相对位置不变性（第 10 章结论）
+D = 64
+cos, sin = build_rope_cache(16, D)
+q = torch.randn(1, 1, 16, D)
+k = torch.randn(1, 1, 16, D)
+qr = apply_rope(q, cos, sin)
+kr = apply_rope(k, cos, sin)
+dot_mn = (qr[0, 0, 8] * kr[0, 0, 6]).sum()      # 相对位置 2
+dot_mn2 = (qr[0, 0, 5] * kr[0, 0, 3]).sum()     # 相对位置 2
+assert torch.allclose(dot_mn, dot_mn2, atol=1e-5)   # 相同相对距离 → 相同点积
+print(&quot;RoPE 相对位置性质通过 ✅&quot;)</code></pre>
+<div class="box box-warning"><div class="box-title">⚠️ 坑</div><div class="box-body"><ul>
+<li>cos/sin 要搬到和 x 相同的 device；</li>
+<li>训练时 <code>seq_len</code> 不够长会报索引错——按最大上下文预生成；</li>
+<li>旋转只作用于 <strong>Q 和 K</strong>，不要碰 V（第 10 章讲过原因）。</li>
+</ul>
+</div></div>
+<h2>Lab 4：实现 Attention（MHA + Causal Mask）</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>把第 7 章的全部知识组装成一个可用的多头注意力模块：投影 → 拆头 → RoPE → 打分 → mask → softmax → 加权 → 拼回。</p>
+</div></details>
+<pre><code class="lang-python">class Attention(nn.Module):
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.h = n_heads
+        self.d = d_model // n_heads
+        self.Wq = nn.Linear(d_model, d_model, bias=False)
+        self.Wk = nn.Linear(d_model, d_model, bias=False)
+        self.Wv = nn.Linear(d_model, d_model, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
+
+    def forward(self, x, cos, sin, mask):
+        # x: [B, S, d_model]   cos/sin: [S, D/2]   mask: [S, S] (True=遮住)
+        B, S, _ = x.shape
+        # ① 投影 + 拆头 → [B, H, S, D]
+        q = self.Wq(x).view(B, S, self.h, self.d).transpose(1, 2)
+        k = self.Wk(x).view(B, S, self.h, self.d).transpose(1, 2)
+        v = self.Wv(x).view(B, S, self.h, self.d).transpose(1, 2)
+        # ② 位置信息（只对 Q/K）
+        q = apply_rope(q, cos, sin)
+        k = apply_rope(k, cos, sin)
+        # ③ 打分 + 缩放 + mask + softmax
+        scores = q @ k.transpose(-2, -1) / (self.d ** 0.5)   # [B,H,S,S]
+        scores = scores.masked_fill(mask, float(&quot;-inf&quot;))
+        attn = scores.softmax(dim=-1)
+        # ④ 加权求和 + 拼回 [B, S, d_model]
+        out = attn @ v                                       # [B,H,S,D]
+        out = out.transpose(1, 2).contiguous().view(B, S, -1)
+        return self.Wo(out)
+
+# 验证
+x = torch.randn(2, 8, 256)
+cos, sin = build_rope_cache(8, 32)
+mask = torch.triu(torch.ones(8, 8), 1).bool()
+out = Attention(256, 8)(x, cos, sin, mask)
+assert out.shape == (2, 8, 256)</code></pre>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">x</span><span class="shape-dims">[B,S,256]</span></span><span class="shape-arrow">→</span><span class="shape-op">Wq/Wk/Wv</span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name"> </span><span class="shape-dims">[B,S,256]</span></span><span class="shape-arrow">→</span><span class="shape-op">view+transpose</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">q,k,v</span><span class="shape-dims">[B,8,S,32]</span></span></div><div class="shape-row"><span class="shape-part"><span class="shape-name">q@kᵀ</span><span class="shape-dims">[B,8,S,S]</span></span><span class="shape-arrow">→</span><span class="shape-op">÷√32</span><span class="shape-arrow">→</span><span class="shape-op">+mask</span><span class="shape-arrow">→</span><span class="shape-op">softmax</span><span class="shape-arrow">→</span><span class="shape-op">@v</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name"> </span><span class="shape-dims">[B,8,S,32]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">transpose+view</span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name"> </span><span class="shape-dims">[B,S,256]</span></span><span class="shape-arrow">→</span><span class="shape-op">Wo</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">输出</span><span class="shape-dims">[B,S,256]</span></span></div></div>
+<details class="fold"><summary>关键检查：因果性测试（每个位置不能看到未来）</summary><div class="fold-body"><pre><code class="lang-python"># 改动位置 7 的输入，前面位置的输出不应变化
+x2 = x.clone(); x2[:, 7] += 100.0
+out2 = Attention(256, 8)(x2, cos, sin, mask)
+assert torch.allclose(out[:, :7], out2[:, :7], atol=1e-5)   # 前 7 个位置不变
+print(&quot;因果性通过 ✅&quot;)</code></pre>
+</div></details>
+<h2>Lab 5：实现 SwiGLU</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>现代 FFN：两条分支，一条当门（第 10 章 <code>swiglu</code> 演示可复习）。</p>
+</div></details>
+<pre><code class="lang-python">class SwiGLU(nn.Module):
+    def __init__(self, d_model, d_ff=None):
+        super().__init__()
+        d_ff = d_ff or int(8 / 3 * d_model)
+        d_ff = 64 * ((d_ff + 63) // 64)          # 对齐到 64（工程习惯，利于 kernel）
+        self.w1 = nn.Linear(d_model, d_ff, bias=False)   # 门
+        self.w3 = nn.Linear(d_model, d_ff, bias=False)   # 内容
+        self.w2 = nn.Linear(d_ff, d_model, bias=False)   # 输出
+
+    def forward(self, x):
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+# 验证参数量（≈ 8/3 d² × 3 = 8d²）
+d = 256
+print(sum(p.numel() for p in SwiGLU(d).parameters()) / d**2)   # ≈ 8.0</code></pre>
+<h2>Lab 6：组装 Transformer Block</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>Pre-Norm + 残差 + Attention + FFN。一个 Block 就是现代 LLM 的全部骨架（第 7 章 <code>transformer-block</code> 演示可复习）。</p>
+</div></details>
+<pre><code class="lang-python">class Block(nn.Module):
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        self.norm1 = RMSNorm(d_model)
+        self.attn = Attention(d_model, n_heads)
+        self.norm2 = RMSNorm(d_model)
+        self.ffn = SwiGLU(d_model)
+
+    def forward(self, x, cos, sin, mask):
+        x = x + self.attn(self.norm1(x), cos, sin, mask)   # Pre-Norm + 残差
+        x = x + self.ffn(self.norm2(x))
+        return x
+
+# 验证参数量公式：每层 ≈ 12 d²（Attention 4d² + FFN 8d²）
+blk = Block(256, 8)
+print(round(sum(p.numel() for p in blk.parameters()) / 256**2, 1))   # ≈ 12.0</code></pre>
+<div class="box box-math"><div class="box-title">🧮 为什么每层是 12d²</div><div class="box-body"><ul>
+<li>Attention：Wq/Wk/Wv/Wo 各 d×d → 4d²</li>
+<li>SwiGLU：w1/w3 各 d×d_ff ≈ d×(8/3)d，w2 同款 → 3 × (8/3)d² = 8d²</li>
+<li>合计 12d²（归一化参数可忽略）</li>
+</ul>
+</div></div>
+<h2>Lab 7：搭出完整的 Decoder-only LM</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>Embedding → N 个 Block → Final Norm → LM Head，加权重共享。这就是 GPT（第 9 章）的最小可运行版本。</p>
+</div></details>
+<pre><code class="lang-python">class TinyLM(nn.Module):
+    def __init__(self, vocab_size, d_model=256, n_layers=6, n_heads=8, max_seq=512):
+        super().__init__()
+        self.max_seq = max_seq
+        self.tok_emb = nn.Embedding(vocab_size, d_model)
+        self.blocks = nn.ModuleList([Block(d_model, n_heads) for _ in range(n_layers)])
+        self.norm_f = RMSNorm(d_model)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
+        self.lm_head.weight = self.tok_emb.weight        # weight tying：省 V×d 参数
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+
+    def forward(self, idx):
+        B, S = idx.shape
+        assert S &lt;= self.max_seq
+        x = self.tok_emb(idx)                            # [B,S,d]
+        cos, sin = build_rope_cache(S, self.blocks[0].attn.d, device=idx.device)
+        mask = torch.triu(torch.ones(S, S, device=idx.device), 1).bool()
+        for blk in self.blocks:
+            x = blk(x, cos, sin, mask)
+        x = self.norm_f(x)
+        return self.lm_head(x)                           # [B,S,V] logits
+
+# 验收测试
+model = TinyLM(vocab_size=32000)
+idx = torch.randint(0, 32000, (2, 32))
+logits = model(idx)
+assert logits.shape == (2, 32, 32000)
+
+# 参数量核对
+total = sum(p.numel() for p in model.parameters())
+formula = 12 * 6 * 256**2 + 32000 * 256
+print(f&quot;实际 {total/1e6:.2f}M  公式 {formula/1e6:.2f}M&quot;)</code></pre>
+<div class="shapeflow"><div class="shape-row"><span class="shape-part"><span class="shape-name">idx</span><span class="shape-dims">[B,S]</span></span><span class="shape-arrow">→</span><span class="shape-op">Embedding</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name"> </span><span class="shape-dims">[B,S,256]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">6</span><span class="shape-op">×</span><span class="shape-op">Block（Attention + FFN，形状不变）</span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name"> </span><span class="shape-dims">[B,S,256]</span></span></div><div class="shape-row"><span class="shape-arrow">→</span><span class="shape-op">Final RMSNorm</span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name"> </span><span class="shape-dims">[B,S,256]</span></span><span class="shape-arrow">→</span><span class="shape-part"><span class="shape-name">LM Head</span><span class="shape-dims">[256, V]</span></span><span class="shape-arrow">→</span><span class="shape-part result"><span class="shape-name">logits</span><span class="shape-dims">[B,S,V]</span></span></div></div>
+<h3>阶段验收清单（做完才能进第 13 章）</h3>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>通过标准</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>参数量</td>
+<td><code>12·L·d² + V·d</code> 与实际误差 &lt; 1%</td>
+</tr>
+<tr>
+<td>形状</td>
+<td>输出 [B, S, V]</td>
+</tr>
+<tr>
+<td>因果性</td>
+<td>修改末尾 token 不影响前面位置的输出</td>
+</tr>
+<tr>
+<td>参数初始化</td>
+<td>std=0.02，loss 初始 ≈ ln(V) ≈ 10.4</td>
+</tr>
+<tr>
+<td>参数量小抄</td>
+<td>embedding + 每层 12d² + final norm</td>
+</tr>
+</tbody></table>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>组件</th>
+<th>关键实现细节</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tokenizer</td>
+<td>BBPE + `&lt;</td>
+</tr>
+<tr>
+<td>RMSNorm</td>
+<td>只除均方根，无 bias，eps 防零</td>
+</tr>
+<tr>
+<td>RoPE</td>
+<td>预生成 cos/sin 查表，只作用于 Q/K，验证相对位置性质</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>拆头 [B,H,S,D] → mask 用 -inf → 拼回，用因果性测试验收</td>
+</tr>
+<tr>
+<td>SwiGLU</td>
+<td>三矩阵、中间维 8/3 d、按 64 对齐</td>
+</tr>
+<tr>
+<td>Block</td>
+<td>Pre-Norm + 双残差，每层 12d²</td>
+</tr>
+<tr>
+<td>LM</td>
+<td>权重共享、std 0.02 初始化、loss 初始 ≈ ln(V)</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">TinyLM 里 <code>self.lm_head.weight = self.tok_emb.weight</code> 这行的作用是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加快训练速度</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>权重共享（weight tying），省一份 V×d 的参数并使输入输出词向量空间对齐</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>冻结 embedding 不训练</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>修正初始化的方差</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>embedding 是 [V,d]，LM Head 是 [d,V]，形状互为转置。共享能省一份参数（30M 级别）且实践中效果常更好。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Attention 的因果性测试应该怎么设计？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>检查输出形状</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>修改序列末尾的输入，验证前面位置的输出保持不变</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>检查 loss 是否下降</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>对比有/无 RoPE 的结果</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>因果性意味着位置 t 的输出只依赖 ≤t 的输入。改动末尾 token 后，前 t-1 个位置的输出必须不变，这是对 mask 实现最直接的验收。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">RoPE 的 cos/sin 为什么要预生成（build_rope_cache）？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>为了让代码更短</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>角度只取决于位置和维度，与输入无关，预生成后训练时查表即可，避免重复计算</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>因为 torch.cos 不支持 GPU</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止梯度爆炸</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>旋转角度是确定的（位置 × 频率），与数据无关。预生成 [S, D/2] 的 cos/sin 后，每个 batch 直接查表，节省算力。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 6 章 BPE</span><span class="tag">第 7 章 Attention</span><span class="tag">第 10 章 RMSNorm/RoPE/SwiGLU</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 13 章 训练篇（数据/预训练/SFT）</span><span class="tag">第 17 章 训练显存</span></div></div>
+</div>
+<div class="static-nav"><a href="pytorch.html">← PyTorch for LLM：动手之前的必备工具箱</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="build-llm-2.html">Build Your Own Small LLM（下）：训练篇 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/12-build-llm-1.md">content/12-build-llm-1.md</a></div>
+</main>
+</body>
+</html>

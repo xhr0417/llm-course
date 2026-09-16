@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU · 大模型知识体系</title>
-<meta name="description" content="LLaMA/Qwen 骨架说明书，6 个交互演示 + 显存估算器。">
+<title>现代 LLM 架构：技术演化视角 · 大模型知识体系</title>
+<meta name="description" content="LayerNorm→RMSNorm、绝对位置→RoPE、ReLU→SwiGLU、MHA→GQA、KV Cache——按技术演化组织。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/modern-llm.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -31,8 +31,8 @@
   <a href="../index.html#/modern-llm">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="gpt.html">← GPT：Decoder-only 与文本生成</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">大模型工程：Pretrain 与 SFT →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/modern-llm">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 10 章 · Transformer 与大模型架构</div><h1 class="chapter-title">现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU</h1><p class="chapter-desc">LLaMA/Qwen 骨架说明书，6 个交互演示 + 显存估算器。</p><p class="chapter-source">对应课件：2-4 BERT&amp;GPT&amp;前沿大语言模型</p></div>
+<div class="static-nav"><a href="gpt.html">← GPT：Decoder-only 与文本生成</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pytorch.html">PyTorch for LLM：动手之前的必备工具箱 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/modern-llm">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 10 章 · 第一部分 · 理解 (Understand)</div><h1 class="chapter-title">现代 LLM 架构：技术演化视角</h1><p class="chapter-desc">LayerNorm→RMSNorm、绝对位置→RoPE、ReLU→SwiGLU、MHA→GQA、KV Cache——按技术演化组织。</p><p class="chapter-source">对应课件：2-4 BERT&amp;GPT&amp;前沿大语言模型</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《2-4 BERT&amp;GPT&amp;前沿大语言模型》后半部分。核心知识点全部按统一模板展开。这一章就是 LLaMA/Qwen 这一代模型的骨架说明书。</p>
@@ -645,7 +645,7 @@ Logits</code></pre>
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">SwiGLU 的 FFN 中间维度通常取 8/3 d 而不是 4d，原因是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>计算更快</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>SwiGLU 有 3 个权重矩阵，需要缩小中间维度以保持参数量相当</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>显存限制</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>8/3 是随机选的</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>ReLU FFN 有 2 个矩阵（2 × d × 4d），SwiGLU 有 3 个矩阵（3 × d × d_ff）。令 3·d·d_ff ≈ 2·d·4d 得 d_ff ≈ 8/3 d。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="transformer.html">Self-Attention</a><a class="tag" href="transformer.html">LayerNorm</a><a class="tag" href="transformer.html">FFN</a><a class="tag" href="transformer.html">位置编码</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">LLaMA</span><span class="tag">Qwen</span><span class="tag">推理优化</span><span class="tag">长上下文</span></div></div>
 </div>
-<div class="static-nav"><a href="gpt.html">← GPT：Decoder-only 与文本生成</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">大模型工程：Pretrain 与 SFT →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/10-modern-llm.md">content/10-modern-llm.md</a></div>
+<div class="static-nav"><a href="gpt.html">← GPT：Decoder-only 与文本生成</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pytorch.html">PyTorch for LLM：动手之前的必备工具箱 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/10-modern-llm.md">content/10-modern-llm.md</a></div>
 </main>
 </body>
 </html>

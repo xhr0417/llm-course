@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>循环神经网络：RNN → LSTM → GRU · 大模型知识体系</title>
-<meta name="description" content="参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN。三个交互演示。">
+<meta name="description" content="参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN（历史演化，保持冻结）。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/rnn.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="stability.html">← 数值稳定：梯度爆炸/消失、初始化、BN 与残差</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="nlp.html">NLP 基础：Tokenizer、BPE 与 Embedding →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rnn">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 5 章 · 序列模型</div><h1 class="chapter-title">循环神经网络：RNN → LSTM → GRU</h1><p class="chapter-desc">参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN。三个交互演示。</p><p class="chapter-source">对应课件：1.5 循环神经网络</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 5 章 · 第一部分 · 理解 (Understand)</div><h1 class="chapter-title">循环神经网络：RNN → LSTM → GRU</h1><p class="chapter-desc">参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN（历史演化，保持冻结）。</p><p class="chapter-source">对应课件：1.5 循环神经网络</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《1.5 循环神经网络》。核心内容：RNN 的隐藏状态与参数共享、长程依赖问题、LSTM 三门一状态、GRU、Deep RNN，以及为什么 Transformer 最终取代了 RNN。</p>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scaling Laws 与算力：为什么这样配置训练 · 大模型知识体系</title>
+<meta name="description" content="参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/scaling-laws.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 14 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/scaling-laws">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="build-llm-2.html">← Build Your Own Small LLM（下）：训练篇</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="gpu.html">GPU Fundamentals：从 SM 到 Roofline →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/scaling-laws">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 14 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">Scaling Laws 与算力：为什么这样配置训练</h1><p class="chapter-desc">参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：Scale 主线开篇。回答一个现实问题：<strong>给定预算（GPU 数量 × 时间），模型开多大、数据喂多少，才是最优的？</strong> 这是从「会训模型」到「会配置训练」的关键一跃，也是 CS336 的核心前置之一。</p>
+</blockquote>
+<h2>14.1 为什么需要 Scaling Laws</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练大模型是几千万美元级的工程决策：模型开 7B 还是 70B？数据喂 1T 还是 15T token？GPU 买 1000 张还是 10000 张？Scaling Laws 用<strong>小规模实验的幂律规律</strong>来预测大规模训练的结果，把「拍脑袋」变成「算得出来」。</p>
+</div></details>
+<p>它回答三个问题：</p>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>Scaling Laws 的回答</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>模型越大越好吗？</td>
+<td>不是——同算力下有最优大小；超过后收益递减</td>
+</tr>
+<tr>
+<td>数据要多少？</td>
+<td>与参数量配比存在最优点（Chinchilla ≈ 20 token/参数）</td>
+</tr>
+<tr>
+<td>该花多少钱？</td>
+<td>给定模型大小，损失随算力呈可预测的幂律下降</td>
+</tr>
+</tbody></table>
+<p><strong>核心工具链</strong>：参数量 → 训练 FLOPs（6ND）→ GPU hours（÷ 吞吐）→ 损失预测（幂律）。</p>
+<h2>14.2 参数量怎么数</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Transformer 的参数量有简洁公式，不用逐层数。这也是判断「一个模型声称 X B 参数是否合理」的基本功。</p>
+</div></details>
+<h3>公式（decoder-only，标准配置）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Params</mtext><mo>≈</mo><munder><munder><mrow><mn>12</mn><mtext> </mtext><mi>L</mi><mtext> </mtext><msup><mi>d</mi><mn>2</mn></msup></mrow><mo stretchy="true">⏟</mo></munder><mrow><mtext>每层 </mtext><mn>12</mn><msup><mi>d</mi><mn>2</mn></msup><mtext>，共 </mtext><mi>L</mi><mtext> 层</mtext></mrow></munder><mo>+</mo><munder><munder><mrow><mi>V</mi><mtext> </mtext><mi>d</mi></mrow><mo stretchy="true">⏟</mo></munder><mtext>embedding 与 LM Head 共享</mtext></munder></mrow><annotation encoding="application/x-tex">\text{Params} \approx \underbrace{12\,L\,d^2}_{\text{每层 } 12d^2 \text{，共 } L \text{ 层}} + \underbrace{V\,d}_{\text{embedding 与 LM Head 共享}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">Params</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.2345em;vertical-align:-1.3704em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-1.6296em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord cjk_fallback mtight">每层</span><span class="mord mtight"> </span></span><span class="mord mtight">12</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7463em;"><span style="top:-2.786em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord text mtight"><span class="mord cjk_fallback mtight">，共</span><span class="mord mtight"> </span></span><span class="mord mathnormal mtight">L</span><span class="mord text mtight"><span class="mord mtight"> </span><span class="mord cjk_fallback mtight">层</span></span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span class="svg-align" style="top:-2.352em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">12</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.648em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3704em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.1647em;vertical-align:-1.4702em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-1.6659em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">embedding </span><span class="mord cjk_fallback mtight">与</span><span class="mord mtight"> LM Head </span><span class="mord cjk_fallback mtight">共享</span></span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord munder"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span class="svg-align" style="top:-2.352em;"><span class="pstrut" style="height:3em;"></span><span class="stretchy" style="height:0.548em;min-width:1.6em;"><span class="brace-left" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMinYMin slice"><path d="M0 6l6-6h17c12.688 0 19.313.3 20 1 4 4 7.313 8.3 10 13
+ 35.313 51.3 80.813 93.8 136.5 127.5 55.688 33.7 117.188 55.8 184.5 66.5.688
+ 0 2 .3 4 1 18.688 2.7 76 4.3 172 5h399450v120H429l-6-1c-124.688-8-235-61.7
+-331-161C60.687 138.7 32.312 99.3 7 54L0 41V6z"/></svg></span><span class="brace-center" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMidYMin slice"><path d="M199572 214
+c100.7 8.3 195.3 44 280 108 55.3 42 101.7 93 139 153l9 14c2.7-4 5.7-8.7 9-14
+ 53.3-86.7 123.7-153 211-199 66.7-36 137.3-56.3 212-62h199568v120H200432c-178.3
+ 11.7-311.7 78.3-403 201-6 8-9.7 12-11 12-.7.7-6.7 1-18 1s-17.3-.3-18-1c-1.3 0
+-5-4-11-12-44.7-59.3-101.3-106.3-170-141s-145.3-54.3-229-60H0V214z"/></svg></span><span class="brace-right" style="height:0.548em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="0.548em" viewBox="0 0 400000 548" preserveAspectRatio="xMaxYMin slice"><path d="M399994 0l6 6v35l-6 11c-56 104-135.3 181.3-238 232-57.3
+ 28.7-117 45-179 50H-300V214h399897c43.3-7 81-15 113-26 100.7-33 179.7-91 237
+-174 2.7-5 6-9 10-13 .7-1 7.3-1 20-1h17z"/></svg></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.648em;"><span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.4702em;"><span></span></span></span></span></span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+<th>典型值（7B）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">L</span></span></span></span></span></td>
+<td>层数</td>
+<td>32</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi></mrow><annotation encoding="application/x-tex">d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span></span></td>
+<td>hidden 维度</td>
+<td>4096</td>
+</tr>
+<tr>
+<td><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>V</mi></mrow><annotation encoding="application/x-tex">V</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span></span></span></span></span></td>
+<td>词表</td>
+<td>32000</td>
+</tr>
+<tr>
+<td>每层组成</td>
+<td>Attention 4d² + FFN 8d²（SwiGLU）</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<h3>数值算例：LLaMA-2-7B</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mn>12</mn><mo>×</mo><mn>32</mn><mo>×</mo><mn>409</mn><msup><mn>6</mn><mn>2</mn></msup><mo>=</mo><mn>6.44</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mn>9</mn></msup></mrow><annotation encoding="application/x-tex">12 \times 32 \times 4096^2 = 6.44 \times 10^9</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">12</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">32</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">409</span><span class="mord"><span class="mord">6</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">6.44</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span></span></span></span></span></div>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>V</mi><mo>×</mo><mi>d</mi><mo>=</mo><mn>32000</mn><mo>×</mo><mn>4096</mn><mo>=</mo><mn>1.31</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mn>8</mn></msup></mrow><annotation encoding="application/x-tex">V \times d = 32000 \times 4096 = 1.31 \times 10^8</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.22222em;">V</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">32000</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">4096</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1.31</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">8</span></span></span></span></span></span></span></span></span></span></span></span></div>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>总计</mtext><mo>≈</mo><mn>6.57</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mn>9</mn></msup><mo>≈</mo><mn>6.6</mn><mtext>B</mtext></mrow><annotation encoding="application/x-tex">\text{总计} \approx 6.57 \times 10^9 \approx 6.6\text{B}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">总计</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">6.57</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">6.6</span><span class="mord text"><span class="mord">B</span></span></span></span></span></span></div>
+<p>（实际报告 6.7B，差异来自 norm/bias 等小项 ✅）</p>
+<h3>快速一览表</h3>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>L</th>
+<th>d</th>
+<th>12Ld²</th>
+<th>+Vd</th>
+<th>≈ 参数量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GPT-2 Small</td>
+<td>12</td>
+<td>768</td>
+<td>0.085B</td>
+<td>0.025B</td>
+<td>0.11B</td>
+</tr>
+<tr>
+<td>TinyLM（第 12 章）</td>
+<td>6</td>
+<td>256</td>
+<td>0.0047B</td>
+<td>0.008B</td>
+<td>0.013B</td>
+</tr>
+<tr>
+<td>LLaMA-2-7B</td>
+<td>32</td>
+<td>4096</td>
+<td>6.44B</td>
+<td>0.13B</td>
+<td>6.6B</td>
+</tr>
+<tr>
+<td>LLaMA-2-70B</td>
+<td>80</td>
+<td>8192</td>
+<td>64.4B</td>
+<td>0.26B</td>
+<td>64.7B（GQA 略减）</td>
+</tr>
+<tr>
+<td>GPT-3</td>
+<td>96</td>
+<td>12288</td>
+<td>173B</td>
+<td>0.39B</td>
+<td>175B</td>
+</tr>
+</tbody></table>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误区</div><div class="box-body"><ul>
+<li><strong>12d² 是 SwiGLU 时代的数字</strong>：如果 FFN 用 4d 的 ReLU FFN，每层是 4d² + 8d² = 12d²（一样）；如果 d_ff 不是 4d 要按实际算。</li>
+<li><strong>词表大时 embedding 不可忽略</strong>：小模型（d=256）里 V·d 占 60%+。</li>
+<li><strong>MoE 是例外</strong>：参数量按专家总数算，但激活参数远小于总参数。</li>
+</ul>
+</div></div>
+<h2>14.3 训练算力：6ND</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练一次（前向 + 反向）的计算量有个经典估算：<strong>每个参数、每个 token 大约 6 次浮点运算</strong>。记住 6ND，你就能口算任何训练任务的算力。</p>
+</div></details>
+<h3>公式与推导直觉</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>C</mi><mo>≈</mo><mn>6</mn><mtext> </mtext><mi>N</mi><mtext> </mtext><mi>D</mi></mrow><annotation encoding="application/x-tex">C \approx 6\,N\,D</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord">6</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>含义</th>
+<th>为什么是 6</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>前向</td>
+<td>每个参数对每个 token 一次乘加（2 FLOPs）= 2ND</td>
+<td>矩阵乘里每个权重参与一次乘 + 一次加</td>
+</tr>
+<tr>
+<td>反向（对输入）</td>
+<td>同样规模 = 2ND</td>
+<td>链式法则要乘权重</td>
+</tr>
+<tr>
+<td>反向（对权重）</td>
+<td>同样规模 = 2ND</td>
+<td>计算权重梯度</td>
+</tr>
+<tr>
+<td>合计</td>
+<td><strong>6ND</strong></td>
+<td>2+2+2</td>
+</tr>
+</tbody></table>
+<h3>数值算例</h3>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>N</th>
+<th>D</th>
+<th>C = 6ND</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TinyLM（第 12 章）</td>
+<td>13M</td>
+<td>1B</td>
+<td>7.8e16</td>
+</tr>
+<tr>
+<td>GPT-2</td>
+<td>0.11B</td>
+<td>10B</td>
+<td>6.6e18</td>
+</tr>
+<tr>
+<td>LLaMA-2-7B</td>
+<td>7B</td>
+<td>2T</td>
+<td><strong>8.4e22</strong></td>
+</tr>
+<tr>
+<td>GPT-3</td>
+<td>175B</td>
+<td>300B</td>
+<td>3.15e23</td>
+</tr>
+<tr>
+<td>LLaMA-3-8B</td>
+<td>8B</td>
+<td>15T</td>
+<td><strong>7.2e23</strong></td>
+</tr>
+</tbody></table>
+<div class="box box-math"><div class="box-title">🧮 从 FLOPs 到时间（完整链路）</div><div class="box-body"><div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>墙钟时间</mtext><mo>=</mo><mfrac><mi>C</mi><mrow><msub><mi>N</mi><mrow><mi>g</mi><mi>p</mi><mi>u</mi></mrow></msub><mo>×</mo><mtext>峰值算力</mtext><mo>×</mo><mtext>MFU</mtext></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{墙钟时间} = \frac{C}{N_{gpu} \times \text{峰值算力} \times \text{MFU}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">墙钟时间</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.3324em;vertical-align:-0.9721em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">u</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord cjk_fallback">峰值算力</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">MFU</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">C</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<p>以 LLaMA-2-7B（8.4e22 FLOPs）在 1000 张 A100（312 TFLOPS BF16）上为例：</p>
+<ul>
+<li>有效算力 = 312 × 0.35（MFU）= 109 TFLOPS/卡</li>
+<li>GPU 总时长 = 8.4e22 ÷ 109e12 ≈ 7.7e8 GPU 秒 ≈ <strong>214,000 GPU hours</strong></li>
+<li>1000 卡 → 约 <strong>9 天</strong></li>
+</ul>
+</div></div>
+<h2>14.4 Kaplan Scaling Laws</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>2020 年 Kaplan 等人发现：<strong>损失随模型大小、数据量、算力都呈幂律下降</strong>——画在 log-log 坐标上就是直线。这意味着小实验可以预测大训练的结果。</p>
+</div></details>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo stretchy="false">(</mo><mi>N</mi><mo stretchy="false">)</mo><mo>∝</mo><msup><mi>N</mi><mrow><mo>−</mo><mn>0.076</mn></mrow></msup><mo separator="true">,</mo><mspace width="2em"/><mi>L</mi><mo stretchy="false">(</mo><mi>D</mi><mo stretchy="false">)</mo><mo>∝</mo><msup><mi>D</mi><mrow><mo>−</mo><mn>0.095</mn></mrow></msup><mo separator="true">,</mo><mspace width="2em"/><mi>L</mi><mo stretchy="false">(</mo><mi>C</mi><mo stretchy="false">)</mo><mo>∝</mo><msup><mi>C</mi><mrow><mo>−</mo><mn>0.050</mn></mrow></msup></mrow><annotation encoding="application/x-tex">L(N) \propto N^{-0.076}, \qquad L(D) \propto D^{-0.095}, \qquad L(C) \propto C^{-0.050}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">L</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1141em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">0.076</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">L</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1141em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">0.095</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">L</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">0.050</span></span></span></span></span></span></span></span></span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>规律</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>幂律（power law）</td>
+<td>每翻倍规模，损失下降固定比例（log-log 直线）</td>
+</tr>
+<tr>
+<td>指数很小（0.05~0.1）</td>
+<td>想再降一点损失，规模要翻很多倍</td>
+</tr>
+<tr>
+<td>结论</td>
+<td>大模型时代「更大 = 更好」有了定量依据</td>
+</tr>
+</tbody></table>
+<div class="box box-note"><div class="box-title">📘 历史意义</div><div class="box-body"><p>Kaplan 的结论是「固定算力下，<strong>模型优先</strong>放大」——这让 GPT-3（175B/300B 数据）成为当时的「最优解」。但两年后 Chinchilla 用更严谨的实验推翻了这个配比。</p>
+</div></div>
+<h2>14.5 Chinchilla：compute-optimal 配比</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>2022 年 DeepMind 的 Chinchilla 重新做了大规模对照实验，发现：<strong>当时的模型都「参数太大、数据太少」</strong>。给定算力预算，模型大小和训练 token 数应该<strong>等比例</strong>增长——每 1 个参数配约 20 个 token。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msup><mi>N</mi><mo>∗</mo></msup><mo>∝</mo><msup><mi>C</mi><mn>0.5</mn></msup><mo separator="true">,</mo><mspace width="2em"/><msup><mi>D</mi><mo>∗</mo></msup><mo>∝</mo><msup><mi>C</mi><mn>0.5</mn></msup><mo separator="true">,</mo><mspace width="2em"/><mfrac><msup><mi>D</mi><mo>∗</mo></msup><msup><mi>N</mi><mo>∗</mo></msup></mfrac><mo>≈</mo><mn>20</mn></mrow><annotation encoding="application/x-tex">N^* \propto C^{0.5}, \qquad D^* \propto C^{0.5}, \qquad \frac{D^*}{N^*} \approx 20</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7387em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7387em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0585em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">0.5</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7387em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0517em;vertical-align:-0.686em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">0.5</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3657em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6147em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6887em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">20</span></span></span></span></span></div>
+<p>参数化损失函数（Chinchilla 论文拟合）：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>L</mi><mo stretchy="false">(</mo><mi>N</mi><mo separator="true">,</mo><mi>D</mi><mo stretchy="false">)</mo><mo>=</mo><mi>E</mi><mo>+</mo><mfrac><mi>A</mi><msup><mi>N</mi><mi>α</mi></msup></mfrac><mo>+</mo><mfrac><mi>B</mi><msup><mi>D</mi><mi>β</mi></msup></mfrac><mo separator="true">,</mo><mspace width="2em"/><mi>E</mi><mo>=</mo><mn>1.69</mn><mo separator="true">,</mo><mtext> </mtext><mi>A</mi><mo>=</mo><mn>406.4</mn><mo separator="true">,</mo><mtext> </mtext><mi>B</mi><mo>=</mo><mn>410.7</mn><mo separator="true">,</mo><mtext> </mtext><mi>α</mi><mo>=</mo><mn>0.34</mn><mo separator="true">,</mo><mtext> </mtext><mi>β</mi><mo>=</mo><mn>0.28</mn></mrow><annotation encoding="application/x-tex">L(N, D) = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}}, \qquad E = 1.69,\ A = 406.4,\ B = 410.7,\ \alpha = 0.34,\ \beta = 0.28</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">L</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">E</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.5904em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0037em;">α</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">A</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7751em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05278em;">β</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05017em;">B</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">E</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord">1.69</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord">406.4</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">410.7</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord">0.34</span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.05278em;">β</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.28</span></span></span></span></span></div>
+<h3>数值算例：Chinchilla 70B vs GPT-3 175B</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>GPT-3</th>
+<th>Chinchilla</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>参数量</td>
+<td>175B</td>
+<td>70B</td>
+</tr>
+<tr>
+<td>训练 token</td>
+<td>300B</td>
+<td>1.4T</td>
+</tr>
+<tr>
+<td>训练 FLOPs</td>
+<td>3.15e23</td>
+<td>5.9e23</td>
+</tr>
+<tr>
+<td>关键对比</td>
+<td>算力更小</td>
+<td><strong>训练成本更低，效果全面更好</strong></td>
+</tr>
+</tbody></table>
+<p><strong>结论</strong>：GPT-3 的 175B 参数只喂了 300B token（D/N ≈ 1.7），远低于最优；Chinchilla 用 70B 参数喂 1.4T token（D/N = 20），在更小算力下全面超越。</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：isoFLOP 曲线与最优配比<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动算力预算滑块，观察曲线的凹陷点（最优点）如何移动：算力越大，最优模型越大、数据越多，且 D*/N* 始终约 20。</p>
+<p><a class="static-link" href="../index.html#/scaling-laws">在交互版中打开这个演示 →</a></p></div></div>
+<h2>14.6 isoFLOP 曲线：为什么不是越大越好</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>固定算力预算 C，模型开大 → 数据就少（D = C/6N）；模型开小 → 数据可以多。损失随模型大小先降后升（呈 U 形）——中间那个谷底就是最优配置。</p>
+</div></details>
+<pre><code class="lang-">Loss
+  │ ╲                       ╱   ← 数据太少（大模型侧）
+  │  ╲___              ___╱
+  │      ╲___      ___╱        ← 谷底 = 最优 N*（D* = C/6N*）
+  │          ╲____╱
+  │  ↑ 参数量不足（小模型侧）
+  └──────────────────────────→ 模型参数量 N（log）</code></pre>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>现象</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>谷底左侧</td>
+<td>模型太小</td>
+<td>容量不足，损失降不下去</td>
+</tr>
+<tr>
+<td>谷底右侧</td>
+<td>模型太大</td>
+<td>数据被摊薄（D = C/6N 太小），欠训练</td>
+</tr>
+<tr>
+<td>谷底</td>
+<td>最优配比</td>
+<td>参数与数据的边际收益相等</td>
+</tr>
+</tbody></table>
+<h2>14.7 GPU hours 与 MFU</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>FLOPs 是「活的总量」，GPU 是「干活的工人」。**MFU（Model FLOPs Utilization）**衡量实际算力利用率——它是大模型训练最重要的工程指标之一，通常只有 30%~50%。</p>
+</div></details>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>MFU</mtext><mo>=</mo><mfrac><mrow><mtext>实际有效 FLOPs/秒</mtext><mo>×</mo><mn>6</mn><mi>N</mi><mi>D</mi></mrow><mtext>峰值算力</mtext></mfrac><mspace width="1em"/><mo>⇒</mo><mspace width="1em"/><mi>T</mi><mo>=</mo><mfrac><mrow><mn>6</mn><mi>N</mi><mi>D</mi></mrow><mrow><msub><mi>N</mi><mrow><mi>g</mi><mi>p</mi><mi>u</mi></mrow></msub><mo>⋅</mo><mtext>峰值</mtext><mo>⋅</mo><mtext>MFU</mtext></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{MFU} = \frac{\text{实际有效 FLOPs/秒} \times 6ND}{\text{峰值算力}} \quad \Rightarrow \quad T = \frac{6ND}{N_{gpu} \cdot \text{峰值} \cdot \text{MFU}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">MFU</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.113em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord cjk_fallback">峰值算力</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord cjk_fallback">实际有效</span><span class="mord"> FLOPs/</span><span class="mord cjk_fallback">秒</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">6</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">⇒</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">T</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.3324em;vertical-align:-0.9721em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">u</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord cjk_fallback">峰值</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">MFU</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">6</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>含义</th>
+<th>典型值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>峰值算力</td>
+<td>硬件理论最大（A100 BF16：312 TFLOPS）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>MFU</td>
+<td>模型 FLOPs 有效利用率</td>
+<td>30%~50%（Llama 3 约 38%）</td>
+</tr>
+<tr>
+<td>HFU</td>
+<td>含重算的硬件利用率（activation checkpointing 时 &gt; MFU）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GPU hours</td>
+<td>训练总成本单位（云上约 <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mtext> </mtext></mrow><annotation encoding="application/x-tex">1~</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace nobreak"> </span></span></span></span></span>3/卡时）</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：训练成本计算器<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>调整参数量、token 数、GPU 数量、MFU，实时看到 FLOPs / GPU hours / 墙钟时间，并自动对比 Chinchilla 配比。</p>
+<p><a class="static-link" href="../index.html#/scaling-laws">在交互版中打开这个演示 →</a></p></div></div>
+<details class="fold"><summary>工程里怎么用（估算训练预算的三行代码）</summary><div class="fold-body"><pre><code class="lang-python">N = 7e9            # 参数量
+D = 2e12           # token 数
+C = 6 * N * D      # FLOPs
+gpu_hours = C / (312e12 * 0.35) / 3600
+print(f&quot;{C:.2e} FLOPs, {gpu_hours:,.0f} GPU hours, 1000卡约 {gpu_hours/1000/24:.1f} 天&quot;)
+# → 8.40e+22 FLOPs, 213,675 GPU hours, 1000卡约 8.9 天</code></pre>
+</div></details>
+<h2>14.8 现代实践：Chinchilla 之后</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>Chinchilla 是「训练算力最优」，但<strong>推理成本</strong>也是钱。现代模型故意「过度训练」：用小模型喂远超 20 倍的数据，训练多花一点，换来推理时永久更便宜。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>参数量</th>
+<th>训练 token</th>
+<th>D/N</th>
+<th>策略</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GPT-3（2020）</td>
+<td>175B</td>
+<td>300B</td>
+<td>1.7</td>
+<td>参数优先（Kaplan 时代）</td>
+</tr>
+<tr>
+<td>Chinchilla（2022）</td>
+<td>70B</td>
+<td>1.4T</td>
+<td>20</td>
+<td>训练算力最优</td>
+</tr>
+<tr>
+<td>LLaMA-2（2023）</td>
+<td>7B</td>
+<td>2T</td>
+<td><strong>286</strong></td>
+<td>过度训练</td>
+</tr>
+<tr>
+<td>LLaMA-3（2024）</td>
+<td>8B</td>
+<td>15T</td>
+<td><strong>1875</strong></td>
+<td>极致过度训练</td>
+</tr>
+<tr>
+<td>Qwen2.5（2024）</td>
+<td>7B</td>
+<td>18T</td>
+<td>≈2570</td>
+<td>同上</td>
+</tr>
+</tbody></table>
+<p><strong>为什么？</strong> 训练是一次性成本，推理是持续成本。一个 8B 模型服务 1 年，推理算力远超训练。所以现代共识：</p>
+<blockquote>
+<p><strong>用小模型 + 海量数据</strong>，把训练算力「过度投入」，换取部署时的低成本。</p>
+</blockquote>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>公式/结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>参数量</td>
+<td>≈ 12Ld² + Vd（SwiGLU/ReLU 同价）</td>
+</tr>
+<tr>
+<td>训练算力</td>
+<td>C ≈ 6ND</td>
+</tr>
+<tr>
+<td>Kaplan</td>
+<td>幂律 L ∝ C^-0.05，参数优先</td>
+</tr>
+<tr>
+<td>Chinchilla</td>
+<td>N* ∝ D* ∝ C^0.5，D/N ≈ 20，算力最优</td>
+</tr>
+<tr>
+<td>isoFLOP</td>
+<td>固定算力下损失对 N 呈 U 形，谷底即最优</td>
+</tr>
+<tr>
+<td>时间</td>
+<td>T = 6ND / (GPU数 × 峰值 × MFU)</td>
+</tr>
+<tr>
+<td>MFU</td>
+<td>有效利用率，大训练 30%~50%</td>
+</tr>
+<tr>
+<td>现代实践</td>
+<td>过度训练（D/N ≫ 20）换推理成本</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">估算训练算力的经典公式 C ≈ 6ND 中，系数 6 的来源是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>模型有 6 层</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>前向 2ND + 反向对输入 2ND + 反向对权重 2ND</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>6 种矩阵乘法</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>经验值，没有解释</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>每个参数对每个 token 在前向是 1 次乘加（2 FLOPs），反向要分别对输入和权重求导，各再 2ND。合计 6ND。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">一个 7B 模型训练 2T token，FLOPs 大约是多少？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>8.4e19</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>8.4e22</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>8.4e25</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>8.4e18</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>6 × 7e9 × 2e12 = 8.4e22 FLOPs。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">Chinchilla 的核心结论是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>模型越大越好</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>固定算力下，模型大小与训练数据应等比例放大，D/N ≈ 20</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>数据越多越好</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>学习率决定一切</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>Chinchilla 发现 N* ∝ D* ∝ C^0.5，最优配比约 20 token/参数。GPT-3 时代参数过大、数据不足。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么 LLaMA-3-8B 要用 15T token 训练（D/N ≈ 1875，远超 Chinchilla 最优）？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>团队算错了</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>过度训练：训练成本是一次性的，小模型推理成本低，长期部署更省钱</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>数据不要钱</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>为了刷榜</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>Chinchilla 只优化训练算力。实际部署中推理是持续成本，用小模型过度训练换取推理效率是行业共识。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 9 章 GPT</span><span class="tag">第 12 章 参数量核算</span><span class="tag">第 17 章 显存</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 15 章 GPU 基础（MFU 从哪来）</span><span class="tag">第 16 章 分布式</span><span class="tag">训练配置决策</span></div></div>
+</div>
+<div class="static-nav"><a href="build-llm-2.html">← Build Your Own Small LLM（下）：训练篇</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="gpu.html">GPU Fundamentals：从 SM 到 Roofline →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/14-scaling-laws.md">content/14-scaling-laws.md</a></div>
+</main>
+</body>
+</html>

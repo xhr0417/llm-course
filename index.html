@@ -46,25 +46,31 @@
       <!-- STATIC-INDEX-START -->
       <div class="chapter-head">
         <h1 class="chapter-title">大模型知识体系 · 静态目录</h1>
-        <p class="chapter-desc">从 深度学习基础 一路走到 GRPO / LoRA / 混合精度，共 14 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>
+        <p class="chapter-desc">从 深度学习基础 一路走到 GRPO / LoRA / 混合精度，共 20 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>
       </div>
       <div class="md">
         <h2>章节目录</h2>
         <ol>
-          <li><a href="chapters/map.html">知识地图与学习主线</a> — 全局脑图、6 层逻辑、优先级清单与学习方法。先读这一章。</li>
+          <li><a href="chapters/map.html">知识地图与学习主线</a> — 五段式学习路线（理解 → 构建 → 扩展 → 服务 → 对齐）、CS336 前置清单与全站导航。</li>
           <li><a href="chapters/basics.html">深度学习基础：回归、Loss、梯度与 Softmax</a> — 线性模型、MSE、梯度下降、反向传播、Softmax、交叉熵、MLP、激活函数——全套地基。</li>
           <li><a href="chapters/optimizers.html">优化器：SGD → Momentum → Adam</a> — SGD、Momentum、Adam 完整推导与算例，AdamW 解耦正则，优化器竞赛演示。</li>
           <li><a href="chapters/evaluation.html">模型评估与泛化：指标、过拟合与正则化</a> — 混淆矩阵计算器、四大指标、不平衡数据陷阱、L2、Dropout。</li>
           <li><a href="chapters/stability.html">数值稳定：梯度爆炸/消失、初始化、BN 与残差</a> — 连乘的威力、Sigmoid 饱和、Kaiming 初始化、BatchNorm 算例、ResNet 残差。</li>
-          <li><a href="chapters/rnn.html">循环神经网络：RNN → LSTM → GRU</a> — 参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN。三个交互演示。</li>
+          <li><a href="chapters/rnn.html">循环神经网络：RNN → LSTM → GRU</a> — 参数共享、BPTT 长程依赖、LSTM 三门一状态、GRU、Deep RNN（历史演化，保持冻结）。</li>
           <li><a href="chapters/nlp.html">NLP 基础：Tokenizer、BPE 与 Embedding</a> — BPE 真实训练器、训练与编码的区别、BBPE、Tokenizer 评估、Embedding 查表。</li>
-          <li><a href="chapters/transformer.html">Transformer：Attention 是全部的核心</a> — Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——6 个交互演示逐层拆解。</li>
+          <li><a href="chapters/transformer.html">Transformer：Attention 是全部的核心</a> — Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——25 小节 + 15 个交互演示 + 39 题面试库。</li>
           <li><a href="chapters/bert.html">BERT：Encoder-only 与双向理解</a> — 三种 Embedding、[CLS]/[SEP]、Attention Mask、MLM、80/10/10、NSP。</li>
           <li><a href="chapters/gpt.html">GPT：Decoder-only 与文本生成</a> — Next Token Prediction、训练并行、推理循环、Temperature、Top-K/Top-P。</li>
-          <li><a href="chapters/modern-llm.html">现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU</a> — LLaMA/Qwen 骨架说明书，6 个交互演示 + 显存估算器。</li>
-          <li><a href="chapters/pretrain-sft.html">大模型工程：Pretrain 与 SFT</a> — 数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。</li>
-          <li><a href="chapters/rl-grpo.html">强化学习：PPO 与 GRPO</a> — Group Relative Advantage、Policy Ratio、Clip、KL 惩罚——交互演示逐项拆解。</li>
-          <li><a href="chapters/efficient.html">高效训练：混合精度与 LoRA</a> — 位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。</li>
+          <li><a href="chapters/modern-llm.html">现代 LLM 架构：技术演化视角</a> — LayerNorm→RMSNorm、绝对位置→RoPE、ReLU→SwiGLU、MHA→GQA、KV Cache——按技术演化组织。</li>
+          <li><a href="chapters/pytorch.html">PyTorch for LLM：动手之前的必备工具箱</a> — shape 操作、广播、matmul/einsum、nn.Module、autograd、DataLoader、训练循环、checkpoint——能读懂并写出 small LLM 代码。</li>
+          <li><a href="chapters/build-llm-1.html">Build Your Own Small LLM（上）：组件篇</a> — Lab 1-7：BPE Tokenizer → RMSNorm → RoPE → Attention → SwiGLU → Transformer Block → Decoder-only LM，每步可运行可验证。</li>
+          <li><a href="chapters/build-llm-2.html">Build Your Own Small LLM（下）：训练篇</a> — Lab 8-14：数据准备 → 预训练 → 评估 → 生成推理 → KV Cache → SFT → DPO/GRPO 小实验。</li>
+          <li><a href="chapters/scaling-laws.html">Scaling Laws 与算力：为什么这样配置训练</a> — 参数量数法、6ND 估算、Kaplan/Chinchilla、isoFLOP 曲线、GPU hours 与 MFU——配训练的计算器与曲线。</li>
+          <li><a href="chapters/gpu.html">GPU Fundamentals：从 SM 到 Roofline</a> — SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。</li>
+          <li><a href="chapters/distributed.html">Distributed Training：从 DDP 到 3D 并行</a> — AllReduce/Ring、ZeRO 三阶段、FSDP、张量并行、流水线并行、通信计算重叠与选型指南。</li>
+          <li><a href="chapters/efficient.html">训练显存、混合精度与 LoRA</a> — 显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/FP8、混合精度与 loss scaling、梯度累积、checkpointing、LoRA。</li>
+          <li><a href="chapters/pretrain-sft.html">训练生命周期：Pretrain 与 SFT</a> — 数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。</li>
+          <li><a href="chapters/rl-grpo.html">Post-training 与 GRPO：偏好优化全景</a> — preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。</li>
         </ol>
       </div>
       <!-- STATIC-INDEX-END -->
@@ -102,6 +108,7 @@
   <script src="js/demos-transformer.js"></script>
   <script src="js/demos-llm.js"></script>
   <script src="js/demos-training.js"></script>
+  <script src="js/demos-systems.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

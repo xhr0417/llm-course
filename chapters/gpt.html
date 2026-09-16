@@ -31,8 +31,8 @@
   <a href="../index.html#/gpt">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="bert.html">← BERT：Encoder-only 与双向理解</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="modern-llm.html">现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/gpt">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 9 章 · Transformer 与大模型架构</div><h1 class="chapter-title">GPT：Decoder-only 与文本生成</h1><p class="chapter-desc">Next Token Prediction、训练并行、推理循环、Temperature、Top-K/Top-P。</p><p class="chapter-source">对应课件：2-4 BERT&amp;GPT&amp;前沿大语言模型</p></div>
+<div class="static-nav"><a href="bert.html">← BERT：Encoder-only 与双向理解</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="modern-llm.html">现代 LLM 架构：技术演化视角 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/gpt">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 9 章 · 第一部分 · 理解 (Understand)</div><h1 class="chapter-title">GPT：Decoder-only 与文本生成</h1><p class="chapter-desc">Next Token Prediction、训练并行、推理循环、Temperature、Top-K/Top-P。</p><p class="chapter-source">对应课件：2-4 BERT&amp;GPT&amp;前沿大语言模型</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《2-4 BERT&amp;GPT&amp;前沿大语言模型》。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
@@ -493,7 +493,7 @@ def generate(model, idx, max_new_tokens, temperature=1.0):
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 LM Head 与 Embedding 权重共享（weight tying），说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>会显著增加参数量</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>省一份参数量并常带来更好的效果</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只能用于 BERT</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>会破坏模型训练</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>输入 embedding [V,d] 与 LM Head [d,V] 形状互为转置，共享能省一份参数量（大词表时可达上亿），且让输入/输出词向量空间对齐，常带来更好效果。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">Transformer Decoder</span><a class="tag" href="transformer.html">Causal Mask</a><a class="tag" href="basics.html">Softmax</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">大语言模型</span><span class="tag">Chat 模型</span><a class="tag" href="modern-llm.html">KV Cache</a><a class="tag" href="gpt.html">采样策略</a></div></div>
 </div>
-<div class="static-nav"><a href="bert.html">← BERT：Encoder-only 与双向理解</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="modern-llm.html">现代 LLM 架构：KV Cache、GQA、RoPE、RMSNorm、SwiGLU →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/09-gpt.md">content/09-gpt.md</a></div>
+<div class="static-nav"><a href="bert.html">← BERT：Encoder-only 与双向理解</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="modern-llm.html">现代 LLM 架构：技术演化视角 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/09-gpt.md">content/09-gpt.md</a></div>
 </main>
 </body>
 </html>

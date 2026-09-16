@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>高效训练：混合精度与 LoRA · 大模型知识体系</title>
-<meta name="description" content="位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。">
+<title>训练显存、混合精度与 LoRA · 大模型知识体系</title>
+<meta name="description" content="显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/FP8、混合精度与 loss scaling、梯度累积、checkpointing、LoRA。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/efficient.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -26,13 +26,13 @@
 <body>
 <header class="static-top">
   <span class="crumb">大模型知识体系</span>
-  <span style="color:var(--text-faint);font-size:13px">第 13 章</span>
+  <span style="color:var(--text-faint);font-size:13px">第 17 章</span>
   <span class="spacer"></span>
   <a href="../index.html#/efficient">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="rl-grpo.html">← 强化学习：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/efficient">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 13 章 · 大模型训练工程</div><h1 class="chapter-title">高效训练：混合精度与 LoRA</h1><p class="chapter-desc">位分布与显存计算器、混合精度、训练显存估算、LoRA 低秩微调。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
+<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/efficient">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 17 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">训练显存、混合精度与 LoRA</h1><p class="chapter-desc">显存构成（参数/梯度/优化器/激活）、FP32/FP16/BF16/FP8、混合精度与 loss scaling、梯度累积、checkpointing、LoRA。</p><p class="chapter-source">对应课件：3.1 大模型工程专题</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《3.1 大模型工程专题》后半部分。核心知识点全部按统一模板展开：直觉、公式、逐项拆解、shape、数字算例、交互演示、代码、误区、面试问题。</p>
@@ -582,7 +582,7 @@ model.print_trainable_parameters()
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">LoRA 中 B 矩阵初始化为 0 的目的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>加速训练</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>保证训练开始时 ΔW = 0，不破坏预训练模型</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>减少参数量</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>防止过拟合</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>ΔW = BA，若 B 初始为 0 则初始更新为 0，模型从原始行为开始平稳训练。A 通常用高斯随机初始化。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="basics.html">梯度下降</a><span class="tag">优化器状态</span><a class="tag" href="efficient.html">显存估算</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">指令微调</span><span class="tag">QLoRA</span><span class="tag">多适配器部署</span><span class="tag">分布式训练</span></div></div>
 </div>
-<div class="static-nav"><a href="rl-grpo.html">← 强化学习：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-efficient.md">content/13-efficient.md</a></div>
+<div class="static-nav"><a href="distributed.html">← Distributed Training：从 DDP 到 3D 并行</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="pretrain-sft.html">训练生命周期：Pretrain 与 SFT →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/13-efficient.md">content/13-efficient.md</a></div>
 </main>
 </body>
 </html>

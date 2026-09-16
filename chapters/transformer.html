@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Transformer：Attention 是全部的核心 · 大模型知识体系</title>
-<meta name="description" content="Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——6 个交互演示逐层拆解。">
+<meta name="description" content="Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——25 小节 + 15 个交互演示 + 39 题面试库。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/transformer.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,7 +32,7 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><a href="nlp.html">← NLP 基础：Tokenizer、BPE 与 Embedding</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="bert.html">BERT：Encoder-only 与双向理解 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/transformer">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 7 章 · Transformer 与大模型架构</div><h1 class="chapter-title">Transformer：Attention 是全部的核心</h1><p class="chapter-desc">Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——6 个交互演示逐层拆解。</p><p class="chapter-source">对应课件：3.2 Transformer</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 7 章 · 第一部分 · 理解 (Understand)</div><h1 class="chapter-title">Transformer：Attention 是全部的核心</h1><p class="chapter-desc">Q/K/V、缩放原理、Multi-Head、LayerNorm、Causal Mask——25 小节 + 15 个交互演示 + 39 题面试库。</p><p class="chapter-source">对应课件：3.2 Transformer</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《3.2 Transformer》。这是全课程最重要的章节，也是面试八股最密集的一章。下面的知识点全部<strong>独立展开</strong>，每个都包含：直觉、公式、逐项拆解、矩阵 shape、最小数字例子、交互演示、代码、常见误区、面试问题。</p>

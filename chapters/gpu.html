@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Fundamentals：从 SM 到 Roofline · 大模型知识体系</title>
+<meta name="description" content="SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/gpu.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 15 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/gpu">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="scaling-laws.html">← Scaling Laws 与算力：为什么这样配置训练</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="distributed.html">Distributed Training：从 DDP 到 3D 并行 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/gpu">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 15 章 · 第三部分 · 扩展 (Scale)</div><h1 class="chapter-title">GPU Fundamentals：从 SM 到 Roofline</h1><p class="chapter-desc">SM/Tensor Core/warp、存储层次、算术强度、Roofline、GEMM 与 kernel fusion、Profiling 入门——理解算力与带宽瓶颈。</p><p class="chapter-source">对应课件：LLM Systems（新增）</p></div>
+<div class="md">
+<blockquote>
+<p><strong>本章定位</strong>：Scale 主线的地基。不理解 GPU 的算力与带宽模型，后面 FlashAttention、分布式训练、推理优化都只能「背结论」。本章目标：让你看到任何算子都能问出「它是 compute-bound 还是 memory-bound」。</p>
+</blockquote>
+<h2>15.1 为什么必须懂 GPU</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>训练 LLaMA-2-7B 要 8.4e22 FLOPs。如果按 CPU 的算力（约 1 TFLOPS），需要 260 万年；用 1000 张 A100 只要 9 天。<strong>GPU 不是「更快的 CPU」，而是完全不同的计算哲学</strong>——理解它的强项和瓶颈，才能理解后面所有的系统优化。</p>
+</div></details>
+<p>本章回答四个问题：</p>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>答案在哪</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GPU 为什么快？</td>
+<td>15.2~15.3：吞吐优先的架构</td>
+</tr>
+<tr>
+<td>什么限制了它？</td>
+<td>15.4~15.5：带宽与 Roofline</td>
+</tr>
+<tr>
+<td>为什么矩阵乘是核心？</td>
+<td>15.6：GEMM 与 Tensor Core</td>
+</tr>
+<tr>
+<td>怎么知道瓶颈在哪？</td>
+<td>15.7~15.8：Kernel 融合与 Profiling</td>
+</tr>
+</tbody></table>
+<h2>15.2 CPU vs GPU：延迟 vs 吞吐</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>CPU 是「几个博士生」——聪明的核心，擅长复杂的串行逻辑；GPU 是「几千个小学生」——单个很笨，但几千人同时搬砖的吞吐量惊人。LLM 的计算恰好是「大量简单重复的乘加」，完美匹配 GPU。</p>
+</div></details>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>CPU</th>
+<th>GPU（A100）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>核心数</td>
+<td>8~64 个复杂核心</td>
+<td>108 个 SM / 6912 个 CUDA Core</td>
+</tr>
+<tr>
+<td>单核能力</td>
+<td>强（分支预测、乱序执行、大缓存）</td>
+<td>弱（简单流水线）</td>
+</tr>
+<tr>
+<td>设计目标</td>
+<td>低延迟（一件事尽快做完）</td>
+<td>高吞吐（单位时间做最多事）</td>
+</tr>
+<tr>
+<td>内存带宽</td>
+<td>~100 GB/s</td>
+<td><strong>2039 GB/s</strong>（HBM2e）</td>
+</tr>
+<tr>
+<td>BF16 算力</td>
+<td>~1 TFLOPS</td>
+<td><strong>312 TFLOPS</strong>（Tensor Core）</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>操作系统、分支复杂逻辑</td>
+<td>矩阵乘、逐元素运算</td>
+</tr>
+</tbody></table>
+<h2>15.3 GPU 硬件结构：从 SM 到 warp</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>GPU 的层级组织像「公司 → 部门 → 小组 → 员工」：一个 GPU 有多个 SM（部门），每个 SM 有一批 CUDA Core / Tensor Core（员工），线程按 32 个一组（warp，小组）统一行动。</p>
+</div></details>
+<pre><code class="lang-">GPU
+├── SM 0（流多处理器）
+│   ├── 128 × CUDA Core（通用浮点/整数计算）
+│   ├── 4 × Tensor Core（矩阵乘专用，算力是 CUDA Core 的 8~16 倍）
+│   ├── Shared Memory / L1（~192 KB，片上）
+│   └── Register File（256 KB）
+├── SM 1 ... SM 107
+└── L2 Cache（40 MB，片内共享）
+    └── HBM 显存（40~80 GB，片外）</code></pre>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>含义</th>
+<th>一句话记忆</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SM</td>
+<td>流多处理器，GPU 的「部门」</td>
+<td>A100 有 108 个</td>
+</tr>
+<tr>
+<td>CUDA Core</td>
+<td>通用计算单元</td>
+<td>一个周期一次 FMA</td>
+</tr>
+<tr>
+<td>Tensor Core</td>
+<td>矩阵乘单元（4×4 / 16×16 块乘加）</td>
+<td>同样的周期算多得多</td>
+</tr>
+<tr>
+<td>thread / block / grid</td>
+<td>线程 / 线程块 / 网格</td>
+<td>软件层的组织方式</td>
+</tr>
+<tr>
+<td>warp</td>
+<td><strong>32 个线程一组</strong>，统一调度</td>
+<td>最小执行单位</td>
+</tr>
+<tr>
+<td>SIMT</td>
+<td>Single Instruction, Multiple Threads</td>
+<td>一条指令 32 个线程同时执行</td>
+</tr>
+</tbody></table>
+<div class="box box-math"><div class="box-title">🧮 用数字感受 Tensor Core 的威力</div><div class="box-body"><p>A100 单个 SM 的 BF16 算力：4 个 Tensor Core 每秒约 2.9 TFLOPS → 108 个 SM ≈ 312 TFLOPS。
+如果用 CUDA Core 做同样的矩阵乘：只有约 19.5 TFLOPS（FP32）。
+<strong>16 倍差距</strong>——这就是「大模型必须用 Tensor Core」的原因，也是低精度（bf16）训练流行的原因。</p>
+</div></div>
+<div class="box box-note"><div class="box-title">📘 SIMT 与分支</div><div class="box-body"><p>warp 里的 32 个线程执行同一条指令。如果代码有 <code>if</code> 分支导致线程走不同路径，warp 会<strong>串行执行两个分支</strong>（利用率减半）——所以 GPU 讨厌复杂控制流，喜欢整齐的向量/矩阵运算。</p>
+</div></div>
+<h2>15.4 存储层次：GPU 世界的「内存墙」</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>GPU 算得极快，但数据住在离计算单元很远的 HBM 里。计算单元等数据的时间可能比算的时间还长——这就是「内存墙」。所有高性能 kernel（FlashAttention 等）本质上都在做同一件事：<strong>让数据尽量待在离计算近的地方</strong>。</p>
+</div></details>
+<pre><code class="lang-">                容量        带宽         延迟
+Register      256 KB/SM   ~20 TB/s     1 cycle        ← 最快，线程私有
+Shared/L1     192 KB/SM   ~19 TB/s     ~30 cycles     ← 片上共享
+L2 Cache      40 MB        ~7 TB/s     ~200 cycles    ← 片内全局
+HBM 显存      40~80 GB    2 TB/s       ~400 cycles    ← 最慢，但最大</code></pre>
+<h3>把「1 次 HBM 访问」当作单位时间</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>相对耗时</th>
+<th>类比（若 HBM = 1 秒）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>寄存器访问</td>
+<td>0.0025</td>
+<td>瞬间</td>
+</tr>
+<tr>
+<td>Shared memory</td>
+<td>0.075</td>
+<td>眨眼</td>
+</tr>
+<tr>
+<td>L2</td>
+<td>0.5</td>
+<td>半秒</td>
+</tr>
+<tr>
+<td>HBM</td>
+<td><strong>1</strong></td>
+<td>1 秒</td>
+</tr>
+<tr>
+<td>一次矩阵乘（算 100 次）</td>
+<td>—</td>
+<td>干活的时间</td>
+</tr>
+</tbody></table>
+<p><strong>关键洞察</strong>：从 HBM 读一个数的时间，够计算单元算几十次。所以优化方向往往是「<strong>减少 HBM 读写</strong>」而不是「减少计算量」。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 常见误判</div><div class="box-body"><p>「卡是因为 GPU 算不过来」——多数时候是错的。绝大多数 LLM 算子（softmax、LayerNorm、激活、逐元素加法、朴素 attention）都是<strong>带宽瓶颈</strong>，算力在闲置。判断方法就是下一节的 Roofline。</p>
+</div></div>
+<h2>15.5 算术强度与 Roofline 模型</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>一个算子到底受限于带宽还是算力？答案取决于它的「算术强度」：每搬运 1 字节数据，能做多少次浮点运算。算术强度低 → 等数据（memory-bound）；高 → 等计算（compute-bound）。</p>
+</div></details>
+<h3>公式</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>算术强度 </mtext><mi>A</mi><mi>I</mi><mo>=</mo><mfrac><mtext>FLOPs</mtext><mtext>Bytes moved</mtext></mfrac><mo separator="true">,</mo><mspace width="2em"/><mtext>性能上限</mtext><mo>=</mo><mi>min</mi><mo>⁡</mo><mrow><mo fence="true">(</mo><msub><mi>P</mi><mrow><mi>p</mi><mi>e</mi><mi>a</mi><mi>k</mi></mrow></msub><mo separator="true">,</mo><mtext> </mtext><mi>B</mi><mi>W</mi><mo>×</mo><mi>A</mi><mi>I</mi><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{算术强度 } AI = \frac{\text{FLOPs}}{\text{Bytes moved}}, \qquad
+\text{性能上限} = \min\left(P_{peak},\ BW \times AI\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">算术强度</span><span class="mord"> </span></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.2408em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">Bytes moved</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">FLOPs</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord cjk_fallback">性能上限</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mop">min</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">ak</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace"> </span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mclose delimcenter" style="top:0em;">)</span></span></span></span></span></span></div>
+<h3>关键概念：拐点（ridge point）</h3>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>A</mi><msup><mi>I</mi><mo>∗</mo></msup><mo>=</mo><mfrac><msub><mi>P</mi><mrow><mi>p</mi><mi>e</mi><mi>a</mi><mi>k</mi></mrow></msub><mrow><mi>B</mi><mi>W</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mn>312</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mn>12</mn></msup></mrow><mrow><mn>2039</mn><mo>×</mo><mn>1</mn><msup><mn>0</mn><mn>9</mn></msup></mrow></mfrac><mo>≈</mo><mn>153</mn><mtext> FLOPs/Byte</mtext></mrow><annotation encoding="application/x-tex">AI^* = \frac{P_{peak}}{BW} = \frac{312 \times 10^{12}}{2039 \times 10^9} \approx 153\ \text{FLOPs/Byte}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7387em;"></span><span class="mord mathnormal">A</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7387em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05017em;">B</span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">ak</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.2604em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4911em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2039</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">312</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">12</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">153</span><span class="mspace"> </span><span class="mord text"><span class="mord">FLOPs/Byte</span></span></span></span></span></span></div>
+<ul>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mi>I</mi><mo>&lt;</mo><mi>A</mi><msup><mi>I</mi><mo>∗</mo></msup></mrow><annotation encoding="application/x-tex">AI &lt; AI^*</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&lt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6887em;"></span><span class="mord mathnormal">A</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6887em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span></span></span></span></span>：<strong>memory-bound</strong>（带宽墙）</li>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mi>I</mi><mo>&gt;</mo><mi>A</mi><msup><mi>I</mi><mo>∗</mo></msup></mrow><annotation encoding="application/x-tex">AI &gt; AI^*</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7224em;vertical-align:-0.0391em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6887em;"></span><span class="mord mathnormal">A</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6887em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">∗</span></span></span></span></span></span></span></span></span></span></span></span>：<strong>compute-bound</strong>（算力平台）</li>
+</ul>
+<h3>常见算子的算术强度</h3>
+<table>
+<thead>
+<tr>
+<th>算子</th>
+<th>AI（约）</th>
+<th>判定</th>
+<th>优化方向</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>向量加法</td>
+<td>0.08</td>
+<td>memory-bound</td>
+<td>融合、减少读写</td>
+</tr>
+<tr>
+<td>GELU / Dropout</td>
+<td>0.2</td>
+<td>memory-bound</td>
+<td>融合进邻近算子</td>
+</tr>
+<tr>
+<td>Softmax</td>
+<td>0.25</td>
+<td>memory-bound</td>
+<td>在线 softmax、融合</td>
+</tr>
+<tr>
+<td>LayerNorm</td>
+<td>0.5</td>
+<td>memory-bound</td>
+<td>融合</td>
+</tr>
+<tr>
+<td>朴素 Attention</td>
+<td>4</td>
+<td>memory-bound</td>
+<td>FlashAttention</td>
+</tr>
+<tr>
+<td>FlashAttention</td>
+<td>40+</td>
+<td>接近拐点</td>
+<td>—</td>
+</tr>
+<tr>
+<td>大 GEMM（M=N=K 大）</td>
+<td>200+</td>
+<td>compute-bound</td>
+<td>Tensor Core、低精度</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：算术强度与瓶颈判断<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动滑块改变算子算术强度，或直接点选常见算子，观察它在 Roofline 图上的位置：左侧「斜线墙」是带宽瓶颈，右侧「平顶」是算力瓶颈。</p>
+<p><a class="static-link" href="../index.html#/gpu">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-math"><div class="box-title">🧮 一个具体算例：为什么 LayerNorm 慢</div><div class="box-body"><p>LayerNorm 处理 <code>[B, S, d] = [8, 512, 4096]</code>：</p>
+<ul>
+<li>数据量 = 8×512×4096×2 bytes ≈ 33 MB（bf16）</li>
+<li>计算量 ≈ 8×512×4096×5 FLOPs ≈ 84 MFLOPs</li>
+<li><span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mi>I</mi><mo>=</mo><mn>84</mn><mi>e</mi><mn>6</mn><mi mathvariant="normal">/</mi><mn>33</mn><mi>e</mi><mn>6</mn><mo>≈</mo><mn>2.5</mn></mrow><annotation encoding="application/x-tex">AI = 84e6 / 33e6 \approx 2.5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">84</span><span class="mord mathnormal">e</span><span class="mord">6/33</span><span class="mord mathnormal">e</span><span class="mord">6</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">2.5</span></span></span></span></span> → 远低于拐点 153 → <strong>memory-bound</strong></li>
+<li>时间下限 = 33 MB ÷ 2039 GB/s ≈ <strong>16 微秒</strong>（计算本身只需 0.0003 微秒）</li>
+</ul>
+<p>结论：LayerNorm 再省计算也没用，唯一的优化是少读写。</p>
+</div></div>
+<h2>15.6 为什么 GEMM 快：分块与 Tensor Core</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>矩阵乘是大模型唯一的 compute-bound 主力。它快的秘诀是「分块（tiling）」：把大矩阵切成小块，反复复用搬到 shared memory / register 里的小块——同一份数据用很多次，掩盖了 HBM 的慢。</p>
+</div></details>
+<pre><code class="lang-">朴素做法：每算一个输出元素读 2K 个数 → AI 很低
+分块做法：把 M×K 和 K×N 切成 B×B 小块
+          每块加载一次到 shared memory，被复用 B×B 次
+          → AI ≈ B（块越大复用越多）</code></pre>
+<table>
+<thead>
+<tr>
+<th>技术</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>分块（tiling）</td>
+<td>数据复用，提高算术强度</td>
+</tr>
+<tr>
+<td>Tensor Core</td>
+<td>一次算 4×4 / 16×16 的乘加块</td>
+</tr>
+<tr>
+<td>双缓冲（double buffering）</td>
+<td>算当前块时预取下一块</td>
+</tr>
+<tr>
+<td>cuBLAS / CUTLASS</td>
+<td>官方高度优化实现（大模型都直接调用）</td>
+</tr>
+</tbody></table>
+<div class="box box-note"><div class="box-title">📘 大模型里的「GEMM 等级」</div><div class="box-body"><p>NVIDIA 给矩阵乘按精度分类（也是性能对比的行业术语）：</p>
+<ul>
+<li><strong>GEMM「9」</strong>：理论峰值 ~100%（极难达到）</li>
+<li>实际训练中 GEMM 时间占比：LLM 前向反向约 70%~90%</li>
+<li>所以 cuBLAS 的效率直接决定模型 FLOPS 利用率</li>
+</ul>
+</div></div>
+<h2>15.7 Kernel 与融合：省的是带宽</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>每次算子启动（kernel launch）都要把数据从 HBM 读进来、算完写回去。很多小算子叠在一起，数据被反复搬运。<strong>Kernel 融合</strong>把它们合成一个大 kernel，数据在片上就完成多步计算——省的全是带宽。</p>
+</div></details>
+<h3>例子：GELU + 残差加法的两种写法</h3>
+<pre><code class="lang-python"># ① 不融合：两次读 HBM、两次写 HBM
+h = gelu(x)          # 读 x(4MB) → 写 h(4MB)
+y = h + residual     # 读 h(4MB) + 读 residual(4MB) → 写 y(4MB)  = 共 16MB 流量
+
+# ② 融合：一次读、一次写
+y = gelu_and_add(x, residual)   # 读 8MB → 写 4MB = 12MB 流量（省 25%）</code></pre>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>torch.compile</code> 让模型变快</td>
+<td>自动做 kernel fusion</td>
+</tr>
+<tr>
+<td>FlashAttention 快</td>
+<td>把 QKᵀ、softmax、×V 融合为一个 kernel（见第 19 章）</td>
+</tr>
+<tr>
+<td>逐元素操作「太慢」</td>
+<td>每个算子各搬一次 HBM</td>
+</tr>
+</tbody></table>
+<h2>15.8 Profiling 入门：找到瓶颈</h2>
+<details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>不要猜性能。用工具看：<strong>时间花在哪个 kernel、它是带宽还是算力瓶颈</strong>。这是把「训练慢」变成「知道为什么慢」的唯一途径。</p>
+</div></details>
+<h3>两把常用工具</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>看什么</th>
+<th>用法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>torch.profiler</code></td>
+<td>每个算子的耗时占比、CUDA kernel 时间</td>
+<td><code>with torch.profiler.profile(...)</code></td>
+</tr>
+<tr>
+<td>Nsight Systems / Nsight Compute</td>
+<td>时间线、kernel 细节（利用率/带宽）</td>
+<td>命令行/图形界面</td>
+</tr>
+</tbody></table>
+<pre><code class="lang-python">import torch
+from torch.profiler import profile, ProfilerActivity
+
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+    for _ in range(10):
+        y = model(x)
+        y.sum().backward()
+
+print(prof.key_averages().table(sort_by=&quot;cuda_time_total&quot;, row_limit=15))</code></pre>
+<h3>判断清单（背下来）</h3>
+<table>
+<thead>
+<tr>
+<th>观察</th>
+<th>结论</th>
+<th>行动</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>大量小 kernel、时间分散</td>
+<td>启动开销/逐元素瓶颈</td>
+<td>融合（torch.compile）</td>
+</tr>
+<tr>
+<td>GPU 利用率低但显存带宽满</td>
+<td>memory-bound</td>
+<td>减少读写、提高复用</td>
+</tr>
+<tr>
+<td>Tensor Core 利用率低</td>
+<td>精度/形状问题</td>
+<td>检查 bf16、矩阵尺寸对齐（64 的倍数）</td>
+</tr>
+<tr>
+<td>等通信时间长</td>
+<td>分布式通信瓶颈</td>
+<td>见第 16 章（重叠、拓扑）</td>
+</tr>
+<tr>
+<td>batch 太小</td>
+<td>无法打满</td>
+<td>增大 batch / 梯度累积</td>
+</tr>
+</tbody></table>
+<h2>15.9 为什么 Transformer 特别适合 GPU</h2>
+<p><strong>适合的部分</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>结构</th>
+<th>为什么适合</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>QKV 投影、FFN、LM Head</td>
+<td>大 GEMM，compute-bound，Tensor Core 友好</td>
+</tr>
+<tr>
+<td>批量多头注意力</td>
+<td>形状整齐（[B,H,S,D]），极易并行</td>
+</tr>
+<tr>
+<td>序列内并行（训练）</td>
+<td>各位置独立，没有 RNN 的串行依赖</td>
+</tr>
+</tbody></table>
+<p><strong>不适合的部分（优化的重点）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>结构</th>
+<th>瓶颈</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Softmax / LayerNorm / Dropout</td>
+<td>memory-bound，AI ≈ 0.3~2</td>
+</tr>
+<tr>
+<td>朴素 Attention 的 S×S 矩阵</td>
+<td>显式物化 S² 张量：读写 O(S²)</td>
+</tr>
+<tr>
+<td>自回归生成</td>
+<td>每步计算量小、kernel 启动多、KV 读写量大</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>一句话总结本章</strong>：GPU 是「吞吐机器」，矩阵乘是它的主场；但 LLM 里大量算子输在内存带宽上。理解 <code>min(峰值, 带宽×AI)</code> 这一个公式，就理解了后面 FlashAttention、量化、融合、显存优化的全部动机。</p>
+</blockquote>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CPU vs GPU</td>
+<td>延迟优先 vs 吞吐优先</td>
+</tr>
+<tr>
+<td>SM / warp / Tensor Core</td>
+<td>部门 / 32 线程组 / 矩阵乘单元</td>
+</tr>
+<tr>
+<td>存储层次</td>
+<td>Register &gt; Shared &gt; L2 &gt; HBM（带宽差百倍）</td>
+</tr>
+<tr>
+<td>算术强度</td>
+<td>AI = FLOPs/Bytes</td>
+</tr>
+<tr>
+<td>Roofline</td>
+<td>性能 = min(峰值, 带宽×AI)，拐点 AI*≈153</td>
+</tr>
+<tr>
+<td>memory-bound</td>
+<td>AI 低 → 等数据（softmax/LayerNorm/朴素 attention）</td>
+</tr>
+<tr>
+<td>compute-bound</td>
+<td>AI 高 → 等计算（大 GEMM）</td>
+</tr>
+<tr>
+<td>Kernel 融合</td>
+<td>省 HBM 读写，torch.compile 的核心收益</td>
+</tr>
+<tr>
+<td>Profiling</td>
+<td>先看时间线再优化，不猜</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">A100 的 Roofline 拐点 AI* = 峰值 ÷ 带宽 ≈ 153 FLOPs/Byte。一个算子的算术强度是 2，它属于？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>compute-bound</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>memory-bound</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>两者都不是</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>取决于 batch size</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>AI=2 远低于拐点，性能由带宽×AI 决定，属于 memory-bound。Softmax（0.25）、LayerNorm（0.5）、逐元素操作都在这一象限。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么 FlashAttention 能大幅加速注意力计算，却没有改变 O(S²) 的复杂度？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>它用了近似算法</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>它通过分块 + 在线 softmax 避免把 S×S 矩阵写入 HBM，优化的是内存流量而不是计算量</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>它减少了 Q/K/V 的维度</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>它跳过了 softmax</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>朴素 attention 的主要代价是读写 O(S²) 的中间矩阵。FlashAttention 让这些中间结果留在片上 SRAM 中完成计算，HBM 流量降到 O(S)，但计算次数仍是 O(S²)。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">代码里两个连续的逐元素算子（如 GELU 后接残差加法）比融合版本慢，主要原因是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>计算量多了</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>每个算子都要独立读写一遍 HBM，内存流量翻倍</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>GPU 不支持多个算子</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>精度损失</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>逐元素算子算术强度极低，瓶颈在 HBM 读写。融合后中间结果留在片上，流量从 16MB 降到 12MB。</div></details></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 7 章 Attention</span><span class="tag">第 14 章 MFU</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 16 章 分布式训练</span><span class="tag">第 19 章 FlashAttention</span><span class="tag">推理优化</span></div></div>
+</div>
+<div class="static-nav"><a href="scaling-laws.html">← Scaling Laws 与算力：为什么这样配置训练</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="distributed.html">Distributed Training：从 DDP 到 3D 并行 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/15-gpu.md">content/15-gpu.md</a></div>
+</main>
+</body>
+</html>

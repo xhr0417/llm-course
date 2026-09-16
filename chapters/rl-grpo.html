@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>强化学习：PPO 与 GRPO · 大模型知识体系</title>
-<meta name="description" content="Group Relative Advantage、Policy Ratio、Clip、KL 惩罚——交互演示逐项拆解。">
+<title>Post-training 与 GRPO：偏好优化全景 · 大模型知识体系</title>
+<meta name="description" content="preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/rl-grpo.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -26,13 +26,13 @@
 <body>
 <header class="static-top">
   <span class="crumb">大模型知识体系</span>
-  <span style="color:var(--text-faint);font-size:13px">第 12 章</span>
+  <span style="color:var(--text-faint);font-size:13px">第 19 章</span>
   <span class="spacer"></span>
   <a href="../index.html#/rl-grpo">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="pretrain-sft.html">← 大模型工程：Pretrain 与 SFT</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="efficient.html">高效训练：混合精度与 LoRA →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rl-grpo">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 12 章 · 大模型训练工程</div><h1 class="chapter-title">强化学习：PPO 与 GRPO</h1><p class="chapter-desc">Group Relative Advantage、Policy Ratio、Clip、KL 惩罚——交互演示逐项拆解。</p><p class="chapter-source">对应课件：GRPO强化学习算法</p></div>
+<div class="static-nav"><a href="pretrain-sft.html">← 训练生命周期：Pretrain 与 SFT</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rl-grpo">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 19 章 · 第四部分 · 训练与对齐 (Train &amp; Align)</div><h1 class="chapter-title">Post-training 与 GRPO：偏好优化全景</h1><p class="chapter-desc">preference data、Reward Model、Bradley-Terry、DPO、PPO/GRPO、RLVR、reward hacking——偏好优化全景图。</p><p class="chapter-source">对应课件：GRPO强化学习算法</p></div>
 <div class="md">
 <blockquote>
 <p><strong>本章对应课件</strong>：《GRPO强化学习算法》。核心知识点全部按统一模板展开。本章公式较多，但每个都能用数字算例验证。</p>
@@ -548,7 +548,7 @@ kl = torch.exp(log_ratio) - log_ratio - 1
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">关于 KL 散度，说法正确的是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>是对称的</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>满足三角不等式</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>非负，P=Q 时为 0</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>可以大于 1</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：C</strong></p>KL 非负（吉布斯不等式），P=Q 时为 0；但它不对称（D(P‖Q) ≠ D(Q‖P)）、不满足三角不等式，所以不是严格意义上的「距离」。KL 可以大于 1，取决于分布差异。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><a class="tag" href="pretrain-sft.html">SFT</a><span class="tag">策略梯度</span><a class="tag" href="rl-grpo.html">KL 散度</a><a class="tag" href="rl-grpo.html">Reward Model</a></div><div class="related-row"><span class="related-label">用于</span><span class="tag">对齐训练</span><span class="tag">可验证奖励</span><span class="tag">推理模型</span><span class="tag">偏好优化</span></div></div>
 </div>
-<div class="static-nav"><a href="pretrain-sft.html">← 大模型工程：Pretrain 与 SFT</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="efficient.html">高效训练：混合精度与 LoRA →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/12-rl-grpo.md">content/12-rl-grpo.md</a></div>
+<div class="static-nav"><a href="pretrain-sft.html">← 训练生命周期：Pretrain 与 SFT</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/12-rl-grpo.md">content/12-rl-grpo.md</a></div>
 </main>
 </body>
 </html>
