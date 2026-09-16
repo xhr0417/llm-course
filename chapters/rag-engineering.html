@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retrieval &amp; RAG Engineering：让模型用上外部知识 · 大模型知识体系</title>
+<meta name="description" content="Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/rag-engineering.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 28 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/rag-engineering">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="capstone-eval.html">← Capstone 1 · Mini LLM Evaluation Harness</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">Capstone 2 · Search + Rerank + RAG Service →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rag-engineering">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 28 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Retrieval &amp; RAG Engineering：让模型用上外部知识</h1><p class="chapter-desc">Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="md">
+<h1>第 28 章 · Retrieval &amp; RAG Engineering：让模型用上外部知识</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>模型权重里没有你的私有知识、也不知道昨天发生的事、更没法给出「这句话出自哪」。RAG 用一条检索管线补上这三件事——而<strong>检索本身是一门可评测的工程</strong>。</p>
+</div></div>
+<p><strong>配套项目</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a>（本批交付，含 27 个测试用例与真实评测数据）。</p>
+<h2>28.1 为什么纯 LLM 不够</h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>表现</th>
+<th>RAG 的解法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>私有知识</td>
+<td>模型没见过你的文档/代码库</td>
+<td>把文档放进上下文</td>
+</tr>
+<tr>
+<td>知识过期</td>
+<td>训练有截止时间</td>
+<td>检索最新内容</td>
+</tr>
+<tr>
+<td>无法溯源</td>
+<td>回答不可验证</td>
+<td>返回引用来源</td>
+</tr>
+<tr>
+<td>幻觉成本</td>
+<td>编造看起来很像的答案</td>
+<td>有据可依 + 失败可归因</td>
+</tr>
+</tbody></table>
+<p>但这三个问题<strong>不是加个向量库就解决的</strong>。真实 RAG 是七个环节的管线，每一环都可以失败：</p>
+<pre><code class="lang-">documents → chunk → 索引（BM25 + embedding）→ 检索 → 融合 → 精排 → 上下文 → LLM → answer + citations</code></pre>
+<p>本章按这条管线逐段讲，并在最后用<strong>真实评测数据</strong>证明：回答不好时，先判断是检索失败还是生成失败。</p>
+<h2>28.2 Chunking：最不起眼、最影响上限的一步</h2>
+<p>文档太长不能整篇塞进上下文，需要切成「可检索段落」（chunk）。三种基础策略：</p>
+<div class="demo-block"><div class="demo-head">🎮 交互：三种切分策略 vs chunk_size / overlap<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>拖动滑块切换策略与大小，观察 chunk 边界如何变化。</p>
+<p><a class="static-link" href="../index.html#/rag-engineering">在交互版中打开这个演示 →</a></p></div></div>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>做法</th>
+<th>优点</th>
+<th>缺点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>fixed</td>
+<td>定长字符 + overlap</td>
+<td>简单、可预测</td>
+<td>可能切断句子</td>
+</tr>
+<tr>
+<td>sentence</td>
+<td>整句合并到接近上限</td>
+<td>语义完整</td>
+<td>超长句无解</td>
+</tr>
+<tr>
+<td>recursive</td>
+<td>段落 → 换行 → 句号逐级降级</td>
+<td>工业默认</td>
+<td>实现稍复杂</td>
+</tr>
+</tbody></table>
+<p>本项目选用 <strong>recursive + size 512 + overlap 64</strong>：课程内容 28 篇 markdown → <strong>841 chunks</strong>。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 切分是超参数，不是常量</div><div class="box-body"><ul>
+<li>切太碎：每块信息不足，检索噪声大；</li>
+<li>切太大：一块里混多个主题，相关性被稀释，还挤占上下文预算；</li>
+<li>overlap 缓解「边界信息被切开」，但会让 chunk 数上涨（存储与检索成本上升）。</li>
+</ul>
+</div></div>
+<h2>28.3 Embedding：把语义变成几何</h2>
+<pre><code class="lang-python">q = embedder.encode([&quot;LoRA 怎么微调大模型&quot;], is_query=True)[0]
+d1 = embedder.encode([&quot;LoRA 冻结原权重，只训练低秩矩阵 A 和 B&quot;])[0]
+d2 = embedder.encode([&quot;今天天气很好，适合出去散步&quot;])[0]
+cosine(q, d1)   # ≫
+cosine(q, d2)   # 相关文档在向量空间里更近</code></pre>
+<p>三个工程要点：</p>
+<ol>
+<li><strong>查询与文档要按模型要求区分编码</strong>（本项目用 BGE，查询侧加指令前缀，文档侧不加）；</li>
+<li><strong>归一化后内积 = 余弦相似度</strong>（本项目向量全部 L2 归一化）；</li>
+<li>embedding 模型也是一个要选型的组件——本项目用 <code>BAAI/bge-small-zh-v1.5</code>（24M 参数，CPU 可跑）。</li>
+</ol>
+<h2>28.4 向量检索：FAISS 最小实现</h2>
+<pre><code class="lang-python">import faiss
+index = faiss.IndexFlatIP(dim)      # 内积索引（配合归一化向量 = 余弦）
+index.add(vectors)                  # 841 × 512
+scores, idxs = index.search(query_vector, k=20)</code></pre>
+<ul>
+<li><code>IndexFlatIP</code> 是<strong>精确检索</strong>：全量算相似度，小规模（几万块）足够快；</li>
+<li>上亿规模再考虑 IVF/HNSW/量化等近似索引——<strong>先把它跑对，再谈规模</strong>；</li>
+<li>本项目在无 FAISS 环境自动回退 numpy 精确实现（接口不变）。</li>
+</ul>
+<h2>28.5 BM25：关键词检索不是落后技术</h2>
+<p>BM25 是经典的稀疏检索：<strong>词频（TF）× 逆文档频率（IDF）× 文档长度归一化</strong>。本项目从零实现（约 40 行，见 <code>bm25.py</code>），中文用 jieba 分词。</p>
+<p>它在什么场景赢过向量检索？</p>
+<ul>
+<li>「RTX 5090」「pass@k」「0x80070005」这类<strong>精确术语</strong>；</li>
+<li>术语密集、缩写多的领域文档（论文、代码库、<strong>本课程内容</strong>）。</li>
+</ul>
+<div class="box box-note"><div class="box-title">📘 真实数据（我们的课程语料，22 条标注查询）</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>模式</th>
+<th>Recall@10</th>
+<th>MRR</th>
+<th>nDCG@10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>BM25</strong></td>
+<td><strong>100.0%</strong></td>
+<td><strong>0.8977</strong></td>
+<td>0.9238</td>
+</tr>
+<tr>
+<td>Dense（bge-small-zh）</td>
+<td>86.4%</td>
+<td>0.6333</td>
+<td>0.6889</td>
+</tr>
+</tbody></table>
+<p>在这份语料上 <strong>BM25 全面不输向量检索</strong>——「dense 一定更好」是误解。</p>
+</div></div>
+<h2>28.6 Hybrid Retrieval：小孩子才做选择</h2>
+<p>把 BM25 与向量结果融合。最常用 <strong>RRF（Reciprocal Rank Fusion）</strong>：</p>
+<div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>score</mtext><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><munder><mo>∑</mo><mrow><mi>r</mi><mo>∈</mo><mtext>rankers</mtext></mrow></munder><mfrac><mn>1</mn><mrow><mi>k</mi><mo>+</mo><msub><mtext>rank</mtext><mi>r</mi></msub><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></mfrac><mspace width="1em"/><mo stretchy="false">(</mo><mi>k</mi><mo>=</mo><mn>60</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{score}(d) = \sum_{r \in \text{rankers}} \frac{1}{k + \text{rank}_r(d)} \quad (k = 60)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">score</span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.6509em;vertical-align:-1.3295em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8479em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span><span class="mrel mtight">∈</span><span class="mord text mtight"><span class="mord mtight">rankers</span></span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3295em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord text"><span class="mord">rank</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">r</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:1em;"></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">60</span><span class="mclose">)</span></span></span></span></span></div>
+<p>只用排名、不用分数——不用调权重、鲁棒。</p>
+<p>真实结果：hybrid Recall@10 = <strong>100%</strong>（与 BM25 持平），MRR 0.8447。
+注意 <strong>hybrid 的 MRR 反而低于纯 BM25</strong>（0.8447 &lt; 0.8977）：向量结果把一部分原本排第一的正确文档挤到了后面。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 融合不等于免费午餐</div><div class="box-body"><p>RRF 让召回更稳（两路互补），但不保证排序更好。
+<strong>排序质量要靠下一步</strong>——reranker。</p>
+</div></div>
+<h2>28.7 Reranker：bi-encoder vs cross-encoder</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>bi-encoder（embedding 检索）</th>
+<th>cross-encoder（reranker）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>结构</td>
+<td>query、doc 分别编码</td>
+<td>(query, doc) 拼接后一起进模型</td>
+</tr>
+<tr>
+<td>交互</td>
+<td>只有最后一步内积</td>
+<td>每一层都在交互</td>
+</tr>
+<tr>
+<td>速度</td>
+<td>快（可预计算）</td>
+<td>慢（必须实时）</td>
+</tr>
+<tr>
+<td>用途</td>
+<td><strong>召回</strong> top-50</td>
+<td><strong>精排</strong> top-50 → top-5</td>
+</tr>
+</tbody></table>
+<p>标准两段式：</p>
+<pre><code class="lang-">query →（BM25 + 向量）召回 50 → cross-encoder 精排 → top-5 → 注入 prompt</code></pre>
+<div class="box box-note"><div class="box-title">📘 真实提升（同一批查询）</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>模式</th>
+<th>MRR</th>
+<th>nDCG@10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Hybrid</td>
+<td>0.8447</td>
+<td>0.8843</td>
+</tr>
+<tr>
+<td><strong>Hybrid + Reranker</strong></td>
+<td><strong>0.9318</strong></td>
+<td><strong>0.9497</strong></td>
+</tr>
+</tbody></table>
+<p>精排把 MRR 从 0.845 提到 <strong>0.932</strong>——整条管线里收益最大的一步。</p>
+</div></div>
+<h2>28.8 检索评测：把「检索」与「生成」拆开评</h2>
+<p>这是本章最重要的一节：<strong>回答不好时，你必须能回答「是检索没找到，还是模型没用/乱说」</strong>。</p>
+<p>三个核心指标（doc 级二值相关）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>公式直觉</th>
+<th>敏感于</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Recall@k</td>
+<td>top-k 里<strong>有没有</strong>至少一条相关</td>
+<td>召回能力</td>
+</tr>
+<tr>
+<td>MRR</td>
+<td>第一条相关的排名倒数</td>
+<td>第一个就命中的能力</td>
+</tr>
+<tr>
+<td>nDCG@k</td>
+<td>相关结果按位置折扣累加</td>
+<td>整体排序质量</td>
+</tr>
+</tbody></table>
+<div class="demo-block"><div class="demo-head">🎮 交互：三个指标怎么算<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点击结果行切换「相关/不相关」，拖动 k，观察指标变化。</p>
+<p><a class="static-link" href="../index.html#/rag-engineering">在交互版中打开这个演示 →</a></p></div></div>
+<p>本项目评测规范（可在 <code>eval/retrieval_eval.py</code> 复现）：</p>
+<ul>
+<li>语料：课程内容 28 篇 → 841 chunks；</li>
+<li>查询集：人工标注 22 条（<code>data/eval_queries.jsonl</code>），<strong>标注到文档级 ground truth</strong>；</li>
+<li>每模式跑 top-10，输出 Recall@10 / MRR / nDCG@10 + 未命中明细。</li>
+</ul>
+<div class="box box-note"><div class="box-title">📘 真实教训：评测集自己的错会伪装成系统失败</div><div class="box-body"><p>第一轮评测显示「5 条未命中」，逐条排查后发现 <strong>5 条全是标注错误</strong>——章节 id 与文件名不一致（<code>efficient</code> 章对应 <code>13-efficient.md</code>，标注却写成 <code>17-efficient.md</code>）。</p>
+<p>修复标注后：BM25/ hybrid 的 Recall@10 从 <strong>77.3% → 100%</strong>。</p>
+<p><strong>纪律：指标异常时，先怀疑数据和标注，再怀疑模型。</strong> 这一步能省掉大量无效调参。</p>
+</div></div>
+<h2>28.9 RAG 评测：四个维度</h2>
+<p>生成侧不能只看「回答对不对」——要拆成：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>问题</th>
+<th>本项目检查方式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Retrieval relevance</td>
+<td>找到的段落相关吗？</td>
+<td>检索指标（28.8）</td>
+</tr>
+<tr>
+<td>Answer correctness</td>
+<td>回答内容对吗？</td>
+<td>人工/规则（0.5B 场景下人工为主）</td>
+</tr>
+<tr>
+<td>Citation correctness</td>
+<td>引用编号对得上来源吗？</td>
+<td>解析 <code>[n]</code> 并校验范围</td>
+</tr>
+<tr>
+<td>Faithfulness</td>
+<td>回答有没有超出资料？</td>
+<td>当前版本限制（见 Known Limitations）</td>
+</tr>
+</tbody></table>
+<p>对 6 道题的真实评测（Qwen2.5-0.5B，检索+精排+生成全链路）：</p>
+<pre><code class="lang-">检索命中 6/6 | 引用规范 4/6 | 用时中位数 19.1s（CPU）</code></pre>
+<p><strong>检索 100% 命中而生成 2/6 失败</strong>——瓶颈定位到生成侧，不是检索侧。</p>
+<h2>28.10 失败案例：四类，各有各的修法</h2>
+<p>来自本项目真实运行（含 prompt 迭代过程）：</p>
+<table>
+<thead>
+<tr>
+<th>失败类型</th>
+<th>表现</th>
+<th>该修什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>retrieval_miss</code></td>
+<td>正确文档没进 top-k</td>
+<td>chunking / 融合 / 加 reranker / 换 embedding</td>
+</tr>
+<tr>
+<td><code>ignored_context</code></td>
+<td>检索到了，回答却说「无法回答」</td>
+<td>prompt / 模型能力</td>
+</tr>
+<tr>
+<td><code>citation_only</code></td>
+<td>只输出 <code>[1][2]</code>，没有答案正文</td>
+<td>格式脚手架 / SFT（Capstone 3）</td>
+</tr>
+<tr>
+<td><code>uncited_answer</code></td>
+<td>有答案但没标引用</td>
+<td>prompt / 后处理强制引用</td>
+</tr>
+<tr>
+<td><code>hallucination</code></td>
+<td>答案超出资料范围</td>
+<td>更严格的 prompt / faithfulness 检查</td>
+</tr>
+</tbody></table>
+<div class="box box-note"><div class="box-title">📘 真实 prompt 迭代（0.5B 模型）</div><div class="box-body"><ol>
+<li>初版「关键处标注 [编号]」→ 4/6 只输出 <code>[1][2]</code>（分类器第一次还把它们误判为 ok——<strong>先修评测器，再改 prompt</strong>）；</li>
+<li>加 few-shot 示例 → 更糟（4/6 citation_only）；</li>
+<li>换成<strong>格式脚手架</strong>（<code>回答：&lt;完整内容&gt;\n引用：[n]</code>）→ 4/6 规范作答。</li>
+</ol>
+<p>结论：<strong>小模型的指令遵循是 RAG 生成侧的瓶颈，检索修不了它</strong>——这正是下一批 Capstone 3（SFT/LoRA）的动机：用真实 bad case 驱动微调。</p>
+</div></div>
+<h2>28.11 面试复盘：RAG</h2>
+<ol>
+<li>chunk size 怎么选？overlap 解决什么问题？</li>
+<li>BM25 和 embedding 检索的区别？各自什么时候更强？</li>
+<li>为什么 reranker 有用？bi-encoder 和 cross-encoder 的结构差异？</li>
+<li>Recall@k 和 MRR 分别对什么敏感？nDCG 为什么&quot;打折&quot;？</li>
+<li>retrieval 对了但回答错了，你怎么定位？拆开评什么？</li>
+<li>引用（citation）怎么保证对得上？模型不配合怎么办？</li>
+<li>你的检索评测集怎么建的？标注错了会发生什么？</li>
+</ol>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你的 RAG 系统上线后用户反馈「回答经常不对」。排查时第一个该看的指标是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接换一个更大的生成模型</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>检索命中率（Recall@k）——先确认正确文档是否进了上下文</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>把 temperature 调到 0</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>增加 system prompt 的字数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>必须先拆开评。本项目实测：检索 6/6 命中、生成 2/6 失败——如果只看「回答不对」就换模型，可能掩盖检索失败的真实原因；反之若检索就先挂了，再强的生成模型也无解。先定位环节，再优化该环节。</div></details></div>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>站点</th>
+<th>核心结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Chunking</td>
+<td>recursive 是工业默认；size/overlap 是超参数</td>
+</tr>
+<tr>
+<td>检索</td>
+<td>BM25 与 dense 互补；术语密集语料 BM25 不输向量（实测）</td>
+</tr>
+<tr>
+<td>融合</td>
+<td>RRF 稳召回但不保证排序</td>
+</tr>
+<tr>
+<td>精排</td>
+<td>cross-encoder 是收益最大的一步（MRR 0.845→0.932 实测）</td>
+</tr>
+<tr>
+<td>评测</td>
+<td>Recall@k / MRR / nDCG，doc 级 ground truth</td>
+</tr>
+<tr>
+<td>纪律</td>
+<td>检索与生成分开评；指标异常先查标注</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>五类失败各有各的修法；citation_only 是 0.5B 的真实瓶颈</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 23 章 LLM Evaluation</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 2（rag-service）</span><span class="tag">Capstone 3（用 bad case 驱动 SFT）</span><span class="tag">RAG 类实习面试</span></div></div>
+</div>
+<div class="static-nav"><a href="capstone-eval.html">← Capstone 1 · Mini LLM Evaluation Harness</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">Capstone 2 · Search + Rerank + RAG Service →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/28-rag-engineering.md">content/28-rag-engineering.md</a></div>
+</main>
+</body>
+</html>

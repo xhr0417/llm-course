@@ -182,4 +182,148 @@
     root.appendChild(out);
     render();
   };
+
+  /* ============================================================
+     4. Chunking 策略对比（第 28 章）
+     ============================================================ */
+  LC.demos["chunking"] = function (root) {
+    var strategy = 0; // 0 fixed 1 sentence 2 recursive
+    var size = 160, overlap = 32;
+    var SAMPLE = "注意力机制让序列中的每个位置根据相关性对其它位置加权求和。\n\n" +
+      "在 Transformer 中，注意力由 Query、Key、Value 三组投影组成：Q 与 K 的点积衡量相关性，除以根号 d 防止数值过大；" +
+      "对分数做 softmax 得到归一化权重；再用权重对 V 加权求和得到输出。\n\n" +
+      "多头注意力把表示空间切成多个头，每个头独立做注意力，最后拼接后再投影。" +
+      "自注意力的复杂度是 O(n²·d)，序列长度翻倍计算量变为四倍——这是长上下文的主要瓶颈之一。\n\n" +
+      "RAG 里的 chunking 把长文档切成可检索的段落：切得太碎会丢上下文，切得太大检索不精准。";
+    var view = h("div"), out = LC.readout();
+
+    function chunkFixed(text, size, overlap) {
+      var chunks = [], start = 0;
+      while (start < text.length) {
+        var end = Math.min(start + size, text.length);
+        chunks.push({ text: text.slice(start, end), start: start, end: end });
+        if (end === text.length) break;
+        start = end - overlap;
+      }
+      return chunks;
+    }
+    function chunkSentence(text, size) {
+      var parts = text.split(/(?<=[。！？\n])/).filter(function (s) { return s.trim(); });
+      var chunks = [], buf = "", bufStart = 0, cursor = 0;
+      parts.forEach(function (p) {
+        if (buf && buf.length + p.length > size) { chunks.push({ text: buf, start: bufStart, end: bufStart + buf.length }); buf = ""; }
+        if (!buf) bufStart = cursor;
+        buf += p; cursor += p.length;
+      });
+      if (buf.trim()) chunks.push({ text: buf, start: bufStart, end: bufStart + buf.length });
+      return chunks;
+    }
+    function chunkRecursive(text, size, overlap) {
+      var paras = text.split(/\n\n/).filter(function (p) { return p.trim(); });
+      var chunks = [], buf = "", bufStart = 0, cursor = 0;
+      paras.forEach(function (p) {
+        if (buf && buf.length + p.length + 2 > size * 1.5) { chunks.push({ text: buf, start: bufStart, end: bufStart + buf.length }); buf = ""; }
+        if (!buf) bufStart = cursor;
+        buf += (buf ? "\n\n" : "") + p; cursor += p.length + 2;
+      });
+      if (buf.trim()) chunks.push({ text: buf, start: bufStart, end: bufStart + buf.length });
+      var long = [];
+      chunks.forEach(function (c) {
+        if (c.text.length <= size * 1.6) long.push(c);
+        else { long = long.concat(chunkFixed(c.text, size, overlap).map(function (x) { return { text: x.text, start: c.start + x.start, end: c.start + x.end }; })); }
+      });
+      return long;
+    }
+
+    function render() {
+      var chunks = strategy === 0 ? chunkFixed(SAMPLE, size, overlap)
+        : strategy === 1 ? chunkSentence(SAMPLE, size)
+        : chunkRecursive(SAMPLE, size, overlap);
+      view.innerHTML = "";
+      chunks.forEach(function (c, i) {
+        view.appendChild(h("div", { style: "border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:8px 10px;margin:6px 0" }, [
+          h("div", { style: "font-size:12px;color:var(--text-soft);margin-bottom:4px" }, "chunk " + i + " · " + (c.end - c.start) + " 字符 · [" + c.start + ", " + c.end + ")" ),
+          h("div", { style: "font-size:13px;line-height:1.7" }, c.text.slice(0, 120) + (c.text.length > 120 ? " …" : ""))
+        ]));
+      });
+      var avg = chunks.length ? Math.round(chunks.reduce(function (a, c) { return a + c.text.length; }, 0) / chunks.length) : 0;
+      out.textContent =
+        "策略：" + ["fixed（定长+overlap）", "sentence（整句合并）", "recursive（段落优先，过长再切）"][strategy] + "\n" +
+        "chunk 数 " + chunks.length + " | 平均 " + avg + " 字符\n\n" +
+        "怎么选：\n" +
+        "· fixed：可预测、实现最简；但可能把一句话从中间切开；\n" +
+        "· sentence：语义完整，适合中文对话类文档；长句仍可能超限；\n" +
+        "· recursive（工业默认）：优先按段落/换行切，过长才降级切句——本课程 rag-service 的默认策略。\n" +
+        "调大 overlap 会缓解「边界信息被切断」，但 chunk 总数与存储/检索成本都会上升。";
+    }
+    var group = LC.buttonGroup(["fixed", "sentence", "recursive"], function (i) { strategy = i; render(); });
+    var sizeS = LC.slider("chunk 大小（字符）", 80, 400, 20, size, function (v) { size = Math.round(v); render(); });
+    var ovS = LC.slider("overlap（字符）", 0, 120, 8, overlap, function (v) { overlap = Math.round(v); render(); });
+    root.appendChild(h("div", { class: "demo-controls" }, [group.el, sizeS.el, ovS.el]));
+    root.appendChild(view);
+    root.appendChild(out);
+    render();
+  };
+
+  /* ============================================================
+     5. 检索指标计算器（第 28 章）
+     ============================================================ */
+  LC.demos["retrieval-metrics"] = function (root) {
+    var relevant = [true, false, true, false, false, true]; // 6 条结果的 ground truth
+    var k = 3;
+    var view = h("div"), out = LC.readout();
+
+    function compute() {
+      var top = relevant.slice(0, k);
+      var recall = top.some(Boolean) ? 1 : 0;
+      var mrr = 0;
+      for (var i = 0; i < relevant.length; i++) {
+        if (relevant[i]) { mrr = 1 / (i + 1); break; }
+      }
+      var dcg = 0;
+      for (var j = 0; j < Math.min(k, relevant.length); j++) {
+        if (relevant[j]) dcg += 1 / Math.log2(j + 2);
+      }
+      var totalRel = relevant.filter(Boolean).length;
+      var idcg = 0;
+      for (var m = 0; m < Math.min(k, totalRel); m++) idcg += 1 / Math.log2(m + 2);
+      var ndcg = idcg > 0 ? dcg / idcg : 0;
+      return { recall: recall, mrr: mrr, ndcg: ndcg };
+    }
+
+    function render() {
+      var metrics = compute();
+      view.innerHTML = "";
+      var list = h("div");
+      relevant.forEach(function (rel, i) {
+        var inTop = i < k;
+        list.appendChild(h("div", {
+          style: "display:flex;align-items:center;gap:8px;padding:6px 8px;margin:4px 0;border-radius:8px;" +
+            "border:1px solid " + (inTop ? "var(--accent)" : "var(--border)") + ";" +
+            "background:" + (rel ? "var(--accent-soft)" : "transparent") + ";cursor:pointer",
+          onclick: function () { relevant[i] = !relevant[i]; render(); }
+        }, [
+          h("span", { style: "font-family:ui-monospace;font-size:12px;color:var(--text-soft)" }, "rank " + (i + 1)),
+          h("span", { style: "flex:1" }, ["文档 A", "文档 B", "文档 C", "文档 D", "文档 E", "文档 F"][i] + (inTop ? "（在 top-" + k + " 内）" : "（在 top-" + k + " 外）")),
+          h("span", { style: "font-size:12px;font-weight:700;color:" + (rel ? "var(--green)" : "var(--text-faint)") }, rel ? "相关" : "不相关")
+        ]));
+      });
+      view.appendChild(list);
+      out.textContent =
+        "点击任意一行可切换「相关 / 不相关」——真实评测里这就是人工标注的工作。\n\n" +
+        "当前 k = " + k + "（只统计前 " + k + " 条结果）\n" +
+        "· Recall@k = " + (metrics.recall * 100).toFixed(0) + "% —— top-" + k + " 里有没有至少一条相关结果（doc 级二值）\n" +
+        "· MRR = " + metrics.mrr.toFixed(4) + " —— 第一条相关结果的排名倒数（对「第一个就对」最敏感）\n" +
+        "· nDCG@k = " + metrics.ndcg.toFixed(4) + " —— 相关结果排得越靠前越高（考虑了位置折扣）\n\n" +
+        "本课程 rag-service 的实测（22 条标注查询，课程内容语料）：\n" +
+        "BM25 100% / 0.898 / 0.924 · dense 86.4% / 0.633 / 0.689 · hybrid+rerank 100% / 0.932 / 0.950\n\n" +
+        "⚠️ 关键纪律：retrieval quality 与 generation quality 必须分开评。回答不好时，先看检索命中率——" +
+        "本项目实测 6/6 检索命中，但生成侧仍有 2/6 失败——问题出在生成，不在检索。";
+    }
+    var kS = LC.slider("k", 1, 6, 1, k, function (v) { k = Math.round(v); render(); });
+    root.appendChild(h("div", { class: "demo-controls" }, [kS.el]));
+    root.appendChild(view);
+    root.appendChild(out);
+    render();
+  };
 })();

@@ -1,0 +1,16 @@
+{
+  "corpus_dir": "../../content",
+  "index_dir": ".cache/index",
+  "chunk_strategy": "recursive",
+  "chunk_size": 512,
+  "chunk_overlap": 64,
+  "embed_model": "BAAI/bge-small-zh-v1.5",
+  "rerank_model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+  "llm_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "retrieve_k": 20,
+  "final_k": 5,
+  "fusion": "rrf",
+  "bm25_weight": 0.5,
+  "max_new_tokens": 256,
+  "request_timeout_s": 60.0
+}

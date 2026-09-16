@@ -1,0 +1,22 @@
+{"query": "online softmax 的分块修正公式是怎么推导的", "gold_docs": ["19-flash-attention.md"]}
+{"query": "PagedAttention 是怎么解决显存碎片的", "gold_docs": ["20-inference.md"]}
+{"query": "GQA 和 MQA 的区别是什么", "gold_docs": ["10-modern-llm.md"]}
+{"query": "pass@k 的无偏估计公式怎么计算", "gold_docs": ["23-llm-eval.md"]}
+{"query": "Chat Template 为什么会影响模型输出", "gold_docs": ["11-pretrain-sft.md", "26-huggingface.md"]}
+{"query": "MinHash 怎么估计 Jaccard 相似度", "gold_docs": ["18-data-pipeline.md"]}
+{"query": "Ring AllReduce 的通信量怎么算", "gold_docs": ["16-distributed.md"]}
+{"query": "什么是算术强度和 Roofline 模型", "gold_docs": ["15-gpu.md"]}
+{"query": "激活检查点为什么能节省显存", "gold_docs": ["13-efficient.md"]}
+{"query": "Chinchilla 的最优参数与 token 配比是多少", "gold_docs": ["14-scaling-laws.md"]}
+{"query": "GRPO 的组相对优势是怎么计算的", "gold_docs": ["12-rl-grpo.md"]}
+{"query": "梯度消失和梯度爆炸的解决方法", "gold_docs": ["04-stability.md"]}
+{"query": "LoRA 的 rank 和 alpha 是什么含义", "gold_docs": ["13-efficient.md"]}
+{"query": "speculative decoding 的接受率怎么理解", "gold_docs": ["20-inference.md"]}
+{"query": "训练数据去污染 decontamination 怎么做", "gold_docs": ["18-data-pipeline.md"]}
+{"query": "数据配比 mixture 怎么决定", "gold_docs": ["18-data-pipeline.md"]}
+{"query": "ZeRO 的三个阶段分别切分了什么", "gold_docs": ["16-distributed.md"]}
+{"query": "warmup 学习率为什么需要", "gold_docs": ["11-pretrain-sft.md"]}
+{"query": "SFT 训练中的 loss mask 怎么用", "gold_docs": ["11-pretrain-sft.md"]}
+{"query": "评测结果的置信区间怎么计算", "gold_docs": ["23-llm-eval.md"]}
+{"query": "Triton 怎么实现 fused softmax", "gold_docs": ["19-flash-attention.md"]}
+{"query": "continuous batching 和 static batching 的区别", "gold_docs": ["20-inference.md"]}

@@ -37,15 +37,15 @@ Transformer（第 7 章）
    ↓
 LLM Evaluation（第 23 章）
    ↓
-Retrieval / RAG         ← 下一批
+Retrieval / RAG（第 28 章 ✅）
    ↓
 SFT / LoRA（第 17 + 26 章）
    ↓
-FastAPI / Docker         ← 下一批
+FastAPI / Docker（第 29 章 ✅）
    ↓
 Capstone 1：Eval Harness ← 第 27 章 ✅
    ↓
-Capstone 2：RAG Service  ← 下一批
+Capstone 2：RAG Service  ← 第 29 章 ✅
    ↓
 开始投递
 ```
@@ -182,7 +182,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）
 | **A** | 写一个 Python CLI：读 JSONL、批量请求模型、保存结果、正确处理中断 | 能跑 + 有测试 + 异常路径不崩 | 第 25 章 ✅ 本批 |
 | **B** | 加载 Qwen、批量 generate、算 logits/loss、做一个 LoRA | 有 base vs tuned 的对比数据 | 第 26 章 ✅ 本批 |
 | **C** | 写 Eval Harness（adapter/task/parser/metric/report） | 能对两个模型产出可比较的报告 | 第 27 章 ✅ 本批 |
-| **D** | 做 RAG + 评测（Recall@k / MRR / faithfulness） | retrieval 与 generation 指标分开报告 | Capstone 2 · 下一批 |
+| **D** | 做 RAG + 评测（Recall@k / MRR / faithfulness） | retrieval 与 generation 指标分开报告 | 第 28-29 章 ✅ 本批 |
 | **E** | 用 profiler 找瓶颈并写出 benchmark 报告 | 有 latency/memory 曲线与解释 | Capstone 4 · 下一批 |
 
 ## 24.6 本批已经交付的内容
@@ -192,6 +192,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）
 | **25 Python Engineering** | [`projects/log-analyzer/`](https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer) | 14 个 pytest 通过；`analyze_logs` 对健康/发散日志的真实输出 |
 | **26 HuggingFace** | [`projects/hf-mini-lab/`](https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab) | Qwen2.5-0.5B-Instruct CPU 全程跑通：训练 loss 2.6364→1.3052；held-out loss 3.8168→3.6102；10 个测试通过 |
 | **27 Capstone 1 · Eval Harness** | [`projects/llm-eval/`](https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval) | 128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；29 个测试用例通过 |
+| **28-29 Retrieval/RAG + Capstone 2** | [`projects/rag-service/`](https://github.com/xhr0417/llm-course/tree/main/projects/rag-service) | 841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；27 个测试用例通过 |
 
 :::warning 数据纪律（对你自己的项目同样适用）
 只把**真实运行得到**的 loss / accuracy / latency / 显存写成「实验结果」。

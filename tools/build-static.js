@@ -155,7 +155,11 @@ const TOPIC_LINKS = {
   "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
   "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready",
   "Eval Harness": "capstone-eval", "评测工程": "capstone-eval", "bad case": "capstone-eval",
-  "ModelAdapter": "capstone-eval", "并发评测": "capstone-eval"
+  "ModelAdapter": "capstone-eval", "并发评测": "capstone-eval",
+  "RAG": "rag-engineering", "BM25": "rag-engineering", "Chunking": "rag-engineering",
+  "Reranker": "rag-engineering", "Recall@k": "rag-engineering", "MRR": "rag-engineering",
+  "nDCG": "rag-engineering", "Hybrid Retrieval": "rag-engineering",
+  "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag"
 };
 
 function renderContent(content, ctx, chapterId) {

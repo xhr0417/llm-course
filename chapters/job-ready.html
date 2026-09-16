@@ -60,15 +60,15 @@ Transformer（第 7 章）
    ↓
 LLM Evaluation（第 23 章）
    ↓
-Retrieval / RAG         ← 下一批
+Retrieval / RAG（第 28 章 ✅）
    ↓
 SFT / LoRA（第 17 + 26 章）
    ↓
-FastAPI / Docker         ← 下一批
+FastAPI / Docker（第 29 章 ✅）
    ↓
 Capstone 1：Eval Harness ← 第 27 章 ✅
    ↓
-Capstone 2：RAG Service  ← 下一批
+Capstone 2：RAG Service  ← 第 29 章 ✅
    ↓
 开始投递</code></pre>
 </div></details>
@@ -300,7 +300,7 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>D</strong></td>
 <td>做 RAG + 评测（Recall@k / MRR / faithfulness）</td>
 <td>retrieval 与 generation 指标分开报告</td>
-<td>Capstone 2 · 下一批</td>
+<td>第 28-29 章 ✅ 本批</td>
 </tr>
 <tr>
 <td><strong>E</strong></td>
@@ -332,6 +332,11 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）</code><
 <td><strong>27 Capstone 1 · Eval Harness</strong></td>
 <td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval"><code>projects/llm-eval/</code></a></td>
 <td>128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；29 个测试用例通过</td>
+</tr>
+<tr>
+<td><strong>28-29 Retrieval/RAG + Capstone 2</strong></td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a></td>
+<td>841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；27 个测试用例通过</td>
 </tr>
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对你自己的项目同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>
