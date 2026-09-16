@@ -10,6 +10,80 @@
 > × 可插拔任务（C3 / XCOPA / QA）× 并发 + 重试 + 缓存
 > → 自动产出 `results.json` / `summary.md` / `badcases.jsonl`。
 
+## 从零开始：我要在哪里开始、怎么开始
+
+**推荐执行位置**：
+
+| 做什么 | 推荐机器 | 原因 |
+| --- | --- | --- |
+| `pytest`（全部 15 个 Step） | 🖥 Mac 或 ☁ Server 都可以 | 不需要 GPU；Step 7 需要 transformers/torch（tiny 模型，很小） |
+| `--adapter mock` 跑 CLI | 🎮 均可 | 不加载任何真实模型 |
+| `--adapter hf` 真实评测 | ☁ Server 优先 | 与第 26 章一样使用 Qwen，模型进 HF 缓存 |
+| `--adapter openai`（API） | 🎮 任意能联网的环境 | API key 只放环境变量（`export ...`），**绝不进 Git** |
+
+在哪台机器执行，`pip install` 和 `pytest` 就必须都在**同一台**机器上。
+
+### 1. 先分清三个「地址」＋ 产出文件去哪里
+
+| 东西 | 是什么 | 示例（只是示例） |
+| --- | --- | --- |
+| GitHub 仓库 | 远程仓库（代码的源头） | `https://github.com/xhr0417/llm-course` |
+| 你的 clone | 本机工作副本 | Mac：`~/Projects/llm-course` · Server：`~/workspace/llm-course` |
+| 本 starter | repo 里的子目录 | `<你的 clone>/projects/llm-eval/starter` |
+| 评测产出 | 运行时生成在 `outputs/run_xxx/`（已 gitignore）；`summary.md` 等**小型报告**可以拷进你的仓库 | `results.json` / `summary.md` / `badcases.jsonl` |
+| 模型缓存 | **不在 repo 里**：HuggingFace 缓存目录（`echo $HF_HOME` 查看） | 大文件留服务器 |
+
+### 2. 五条命令：从零到第一次 pytest
+
+```bash
+# ① 【在哪执行】Mac 或 Linux Server（任选一台）
+git clone https://github.com/xhr0417/llm-course.git
+cd llm-course
+pwd        # 记下它 = repo root（已有 clone 就直接 cd 过来）
+
+# ② 进入 starter
+# 【当前目录】repo root
+cd projects/llm-eval/starter
+pwd        # 应看到 .../llm-course/projects/llm-eval/starter
+
+# ③ 安装依赖（httpx + pytest；Step 7 再装 transformers/torch）
+pip install -r requirements.txt
+
+# ④ 第一次运行：应该满屏红色
+pytest -q
+```
+
+### 3. starter 和 reference 是什么关系？
+
+- **starter**（你现在这里）：刻意**不完整**；77 个失败就是你的任务清单；
+- **reference**（上一级 `projects/llm-eval/`）：完整实现 + 真实 C3/XCOPA 评测记录。**做完再看**。
+
+### 4. 哪些文件要改？哪些不要改？
+
+| 文件 | 动它吗 |
+| --- | --- |
+| `src/llm_eval/**` | ✅ 要实现的代码全在这里 |
+| `tests/test_step*.py` | ❌ 不要改（验收标准） |
+| `run_eval.py` | ✅ 只有 `build_adapter()` 留给你补全 |
+| `data/mini_*.jsonl` | 🔧 小夹具，可读可加 |
+| `scripts/fetch_data.py` | ✅ Step 13 拉真实数据时用（需联网） |
+| `../`（reference） | ⚠️ 只做对照 |
+
+### 5. 做完之后：代码和报告放哪里？
+
+```bash
+# 【在哪执行】做项目的机器【当前目录】repo root
+mkdir -p ~/Projects/my-llm-eval
+cp -R projects/llm-eval/starter/. ~/Projects/my-llm-eval/
+cd ~/Projects/my-llm-eval
+git init && git add . && git commit -m "my mini eval harness"
+```
+
+你的作品集仓库里适合放：源码、测试、`summary.md` 这类小型报告、`badcases.jsonl` 的截取样例。
+不适合放：模型权重、大数据集、`.cache/`（sqlite 缓存）。
+
+⚠️ 不要把整个课程 repo 伪装成你独立写的作品。
+
 ## Quick Start
 
 ```bash

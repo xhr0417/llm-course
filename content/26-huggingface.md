@@ -63,15 +63,40 @@ effort: 3–5 小时（每个 Step 10–30 分钟）
 prereq: 第 7/9/17 章概念 + 第 25 章工程习惯；能装 torch/transformers/peft（CPU 即可）
 deliverable: 38 测试全绿 + 用真实 Qwen 跑出的 outputs/ 实验报告（adapter + report.md）
 
+:::where
+机器：pytest（tiny 模型）🖥 Mac / ☁ Server 都可以；真实 Qwen 实验（Step 12 的 run_lab）☁ Server 优先
+执行纪律：`pip install` 和 `pytest` 必须在同一台机器上执行；换机器要重新装依赖
+Repo Root：你 clone 的 llm-course 目录（`pwd` 确认）
+Starter：projects/hf-mini-lab/starter（你写代码的地方）
+Reference：projects/hf-mini-lab（完整实现 + run_lab.py，做完再对照）
+模型缓存：**不在 repo**——HuggingFace 缓存目录（`echo $HF_HOME` 查看；要放大盘先 export HF_HOME）
+大文件：模型权重 ~2GB 默认进缓存；repo 里只放代码 / 小数据 / 小报告
+GitHub：先 `git status`；模型、缓存、outputs 不动，只提交 src/ tests/ configs/ data/ 等小文件
+:::
+
 :::step 0 环境与模型选择
 :::goal
-把 starter 跑起来，看到 38 failed——并且选好本章使用的模型。
+在一台明确的机器上把 starter 跑起来，看到 38 failed——并且选好本章使用的模型。
 :::
 
 :::why
 HF 生态第一个工程决策不是代码，而是**模型选择**：参数量决定了你的显存/内存、加载时间和实验可行性。
 本章全程用 `Qwen/Qwen2.5-0.5B-Instruct`：中文能力好、0.5B 在 CPU 上可跑、有完整的 ChatML 模板。
 不要换成更大的模型——第一段实习的项目标准是「别人能复现」，不是「参数越大越厉害」。
+
+本章和第 25 章的「在哪台机器 / 哪个目录执行」规则完全一样（如果你跳过了第 25 章：
+先读它 Step 0 的心智模型，或看文档 [docs/ENVIRONMENT_AND_WORKFLOW.md](https://github.com/xhr0417/llm-course/blob/main/docs/ENVIRONMENT_AND_WORKFLOW.md)）。
+本章多出来的一件事是：**模型文件不放在 repo 里，而是下载进 HuggingFace 缓存**——见下方知识盒。
+:::
+
+:::note 模型文件下载到哪里？（第一次接触一定会问）
+运行 `from_pretrained(...)` 时，模型进入 **HuggingFace 缓存目录**，不是 `projects/hf-mini-lab/`：
+
+- 查看缓存位置：`echo $HF_HOME`（为空则使用默认用户缓存目录）；
+- 想把缓存放到大盘（例如服务器）：`export HF_HOME=~/models/huggingface`（路径要先存在且有写权限）；
+- 下载前先看磁盘：`df -h`（剩余空间）、`du -sh ~/models 2>/dev/null`（已占用）。
+
+因此你跑完实验后 `git status` 不应该、也不会看到模型权重——它们不在 repo 里，不需要提交。
 :::
 
 :::files
@@ -84,9 +109,21 @@ starter/
 └── tests/               # 38 个测试，按 Step 拆成 12 个文件
 :::
 
-:::run
+:::run 🖥 Mac / ☁ Linux Server（tiny 测试任选一台；真实 Qwen 实验见 Step 12）
 ```bash
+# 【确认你在哪】提示符 yourname@MacBook ~ % = Mac；user@ubuntu:~$ = 服务器
+hostname
+pwd
+
+# 【回到 repo root】已有 clone 的情况（还没有 clone 就按根 README Quick Start 做一次）
+cd "$(git rev-parse --show-toplevel)"
+pwd
+
+# 【进入 starter】
 cd projects/hf-mini-lab/starter
+pwd        # 必须以 llm-course/projects/hf-mini-lab/starter 结尾；不是就先别继续
+
+# 【装依赖 + 第一次运行】在哪台机器跑 pytest，就在哪台机器装
 pip install -r requirements.txt
 pytest -q
 ```
@@ -96,7 +133,7 @@ pytest -q
 ```
 38 failed
 ```
-（真实记录：本课程实测 `38 failed in ~30s`；首次运行会下载 tiny 测试模型，之后走本地缓存。）
+（真实记录：本课程实测 `38 failed in ~30s`；首次运行会下载 tiny 测试模型（几 MB，进 HF 缓存），之后走本地缓存。）
 :::
 
 :::fail
@@ -122,6 +159,8 @@ CPU 完全够用：0.5B fp32 约 2GB 内存，加载约 3 秒，60 步 LoRA 训�
 
 :::explain
 - 为什么「模型选择」是 LLM 工程的第一个决策？参数量、精度（fp32/fp16）、设备（CPU/GPU）分别影响什么？
+- 模型文件下载到了哪里？为什么 `git status` 里看不到它们、也不需要提交？
+- 你现在运行 `pytest` 的这台机器是 Mac 还是服务器？如果 Step 12 要在另一台机器跑真实实验，需要做什么准备？
 :::
 :::
 
@@ -157,7 +196,7 @@ Qwen 的实测值：`vocab=151643`，`pad=<|endoftext|>`（用 `tokenizer.pad_to
 - TODO 3：`logger.info` 打印 vocab 与 pad（调试时的第一手信息）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step1_tokenizer.py
 ```
@@ -258,7 +297,7 @@ You are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>
 - TODO 3：自己在终端运行一次 `show_template`，把「错误做法 vs 正确做法」的 token 数对比记下来。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step2_chat_template.py
 python -c "
@@ -358,7 +397,7 @@ model.to("cpu")                # 或 "cuda" / device_map="auto"
 - TODO 4：统计参数量并 `logger.info` 打印（`sum(p.numel() for p in model.parameters())`）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step3_model.py
 ```
@@ -445,7 +484,7 @@ input_ids: (1, 27) → logits: (1, 27, 151936)
 - TODO 3：确保函数返回 shape 为 `(1, seq, vocab)` 的张量。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step4_logits.py
 ```
@@ -544,7 +583,7 @@ generated = output[:, batch["input_ids"].shape[1]:]     # 只取新生成的 tok
 - TODO 4：切片 `output[:, batch["input_ids"].shape[1]:]` 再 `batch_decode(..., skip_special_tokens=True)`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step5_generate.py
 ```
@@ -628,7 +667,7 @@ SFT 的数据格式就是 `messages` 列表。第 25 章的 JSONL 知识在这�
 - TODO 3：返回的**元素是 `row["messages"]`**，不是整行 dict。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step6_data.py
 ```
@@ -728,7 +767,7 @@ labels[:len(prompt_ids)] = [-100] * len(prompt_ids)     # 掩掉 prompt（含 as
 - TODO 3：`encode_batch`——逐条 `build_labels` 后截断到 `max_length`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step7_labels.py
 ```
@@ -818,7 +857,7 @@ LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%
 - TODO 3：自己确认「注入后哪些参数 requires_grad」——用一行 Python 打印。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step8_lora.py
 ```
@@ -896,7 +935,7 @@ loss 是怎么算的、谁在更新、梯度只流进哪些参数。你的 loss 
 - TODO 4：返回 `TrainResult(losses, trainable_params, total_params)`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step9_train.py
 ```
@@ -977,7 +1016,7 @@ def _collate(batch_ids, batch_labels, pad_id):
 - TODO 3：自己想清楚——重载时传入的 `base_model` 应该是一个怎样的对象？
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step10_save_load.py
 ```
@@ -1062,7 +1101,7 @@ print(sum(p.numel() for n, p in base.named_parameters() if p.requires_grad and "
 两个 print 的结果分别是什么？如果你之后直接用 `base` 当基线评测，会发生什么？
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step11_peft_trap.py
 ```
@@ -1139,12 +1178,27 @@ tuned_eval = eval_loss(tuned_model, tokenizer, eval_samples, cfg.max_length)
 - TODO 3：`build_report`——markdown 实验报告（模型、数据、LoRA 配置、可训练参数、loss、生成对比、已知限制）。
 :::
 
-:::run
+:::run ☁ Server 优先（Mac 也能跑；首次会下载约 2GB 权重，先进 HF 缓存）
 ```bash
+# 【当前目录】.../llm-course/projects/hf-mini-lab/starter
+pwd
+
+# 【先看磁盘】模型权重约 2GB（fp32）+ 缓存开销；服务器上尤其先确认
+df -h .
+
+# 【单元测试】
 pytest -q tests/test_step12_evaluate.py
 pytest -q                                    # 全量：38 passed
-python scripts/run_lab.py                    # 真实 Qwen 实验（CPU 约 1 分钟）
+
+# 【真实 Qwen 实验】CPU 约 1 分钟；模型下载进 HF 缓存，不进 repo
+python scripts/run_lab.py
 ```
+:::
+
+:::note 跑完 experimental 之后你会多出哪些文件？会不会把 repo 撑爆？
+- 模型权重 → HuggingFace 缓存（`echo $HF_HOME` 查看），**不在 repo**；
+- 实验产物 → `outputs/lab_run/`（几 MB：adapter + report.md + losses.json，已被 gitignore）；
+- `git status` 应该只显示你修改的源码文件——如果看到几十 GB 的东西，先停下来检查 `.gitignore`。
 :::
 
 :::expect

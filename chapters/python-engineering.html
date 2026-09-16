@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Python Engineering for AI：写出能跑的项目 · 大模型知识体系</title>
-<meta name="description" content="项目结构、argparse/dataclass、typing、pathlib 与 JSONL、logging、异常、HTTP/retry、asyncio、pytest——配可运行 CLI 项目 + pytest 全套。">
+<title>Python Engineering for AI：从 0 亲手构建第一个真实项目 · 大模型知识体系</title>
+<meta name="description" content="Guided Build：starter + 10 个 Step（41 个分步测试从红变绿，含你自己写的 3 个边界测试）；配套 Learn 参考手册（项目结构、argparse/dataclass、typing、pathlib/JSONL、logging、异常、asyncio、pytest）与完整参考实现。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/python-engineering.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -31,8 +31,8 @@
   <a href="../index.html#/python-engineering">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：用工业生态跑模型 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/python-engineering">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 25 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Python Engineering for AI：写出能跑的项目</h1><p class="chapter-desc">项目结构、argparse/dataclass、typing、pathlib 与 JSONL、logging、异常、HTTP/retry、asyncio、pytest——配可运行 CLI 项目 + pytest 全套。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/python-engineering">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 25 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Python Engineering for AI：从 0 亲手构建第一个真实项目</h1><p class="chapter-desc">Guided Build：starter + 10 个 Step（41 个分步测试从红变绿，含你自己写的 3 个边界测试）；配套 Learn 参考手册（项目结构、argparse/dataclass、typing、pathlib/JSONL、logging、异常、asyncio、pytest）与完整参考实现。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
 <div class="md">
 <h1>第 25 章 · Python Engineering for AI：从 0 亲手构建第一个真实项目</h1>
 <div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>第 11 章解决「怎么看懂模型代码」；这一章解决「<strong>怎么亲手写出一个真正的工程项目</strong>」——不是看一个做好的仓库，而是从一个不完整的 starter 出发，让 41 个测试从红变绿。</p>
@@ -98,11 +98,12 @@
 <li>有没有出现 NaN、训练是否发散？</li>
 </ul>
 <p><strong>最终交付物</strong>（就是你要亲手做的）：一个 CLI 项目 ——</p>
-<pre><code class="lang-bash">cd projects/log-analyzer/starter
+<pre><code class="lang-bash"># 【在哪台机器】Mac 或 Linux Server 都可以【当前目录】repo root
+cd projects/log-analyzer/starter
 python -m log_analyzer.cli samples/train.log          # 人读报告
 python -m log_analyzer.cli samples/train.log --json    # 机读 JSON（字段契约）
 python -m log_analyzer.cli samples/train_nan.log --warnings
-pytest -q                                              # 41 passed（你的验收线）</code></pre>
+pytest -q                                              # 41 passed（= 课程提供的 38 个 + 你写的 3 个）</code></pre>
 <p>参考实现的真实输出（本课程实测，你做完后应该得到同类结果）：</p>
 <pre><code class="lang-">== 训练日志分析 ==
 事件数            : 22（原始行 22）
@@ -115,9 +116,24 @@ error   数        : 0
 NaN 事件          : 否</code></pre>
 <p><strong>starter 在哪里</strong>：<code>projects/log-analyzer/starter/</code>（你写代码的地方）。
 <strong>参考实现在哪里</strong>：<code>projects/log-analyzer/</code>（先不要打开——最后对照用）。</p>
-<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">log-analyzer · Guided Build</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零实现一个训练日志分析 CLI：parser / stats / CLI 三层，41 个测试全绿</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/log-analyzer/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">2–4 小时（每个 Step 约 10–30 分钟）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">会写 Python 函数 / 循环 / dict；装好 Python 3.9+ 与 pytest</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">通过全部测试的 src/log_analyzer/（parser + stats + cli）+ 真实运行输出 + 自己的 3 个边界测试</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/python-engineering">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">准备环境与第一次运行</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>把 starter 跑起来，亲眼看到初始的红色测试——并且理解：<strong>这是正常的</strong>。</p>
+<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">log-analyzer · Guided Build</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零实现一个训练日志分析 CLI：parser / stats / CLI 三层，41 个测试全绿</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/log-analyzer/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">2–4 小时（每个 Step 约 10–30 分钟）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">会写 Python 函数 / 循环 / dict；装好 Python 3.9+ 与 pytest</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">通过全部测试的 src/log_analyzer/（parser + stats + cli；41 = 课程提供的 38 + 你在 Step 8 自己写的 3 个）+ 真实运行输出</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/python-engineering">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div><div class="box-body"><div class="where-rows"><div class="where-row"><span class="where-k">机器</span><span class="where-v">🖥 Mac 或 ☁ Linux Server 都可以（纯标准库 + pytest，不需要 GPU，也不需要下载模型）</span></div><div class="where-row"><span class="where-k">执行纪律</span><span class="where-v"><code>pip install</code> 和 <code>pytest</code> 必须在同一台机器上执行；换机器要重新装依赖</span></div><div class="where-row"><span class="where-k">Repo Root</span><span class="where-v">你 clone 的 llm-course 目录（<code>pwd</code> 确认；忘了位置用 <code>git rev-parse --show-toplevel</code>）</span></div><div class="where-row"><span class="where-k">Starter</span><span class="where-v">projects/log-analyzer/starter（你写代码的地方）</span></div><div class="where-row"><span class="where-k">Reference</span><span class="where-v">projects/log-analyzer（完整参考实现，做完再对照）</span></div><div class="where-row"><span class="where-k">大文件</span><span class="where-v">无——本项目不产生模型 / 数据集 / checkpoint</span></div><div class="where-row"><span class="where-k">GitHub</span><span class="where-v">只提交 src/ tests/ README 等小文件；先 <code>git status</code> 看，再 <code>git add</code> 具体文件</span></div></div></div></div><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">准备环境与第一次运行</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>在一台明确的机器（Mac 或 Linux Server）上、一个明确的目录里，把 starter 跑起来看到初始红色测试——
+并且理解：<strong>这是正常的</strong>。</p>
 </div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>Guided Build 的第一步永远是「先让项目在你机器上跑起来」。连测试都不会跑，
 后面每一步的反馈都无从谈起。</p>
+<p>但比「跑起来」更前置的问题是：<strong>这条命令在哪台机器、哪个目录执行？</strong> 很多新手就卡在这里——
+所以本步会把你需要的环境知识一次讲清，后面所有 Step 都只重复标签。</p>
+</div></div><div class="box box-note"><div class="box-title">📘 先建立三个「地方」的心智模型（只读一次，后面都靠它）</div><div class="box-body"><pre><code class="lang-text">        🌐 GitHub（远程仓库）               ← 网页，不是命令执行环境
+        https://github.com/xhr0417/llm-course
+                 ↑ push / pull        ↓ clone / pull
+        🖥 Mac（本地）                  ☁ Linux 服务器
+        ~/Projects/llm-course         ~/workspace/llm-course</code></pre>
+<ul>
+<li><strong>GitHub 不是文件夹、也不跑命令</strong>：任何机器都必须先 <code>git clone</code>，本地才有一份真实目录；</li>
+<li><strong>Mac 和服务器可以各有一份 clone</strong>：两块硬盘上的两份文件，不会自动同步（用 GitHub 中转）；</li>
+<li><strong><code>cd</code> 只改变你当前登录那台机器的当前目录</strong>：Mac 终端里 <code>cd llm-course</code> 进的是 Mac 的目录；
+<code>ssh</code> 之后再 <code>cd llm-course</code>，进的是服务器的目录——名字一样，其实是两份文件。</li>
+</ul>
+<p>完整版（含服务器工作流 / 文件该放哪里 / 常见报错）：<a href="https://github.com/xhr0417/llm-course/blob/main/docs/ENVIRONMENT_AND_WORKFLOW.md">docs/ENVIRONMENT_AND_WORKFLOW.md</a>。</p>
 </div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>starter/
 ├── README.md            # 先读它：Step → 测试 对应表
 ├── requirements.txt     # 只需要 pytest
@@ -125,16 +141,35 @@ NaN 事件          : 否</code></pre>
 ├── samples/train_nan.log
 ├── src/log_analyzer/    # ← 你要在这里写代码（现在全是 NotImplementedError）
 └── tests/               # 41 个测试，分 8 个步骤文件</p>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">cd projects/log-analyzer/starter
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🖥 Mac 或 ☁ Linux Server（任选一台，以下命令全部在同一台上执行）</div><div class="box-body"><pre><code class="lang-bash"># 【第 0 件事】确认你在哪台机器（看提示符不够放心就运行这两条）
+hostname        # 我在哪台机器
+pwd             # 我在哪个目录
+
+# 【如果你还没有这个 repo】先 clone（路径只是示例，可以换成你喜欢的目录）
+cd ~/Projects                       # Mac 示例；服务器可用 mkdir -p ~/workspace &amp;&amp; cd ~/workspace
+git clone https://github.com/xhr0417/llm-course.git
+cd llm-course
+
+# 【如果你已经有 repo，只是想确认/回到 repo root】
+cd &quot;$(git rev-parse --show-toplevel)&quot;
+pwd                                 # 记下这个输出 = 你的 repo root
+
+# 【进入 starter】
+cd projects/log-analyzer/starter
+pwd                                 # 必须以 llm-course/projects/log-analyzer/starter 结尾
+                                    # ⚠️ 不是这个结尾就先别继续：你可能在另一台机器或另一个目录
+
+# 【装依赖 + 第一次运行】在哪台机器跑 pytest，就在哪台机器装依赖
 pip install -r requirements.txt
 pytest -q</code></pre>
-</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">41 failed in 0.15s</code></pre>
+</div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-text">41 failed in 0.15s</code></pre>
 （真实记录：本课程在 Python 3.12 + pytest 9 下实测为 <code>41 failed in 0.15s</code>；pytest 版本不同时措辞可能略有差异，关键是 41 个失败。）</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果你看到的是：</p>
 <ul>
-<li><code>No module named pytest</code> → 依赖没装好，先 <code>pip install -r requirements.txt</code>；</li>
-<li><code>collected 0 items</code> → 你在错误的目录里运行 pytest，检查 <code>pytest.ini</code> 是否和 tests/ 同级；</li>
-<li><code>0 failed</code> 全绿 → 你打开的不是 starter，而是参考实现（检查路径里有没有 <code>starter/</code>）。</li>
+<li><code>No module named pytest</code> → 依赖没装好，先 <code>pip install -r requirements.txt</code>（注意：要在<strong>同一台机器</strong>上装）；</li>
+<li><code>collected 0 items</code> → 你在错误的目录里运行 pytest，先用 <code>pwd</code> 确认路径最后是 <code>projects/log-analyzer/starter</code>；</li>
+<li><code>0 failed</code> 全绿 → 你打开的不是 starter，而是参考实现（检查路径里有没有 <code>starter/</code>）；</li>
+<li><code>cd: no such file or directory</code> → 目录名不对或你在另一台机器；用 <code>pwd</code> + <code>ls</code> 看看自己实际在哪。</li>
 </ul>
 </div></div><details class="hint"><summary>Hint 1 — 用哪个 Python</summary><div class="fold-body"><p>先 <code>python --version</code> 确认 3.9+。如果有多个环境（conda / pyenv / venv），
 记住你装 pytest 的那个环境和运行 pytest 的必须是同一个。</p>
@@ -144,6 +179,8 @@ pytest -q</code></pre>
 </div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
 <li>为什么 starter 一上来应该是红的？如果它全绿，问题出在哪？</li>
 <li>测试文件为什么按 step 拆成 8 个而不是一个大文件？</li>
+<li>在 Mac 终端里 <code>cd llm-course</code> 和 ssh 到服务器后 <code>cd llm-course</code>，进入的是同一个文件夹吗？为什么？</li>
+<li>现在你运行 <code>pytest</code> 的这台机器是 Mac 还是服务器？刚才 <code>pip install</code> 装到了哪台机器上？</li>
 </ul>
 </div></div></div></section><section class="guided-step" data-step-id="s1" data-state="todo"><div class="gs-head"><span class="gs-num">1</span><h3 class="gs-title">先读取日志文件（pathlib / encoding）</h3><span class="gs-chip">步骤 1</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>实现 <code>load_lines()</code>：按 UTF-8 读出文件的每一行；文件不存在时抛出 <code>FileNotFoundError</code>。</p>
 </div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>所有数据管线都从「把文件读进内存」开始。用 <code>pathlib.Path</code> 而不是字符串拼路径，
@@ -164,7 +201,7 @@ lines = text.splitlines()                     # 不带换行符；空行保留�
 <li>TODO 2：用 <code>.splitlines()</code> 拆行返回（返回 <code>list[str]</code>）；</li>
 <li>TODO 3：<strong>不要</strong> try/except 吞掉 <code>FileNotFoundError</code>——让它抛给调用方。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step1_load.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step1_load.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">5 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li><code>UnicodeDecodeError</code> → 检查是否真的写了 <code>encoding=&quot;utf-8&quot;</code>；</li>
@@ -223,7 +260,7 @@ def step(self) -&gt; Optional[int]: ...                    # 可能没有 step �
 <li>TODO 4：<code>parse_line</code>——先过行级正则拿到「时间戳 + 级别 + 内容」，再把内容里的 <code>key=value</code> 全部切进 <code>fields</code>；</li>
 <li>TODO 5/6：<code>parse_lines</code>（跳过 None）、<code>parse_log_file</code>（组合 <code>load_lines</code> + <code>parse_lines</code>）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step2_parse.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step2_parse.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">8 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li><code>tokens_per_sec</code> 永远返回 None → 你的 KV 正则不允许键名里出现 <code>/</code>（这是本项目开发时<strong>真实踩过的坑</strong>，见下方 Bug 记录）；</li>
@@ -290,7 +327,7 @@ def parse_line(line: str) -&gt; Optional[LogEvent]:
 <li>TODO 3：确认 <code>parse_line</code> 对空行 / 续行（无时间戳）返回 <code>None</code>；</li>
 <li>TODO 4：不用改代码，但用一行 Python 验证 NaN 行如何进入统计——它的信号在 <code>message</code> 里（含 &quot;NaN&quot;），不在 <code>fields</code> 里。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step3_messy.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step3_messy.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">6 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li><code>test_bad_value_does_not_crash</code> 失败 → 你在属性里让 <code>ValueError</code> 冒出来了；</li>
@@ -349,7 +386,7 @@ def step(self) -&gt; Optional[int]:
 <li>TODO 5：<code>to_dict()</code>——把结果整理成 JSON 友好的 dict（Step 6 的 <code>--json</code> 直接用它，<strong>字段名就是对外契约</strong>）；</li>
 <li>TODO 6：<code>analyze(events, total_lines)</code>——遍历事件：填 steps / losses / throughput / warnings / errors / nan_events / start_time / end_time。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step4_stats.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step4_stats.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">6 passed</code></pre>
 （此时 final loss = 2.271，平均吞吐 ≈ 4936 tokens/s——你的预测对吗？）</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
@@ -402,7 +439,7 @@ WARNING step=550 val_loss increased (2.41 -&gt; 2.46)</code></pre>
 <li>正确答案应该是什么？为什么？</li>
 <li>把 <code>steps</code> 列表打印出来，数一数它有几个元素？<code>losses</code> 呢？</li>
 </ol>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step5_alignment.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step5_alignment.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">3 failed</code></pre>
 预期失败信息：<code>assert 550 == 1000</code>（或类似）。<strong>这个红色是设计好的</strong>——它模拟真实开发中测试抓出 bug 的那一刻。</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果 <code>best_step</code> 直接 AttributeError → 你的 <code>TrainRunStats</code> 还没有 <code>best_step</code> / <code>loss_steps</code>，这正是本步要添加的。</p>
@@ -473,7 +510,7 @@ def build_parser() -&gt; argparse.ArgumentParser:
 <li>TODO 3：<code>main(argv)</code>——解析参数 → 读文件 → 解析 → 统计 → 输出；<code>--json</code> 时 <code>print(json.dumps(stats.to_dict(), ensure_ascii=False, indent=2))</code>；</li>
 <li>TODO 4：文件末尾加 <code>if __name__ == &quot;__main__&quot;: raise SystemExit(main())</code>。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step6_cli.py
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step6_cli.py
 python -m log_analyzer.cli samples/train.log</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">4 passed</code></pre>
 以及你在终端里第一次看到自己写的报告。</p>
@@ -558,7 +595,7 @@ CI / Shell / Airflow 都靠它判断成败。而 logging 决定了线上出问�
 <li>TODO 4：坏行只记 <code>logger.warning</code> / 静默跳过，最终 <code>return 0</code>；</li>
 <li>TODO 5：NaN 事件打到 <code>stderr</code>（<code>print(..., file=sys.stderr)</code>）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step7_logging.py
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step7_logging.py
 python -m log_analyzer.cli samples/train_nan.log; echo &quot;exit=$?&quot;</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">6 passed</code></pre>
 <code>echo &quot;exit=$?&quot;</code> 对 NaN 日志应显示 <code>exit=0</code>（NaN 是业务结论，不是程序失败）。</p>
@@ -607,7 +644,7 @@ python -m log_analyzer.cli samples/train_nan.log; echo &quot;exit=$?&quot;</code
 <li>TODO 2：极端数值（<code>loss=0.0</code> / 超长行 / 重复 step）→ 你的统计口径是什么？用测试把它固化下来；</li>
 <li>TODO 3：CLI 边界（相对路径 / 临时目录里的中文文件名 / <code>--json</code> 同时 <code>--warnings</code>）→ 行为符合预期。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step8_edge_cases.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step8_edge_cases.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">3 passed</code></pre>
 只有你自己写完才会变绿。</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><p>如果你的新测试抓出了实现里的 bug——恭喜，这就是测试的价值。
@@ -621,11 +658,13 @@ python -m log_analyzer.cli samples/train_nan.log; echo &quot;exit=$?&quot;</code
 <li>你的 3 个测试分别保护了什么行为？如果未来有人重构 parser，它们能拦住什么回归？</li>
 </ul>
 </div></div></div></section><section class="guided-step" data-step-id="s9" data-state="todo"><div class="gs-head"><span class="gs-num">9</span><h3 class="gs-title">最终验收与复盘</h3><span class="gs-chip">步骤 9</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p><code>pytest -q</code> 全部通过；对两个真实样例运行 CLI；不看资料回答 5 个复盘问题。</p>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q
 python -m log_analyzer.cli samples/train.log
 python -m log_analyzer.cli samples/train_nan.log --warnings</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">41 passed</code></pre>
-CLI 输出（参考实现的真实记录；你的格式可以不同，但要包含同样的信息）：</p>
+口径说明：41 = 课程提供的 38 个测试 + <strong>你在 Step 8 自己写的 3 个边界测试</strong>。
+如果这里显示 <code>38 passed, 3 failed</code>，说明源码已经完成、但 Step 8 的 3 个占位测试还没换成你自己的用例。</p>
+<p>CLI 输出（参考实现的真实记录；你的格式可以不同，但要包含同样的信息）：</p>
 <pre><code class="lang-">== 训练日志分析 ==
 事件数            : 22（原始行 22）
 step 范围         : 10 → 1000
@@ -1095,7 +1134,7 @@ tests/test_analyzer.py   # 14 个测试函数</code></pre>
 </div></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 11 章 PyTorch</span><span class="tag">第 23 章 LLM Evaluation（评测脚本工程化）</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 26 章 HuggingFace Guided Build</span><span class="tag">Capstone 1（Eval Harness）</span><span class="tag">Capstone 2（RAG Service）</span></div></div>
 </div>
-<div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：用工业生态跑模型 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/25-python-engineering.md">content/25-python-engineering.md</a></div>
+<div class="static-nav"><a href="job-ready.html">← Job-Ready Track：从「会解释」到「能做出来」</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="huggingface.html">HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/25-python-engineering.md">content/25-python-engineering.md</a></div>
 </main>
 </body>
 </html>

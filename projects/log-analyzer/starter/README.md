@@ -8,6 +8,85 @@
 > 项目目标：训练日志分析 CLI —— 一次训练跑完（或崩掉）后，从 `train.log` 回答：
 > final loss / best loss 出现在第几步、平均吞吐、warning、是否出现 NaN。
 
+## 从零开始：我要在哪里开始、怎么开始
+
+**推荐执行位置**：🖥 Mac 或 ☁ Linux Server **都可以**（本项目只用标准库 + pytest，不需要 GPU，不需要下载模型）。
+在哪台机器执行，`pip install` 和 `pytest` 就必须都在**同一台**机器上。
+
+### 1. 先分清三个「地址」（很多新手卡在这里）
+
+| 东西 | 是什么 | 示例（只是示例，别照抄路径） |
+| --- | --- | --- |
+| GitHub 仓库 | 远程仓库（代码的源头，不是文件夹） | `https://github.com/xhr0417/llm-course` |
+| 你的 clone | 这份仓库在你机器上的**工作副本** | Mac：`~/Projects/llm-course` · Server：`~/workspace/llm-course` |
+| 本 starter | repo 里的一个子目录 | `<你的 clone>/projects/log-analyzer/starter` |
+
+Mac 上一份 clone、服务器上一份 clone 是**两块硬盘上的两份文件**，通过 GitHub（push/pull）同步。
+详见 [docs/ENVIRONMENT_AND_WORKFLOW.md](../../../docs/ENVIRONMENT_AND_WORKFLOW.md)。
+
+### 2. 五条命令：从零到第一次 pytest
+
+```bash
+# ① 【在哪执行】Mac 或 Linux Server（任选一台）
+# 【当前目录】你想把 repo 放在哪，就先 cd 到哪
+git clone https://github.com/xhr0417/llm-course.git
+cd llm-course
+pwd        # 记下它 = 你的 repo root；以后所有相对路径都从这出发
+# （已经有 clone：cd 到你的 repo root；忘了在哪：git rev-parse --show-toplevel）
+
+# ② 进入 starter（本项目的起点）
+# 【当前目录】repo root
+cd projects/log-analyzer/starter
+pwd        # 应看到 .../llm-course/projects/log-analyzer/starter；不是的话先别继续
+
+# ③ 安装依赖（在哪台机器跑 pytest，就在哪台机器装）
+pip install -r requirements.txt
+
+# ④ 第一次运行：应该满屏红色
+pytest -q
+```
+
+补充命令（任何时候迷路时用）：
+
+```bash
+hostname   # 我在哪台机器（Mac 还是服务器）
+pwd        # 我在哪个目录
+```
+
+### 3. starter 和 reference 是什么关系？
+
+- **starter**（你现在这里，`projects/log-analyzer/starter/`）：刻意**不完整**的版本，核心函数是 TODO；
+- **reference**（上一级目录 `projects/log-analyzer/`）：完整参考实现。**做完本 starter 再看**，否则项目不算你做的。
+
+### 4. 哪些文件要改？哪些不要改？
+
+| 文件 | 动它吗 |
+| --- | --- |
+| `src/log_analyzer/*.py` | ✅ 要实现的代码全在这里 |
+| `tests/test_step1-7*.py` | ❌ 不要改（它们是验收标准） |
+| `tests/test_step8_edge_cases.py` | ✅ 唯一例外：Step 8 要你把 3 个占位测试改成自己的边界用例 |
+| `samples/` | 🔧 只读；想加样例可以另建文件 |
+| `README.md` | 🔧 可以补充你的笔记 |
+| `../`（reference 实现） | ⚠️ 只做对照；不要改 reference 来让 starter 变绿 |
+
+### 5. 做完之后：代码放哪里？
+
+- **方式 A · 学习模式（推荐先这样）**：就在这份 clone 里完成，用 `git add / commit` 记录每一步进展；
+- **方式 B · 作品集模式（准备放进简历时）**：把 starter 复制成**你自己的独立仓库**（安全做法，不删除任何东西）：
+
+```bash
+# 【在哪执行】做项目的机器【当前目录】repo root
+mkdir -p ~/Projects/my-log-analyzer
+cp -R projects/log-analyzer/starter/. ~/Projects/my-log-analyzer/
+cd ~/Projects/my-log-analyzer
+git init
+git add .
+git commit -m "my log-analyzer implementation"
+pytest -q                  # 确认它仍然可运行
+```
+
+⚠️ 不要把整个课程 repo 伪装成你自己独立写的作品；简历里的仓库应该是你完成并整理过的项目。
+
 ## Quick Start
 
 ```bash
@@ -32,10 +111,14 @@ pytest -q          # ✅ 现在就应该失败（这是设计的一部分）
 | 6 | 变成 CLI（argparse / --json / --warnings） | `pytest -q tests/test_step6_cli.py` | 4 passed |
 | 7 | logging 与退出码（可恢复 vs 致命） | `pytest -q tests/test_step7_logging.py` | 6 passed |
 | 8 | 写你自己的 3 个边界测试 | `pytest -q tests/test_step8_edge_cases.py` | 3 passed（你自己写） |
-| 9 | 最终验收 | `pytest -q` | 41 passed |
+| 9 | 最终验收 | `pytest -q` | 41 passed ※ |
 
 > 跑全量 `pytest -q` 时，后面步骤的测试也会一起失败——这是正常的：
 > 它们在等你先完成前面的步骤。
+
+※ **41 passed 的准确口径**：41 = 课程提供的 38 个测试 + **Step 8 里你自己写的 3 个测试**。
+只完成 `src/` 而不写 Step 8 的 3 个边界测试，会停在 `38 passed, 3 failed`——
+这不是 bug，是设计的一部分（Step 8 的验收就是「你来写测试」）。
 
 ## 目录结构
 

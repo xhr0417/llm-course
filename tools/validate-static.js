@@ -22,7 +22,7 @@ function fail(file, msg) { console.log(`❌ ${file}: ${msg}`); errors++; }
 function warn(file, msg) { console.log(`⚠️  ${file}: ${msg}`); warnings++; }
 
 // 未解析的容器标记（构建管线应全部替换掉）
-const CONTAINER_RE = /:::(note|warning|quiz|fold|unfold|key|interview|related|shapeflow|demo|intuition|math|engineering|example|answer|lab|step|goal|why|files|predict|write|run|expect|fail|inspect|bug|hint|solution|checkpoint|explain)\b/g;
+const CONTAINER_RE = /:::(note|warning|quiz|fold|unfold|key|interview|related|shapeflow|demo|intuition|math|engineering|example|answer|lab|step|goal|why|files|predict|write|run|expect|fail|inspect|bug|hint|solution|checkpoint|explain|where)\b/g;
 
 const files = fs.readdirSync(CHAPTERS).filter(f => f.endsWith(".html"));
 console.log(`检查 ${files.length} 个静态页（manifest 共 ${manifest.chapters.length} 章）\n`);

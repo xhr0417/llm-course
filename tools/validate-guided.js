@@ -38,8 +38,8 @@ const GUIDED_KINDS = ["lab", "step", "goal", "why", "files", "predict", "write",
 const appSrc = read("js/app.js");
 const buildSrc = read("tools/build-static.js");
 const PARITY_MARKERS = [
-  '"lab"', '"step"', '"hint"', '"solution"',
-  "box-write", "box-checkpoint", "box-run", "box-fail", "box-predict", "box-explain",
+  '"lab"', '"step"', '"hint"', '"solution"', '"where"',
+  "box-write", "box-checkpoint", "box-run", "box-fail", "box-predict", "box-explain", "box-where",
   "guided-lab", "guided-step", "gl-progress", "data-lab-id", "data-step-id",
 ];
 PARITY_MARKERS.forEach((marker) => {
@@ -54,6 +54,11 @@ const SMOKE = [
   ":::lab 冒烟测试 Lab",
   "goal: 验证渲染",
   "project: projects/demo/starter",
+  "",
+  ":::where",
+  "机器：🖥 Mac / ☁ Linux Server",
+  "Repo Root：运行 `pwd` 确认",
+  ":::",
   "",
   ":::step 1 第一步",
   ":::goal",
@@ -76,7 +81,7 @@ const SMOKE = [
   ":::",
   "",
   ":::step 2 第二步",
-  ":::run",
+  ":::run 🖥 Mac / ☁ Server",
   "```bash",
   "pytest -q",
   "```",
@@ -95,6 +100,9 @@ mustHave("冒烟渲染：缺少 box-write", smokeHtml.includes("box-write"));
 mustHave("冒烟渲染：缺少 box-run", smokeHtml.includes("box-run"));
 mustHave("冒烟渲染：缺少 box-checkpoint", smokeHtml.includes("box-checkpoint"));
 mustHave("冒烟渲染：缺少 box-explain", smokeHtml.includes("box-explain"));
+mustHave("冒烟渲染：缺少 box-where 执行环境块", smokeHtml.includes("box-where") && smokeHtml.includes("where-row"));
+mustHave("冒烟渲染：where 的 key:value 未正确分行", smokeHtml.includes("where-k"));
+mustHave("冒烟渲染：run 盒子未保留「运行 · 位置标签」", smokeHtml.includes("运行 · 🖥 Mac / ☁ Server"));
 mustHave("冒烟渲染：hint 应为折叠块", /<details class="hint">/.test(smokeHtml));
 mustHave("冒烟渲染：solution 应为折叠块", /<details class="solution">/.test(smokeHtml));
 mustHave("冒烟渲染：Solution 不应默认展开", !/<details class="solution" open/.test(smokeHtml) && !/<details open class="solution"/.test(smokeHtml));

@@ -28,9 +28,9 @@
 - [强化学习与偏好优化：PPO 与 GRPO](https://llm.xhr0417.cn/chapters/rl-grpo.html): 为什么 SFT 后还要 RL、PPO/GRPO 结构、Group Relative Advantage、Policy Ratio、Clip、KL 散度。
 - [LLM Evaluation：模型到底有没有变好](https://llm.xhr0417.cn/chapters/llm-eval.html): PPL、Exact Match、pass@k、MMLU/C-Eval/GSM8K、LLM-as-a-Judge、置信区间、Contamination、失败案例分析 + 评测 Lab。
 - [Job-Ready Track：从「会解释」到「能做出来」](https://llm.xhr0417.cn/chapters/job-ready.html): 三条岗位路线（应用/算法/Infra）、岗位能力矩阵、第一次找实习的学习顺序、Checkpoint 验收与四级学习标准。
-- [Python Engineering for AI：写出能跑的项目](https://llm.xhr0417.cn/chapters/python-engineering.html): 项目结构、argparse/dataclass、typing、pathlib 与 JSONL、logging、异常、HTTP/retry、asyncio、pytest——配可运行 CLI 项目 + pytest 全套。
-- [HuggingFace for LLM Engineering：用工业生态跑模型](https://llm.xhr0417.cn/chapters/huggingface.html): AutoTokenizer、Chat Template、AutoModelForCausalLM、logits、generate、left padding 批量推理、datasets、PEFT/LoRA、save/load——Qwen2.5 真实实验。
-- [Capstone 1 · Mini LLM Evaluation Harness](https://llm.xhr0417.cn/chapters/capstone-eval.html): Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。
+- [Python Engineering for AI：从 0 亲手构建第一个真实项目](https://llm.xhr0417.cn/chapters/python-engineering.html): Guided Build：starter + 10 个 Step（41 个分步测试从红变绿，含你自己写的 3 个边界测试）；配套 Learn 参考手册（项目结构、argparse/dataclass、typing、pathlib/JSONL、logging、异常、asyncio、pytest）与完整参考实现。
+- [HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow](https://llm.xhr0417.cn/chapters/huggingface.html): Guided Build：starter + 13 个 Step（38 个分步测试从红变绿）——Tokenizer、Chat Template、logits、generate、left padding、response-only mask、PEFT/LoRA、save/load，最终用 Qwen2.5 跑出你自己的实验报告；含模型缓存/HF_HOME 与执行位置说明。
+- [Capstone 1 · Build Your Own Mini LLM Evaluation Harness](https://llm.xhr0417.cn/chapters/capstone-eval.html): Guided Capstone：starter + 15 个 Step（79 个分步测试从红变绿）——Adapter × Task × Runner × Reports、并发+重试+SQLite 缓存、bad case 分类、自动报告与真实 C3/XCOPA 评测记录——Checkpoint C。
 - [Retrieval & RAG Engineering：让模型用上外部知识](https://llm.xhr0417.cn/chapters/rag-engineering.html): Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。
 - [Capstone 2 · Search + Rerank + RAG Service](https://llm.xhr0417.cn/chapters/capstone-rag.html): 完整 RAG 服务：FastAPI（/chat、/chat/stream SSE、超时 504、线程池）+ 检索与生成分开评测 + Dockerfile——Checkpoint D。
 - [Capstone 3 · Real SFT / LoRA Experiment](https://llm.xhr0417.cn/chapters/capstone-sft.html): 真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。

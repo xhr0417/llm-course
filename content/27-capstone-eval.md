@@ -80,14 +80,31 @@ effort: 4–8 小时（15 步；Step 10-11 需要理解 asyncio）
 prereq: 第 23 章评测概念 + 第 25 章工程（asyncio/重试/退出码）+ 第 26 章 HF（Step 7 用）
 deliverable: 79 测试全绿 + results.json/summary.md/badcases.jsonl + 一份你自己的 bad case 分析
 
+:::where
+机器：`pytest`（15 步）与 mock CLI 🖥 Mac / ☁ Server 都可以；真实 HF 评测 ☁ Server 优先；API 评测需联网环境
+执行纪律：`pip install` 和 `pytest` 必须在同一台机器上执行；Step 7 额外装 transformers/torch
+Repo Root：你 clone 的 llm-course 目录（`pwd` 确认）
+Starter：projects/llm-eval/starter（你写代码的地方）
+Reference：projects/llm-eval（完整实现 + 真实评测记录，做完再对照）
+模型缓存：**不在 repo**——HuggingFace 缓存（`echo $HF_HOME`）
+大文件：无大文件进 repo；评测产出在 `outputs/run_*/`（已 gitignore，小型 summary 可拷进你自己的仓库）
+密钥：API key 只放环境变量（`export OPENAI_API_KEY=...`），**绝不提交**；示例里不出现真实 key
+GitHub：先 `git status`；只提交 src/ tests/ run_eval.py README 等小文件
+:::
+
 :::step 0 Starter：先让 77 个测试红给你看
 :::goal
-跑通 starter，接受「77 failed, 2 passed」这个起点，并理解为什么这个数字是设计好的。
+在一台明确的机器上跑通 starter（并确认当前目录正确），接受「77 failed, 2 passed」这个起点，
+并理解为什么这个数字是设计好的。
 :::
 
 :::why
 这是整个 Track 最大的项目。一上来就 77 个红色很容易让人想放弃——
 所以先做一个心理建设：**它们不是错误，是任务清单**。你会按 Step 一组一组把它们变绿。
+
+执行位置规则与前两章完全一致（第 25 章 Step 0 有完整讲解）：
+`pip install` 和 `pytest` 必须在同一台机器；GitHub 网页不是命令执行环境；
+Mac 和服务器上的两份 clone 通过 GitHub 同步。
 :::
 
 :::files
@@ -100,9 +117,21 @@ starter/
 └── tests/               # 79 个用例，按 Step 拆成 15 个文件
 :::
 
-:::run
+:::run 🖥 Mac / ☁ Linux Server（任选一台，以下全部在同一台上执行）
 ```bash
+# 【确认你在哪】提示符 yourname@MacBook ~ % = Mac；user@ubuntu:~$ = 服务器
+hostname
+pwd
+
+# 【回到 repo root】已有 clone 的情况（还没有 clone 就按根 README Quick Start 做一次）
+cd "$(git rev-parse --show-toplevel)"
+pwd
+
+# 【进入 starter】
 cd projects/llm-eval/starter
+pwd        # 必须以 llm-course/projects/llm-eval/starter 结尾；不是就先别继续
+
+# 【装依赖 + 第一次运行】在哪台机器跑 pytest，就在哪台机器装
 pip install -r requirements.txt
 pytest -q
 ```
@@ -138,6 +167,8 @@ Runner/并发那些「难」的部分都在后面，那时你已经热身完毕�
 :::explain
 - 为什么这个 starter 不把测试文件合并成一个？
 - 「77 failed」里，有多少是 import 层面的失败、多少是行为层面的失败？为什么这个区别重要？
+- 你现在这个 starter 的完整路径是什么（`pwd` 输出）？如果要在另一台机器继续做，需要做哪两件事？
+- 评测产出的 `outputs/run_*/` 要不要提交 GitHub？`summary.md` 这类小报告和模型缓存分别该怎么处理？
 :::
 :::
 
@@ -174,7 +205,7 @@ Runner/并发那些「难」的部分都在后面，那时你已经热身完毕�
 - TODO 4：`valid` 之外的结果必须返回 None（评测里 `"E"` 对 4 选 1 是无效答案）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step1a_parser_basic.py    # 第一版：5 passed
 pytest -q tests/test_step1b_parser_robust.py   # 鲁棒版：15 passed
@@ -272,7 +303,7 @@ def parse_choice(text: str, valid: str = "ABCDEFGH") -> str | None:
 - TODO 3：`f1_score(prediction, gold)`——用给出的 `_tokenize`，注意多重集合（词频）匹配。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step2_metrics.py
 ```
@@ -381,7 +412,7 @@ class EvalTask(ABC):
 - TODO 3：跑测试时注意夹具答案的均衡性断言（防止全 A / 全 B 造成假高分——这是测试的自我拷问）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step3a_c3_task.py      # 6 passed
 pytest -q tests/test_step3b_xcopa_task.py   # 4 passed
@@ -482,7 +513,7 @@ class ModelAdapter(ABC):
 - TODO 2：返回 `[self.policy(p) for p in prompts]`（默认 policy 返回 `"A"`）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step4_mock_adapter.py
 ```
@@ -557,7 +588,7 @@ accuracy 会接近 25%（随机水平）还是更高？为什么？
   （优先 `await adapter.aclose()`，否则 `adapter.close()`）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step5_runner.py
 ```
@@ -659,7 +690,7 @@ bad case 分类把「失败」变成「可行动项」。
 - TODO 4：生成失败时同时累加 `report.api_errors`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step6_badcase.py
 ```
@@ -744,9 +775,11 @@ HF 推理代码包装成 Adapter——你会看到「换模型 = 换 Adapter」�
 - TODO 3：`generate`——按 `self.batch_size` 分块调用。
 :::
 
-:::run
+:::run 🖥 Mac / ☁ Linux Server（需要 transformers/torch；tiny 模型测试很快）
 ```bash
-pip install transformers torch
+# 【当前目录】.../llm-course/projects/llm-eval/starter
+pwd
+pip install transformers torch        # 在哪台机器跑测试，就在哪台机器装
 pytest -q tests/test_step7_hf_adapter.py
 ```
 :::
@@ -832,7 +865,7 @@ def make_key(model, prompt, params):
 2. 改动 `max_new_tokens` 或 `temperature` 之后，同一个 prompt 应该命中缓存吗？
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step8_cache.py
 ```
@@ -936,7 +969,7 @@ def get(self, key: str) -> str | None:
 - TODO 4：`agenerate`（复用长连接 `httpx.AsyncClient`）+ `aclose`（在事件循环内关闭）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step9_api_adapter.py
 ```
@@ -1026,7 +1059,7 @@ async def _one(self, client, prompt: str) -> str:
 - TODO 4：把 Step 5 的「一次性 agenerate」替换为「先查缓存 → 生成缺失 → 回填」。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step10_async.py
 ```
@@ -1121,7 +1154,7 @@ async def _generate_missing(adapter, prompts, cfg):
 - TODO 4：把两个生成分支（并发/批量）都包进重试。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step11_retry.py
 ```
@@ -1215,7 +1248,7 @@ async def _async_with_retry(fn, cfg):
 - TODO 4：返回 `{"results": Path, "summary": Path, "badcases": Path}`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step12_reports.py
 ```
@@ -1294,13 +1327,25 @@ CLI 是用户唯一看见的界面：参数、退出码、输出目录，缺一�
   `python run_eval.py --adapter hf --model Qwen/Qwen2.5-0.5B-Instruct --tasks c3 --data c3=data/c3_dialog_60.jsonl --limit 60 --output outputs/run_real`。
 :::
 
-:::run
+:::run 🎮 Mac / ☁ Server（下面几条都不需要 GPU；真实数据下载需联网）
 ```bash
+# 【当前目录】.../llm-course/projects/llm-eval/starter
+pwd
+
+# 单元测试 + 全量
 pytest -q tests/test_step13_cli.py
 pytest -q                          # 全量：79 passed
+
+# mock 评测（不加载任何真实模型）——产出落在 outputs/run_mock/（gitignore）
 python run_eval.py --adapter mock --tasks c3 xcopa qa --limit 12 --output outputs/run_mock
 ls outputs/run_mock
 ```
+:::
+
+:::note 真实数据 / 真实模型分别在哪跑？
+- `scripts/fetch_data.py` 拉取 C3/XCOPA 切片：任意能联网的机器（Mac 或 Server）都可以，产出是小型 JSONL，可以留在 repo 的 `data/`；
+- `--adapter hf` 真实模型评测：**推荐服务器**（模型进 HF 缓存，`echo $HF_HOME` 查看）；Mac 也能跑，注意磁盘；
+- `--adapter openai` API 评测：任意能联网环境；key 只放环境变量（`export OPENAI_API_KEY=...`），绝不写进代码或提交。
 :::
 
 :::expect
@@ -1383,7 +1428,7 @@ def build_adapter(cfg: EvalConfig) -> ModelAdapter:
 - Q4：哪些错误是系统问题（parser/prompt/并发配置），哪些才是模型能力？
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 # 从你的报告里统计（示例）
 python - <<'EOF'

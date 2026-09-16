@@ -50,15 +50,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        starter: [log-analyzer, llm-eval]
+        include:
+          - starter: log-analyzer
+          - starter: llm-eval
+          # hf-mini-lab：只跑「不依赖真实大模型」的测试（RUN_MODEL_TESTS=0，不下载任何模型）；
+          # 需要下载 tiny 模型的完整红灯验证放在 dispatch 专用 job（guided-hf-full）。
+          - starter: hf-mini-lab
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+      - name: CPU-only torch (hf-mini-lab only — 避免 CUDA 大轮子)
+        if: matrix.starter == 'hf-mini-lab'
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -r projects/${{ matrix.starter }}/starter/requirements.txt
       - name: Starter 初始状态必须是「有意义的红」（全绿 = 教学设计失效）
         working-directory: projects/${{ matrix.starter }}/starter
+        env:
+          RUN_MODEL_TESTS: "0"
+          KMP_DUPLICATE_LIB_OK: "TRUE"
         run: |
           set +e
           pytest -q > starter_output.txt 2>&1
@@ -71,6 +83,10 @@ jobs:
           fi
           if ! grep -qE "[0-9]+ (failed|error)" starter_output.txt; then
             echo "::error::starter 失败输出中没有 failed/error 计数"
+            exit 1
+          fi
+          if [ "${{ matrix.starter }}" = "hf-mini-lab" ] && ! grep -q "7 failed" starter_output.txt; then
+            echo "::error::hf-mini-lab starter 期望非模型测试恰好 7 failed（RUN_MODEL_TESTS=0），实际不符——请检查测试结构或环境"
             exit 1
           fi
           echo "✅ starter 初始状态符合设计：测试为红，等待学生逐步实现。"
@@ -104,3 +120,37 @@ jobs:
           RUN_MODEL_TESTS: "1"
           KMP_DUPLICATE_LIB_OK: "TRUE"
         run: pytest -q
+
+  guided-hf-full:
+    name: Guided hf starter red-state with tiny model (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -r projects/hf-mini-lab/starter/requirements.txt
+      - name: 含模型测试的 starter 仍必须为红（只下载 tiny 模型，不下载 0.5B）
+        working-directory: projects/hf-mini-lab/starter
+        env:
+          RUN_MODEL_TESTS: "1"
+          KMP_DUPLICATE_LIB_OK: "TRUE"
+        run: |
+          set +e
+          pytest -q > starter_full.txt 2>&1
+          code=$?
+          tail -40 starter_full.txt
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::starter 全量模型测试不应全绿（学生还没有实现）"
+            exit 1
+          fi
+          if ! grep -qE "[0-9]+ failed" starter_full.txt; then
+            echo "::error::未见 failed 计数——模型测试可能被跳过或环境异常"
+            exit 1
+          fi
+          echo "✅ hf-mini-lab starter（含 tiny 模型测试）仍为红，符合教学设计。"

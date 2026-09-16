@@ -62,11 +62,12 @@
 **最终交付物**（就是你要亲手做的）：一个 CLI 项目 ——
 
 ```bash
+# 【在哪台机器】Mac 或 Linux Server 都可以【当前目录】repo root
 cd projects/log-analyzer/starter
 python -m log_analyzer.cli samples/train.log          # 人读报告
 python -m log_analyzer.cli samples/train.log --json    # 机读 JSON（字段契约）
 python -m log_analyzer.cli samples/train_nan.log --warnings
-pytest -q                                              # 41 passed（你的验收线）
+pytest -q                                              # 41 passed（= 课程提供的 38 个 + 你写的 3 个）
 ```
 
 参考实现的真实输出（本课程实测，你做完后应该得到同类结果）：
@@ -91,16 +92,46 @@ goal: 从零实现一个训练日志分析 CLI：parser / stats / CLI 三层，4
 project: projects/log-analyzer/starter
 effort: 2–4 小时（每个 Step 约 10–30 分钟）
 prereq: 会写 Python 函数 / 循环 / dict；装好 Python 3.9+ 与 pytest
-deliverable: 通过全部测试的 src/log_analyzer/（parser + stats + cli）+ 真实运行输出 + 自己的 3 个边界测试
+deliverable: 通过全部测试的 src/log_analyzer/（parser + stats + cli；41 = 课程提供的 38 + 你在 Step 8 自己写的 3 个）+ 真实运行输出
+
+:::where
+机器：🖥 Mac 或 ☁ Linux Server 都可以（纯标准库 + pytest，不需要 GPU，也不需要下载模型）
+执行纪律：`pip install` 和 `pytest` 必须在同一台机器上执行；换机器要重新装依赖
+Repo Root：你 clone 的 llm-course 目录（`pwd` 确认；忘了位置用 `git rev-parse --show-toplevel`）
+Starter：projects/log-analyzer/starter（你写代码的地方）
+Reference：projects/log-analyzer（完整参考实现，做完再对照）
+大文件：无——本项目不产生模型 / 数据集 / checkpoint
+GitHub：只提交 src/ tests/ README 等小文件；先 `git status` 看，再 `git add` 具体文件
+:::
 
 :::step 0 准备环境与第一次运行
 :::goal
-把 starter 跑起来，亲眼看到初始的红色测试——并且理解：**这是正常的**。
+在一台明确的机器（Mac 或 Linux Server）上、一个明确的目录里，把 starter 跑起来看到初始红色测试——
+并且理解：**这是正常的**。
 :::
 
 :::why
 Guided Build 的第一步永远是「先让项目在你机器上跑起来」。连测试都不会跑，
 后面每一步的反馈都无从谈起。
+
+但比「跑起来」更前置的问题是：**这条命令在哪台机器、哪个目录执行？** 很多新手就卡在这里——
+所以本步会把你需要的环境知识一次讲清，后面所有 Step 都只重复标签。
+:::
+
+:::note 先建立三个「地方」的心智模型（只读一次，后面都靠它）
+```text
+        🌐 GitHub（远程仓库）               ← 网页，不是命令执行环境
+        https://github.com/xhr0417/llm-course
+                 ↑ push / pull        ↓ clone / pull
+        🖥 Mac（本地）                  ☁ Linux 服务器
+        ~/Projects/llm-course         ~/workspace/llm-course
+```
+- **GitHub 不是文件夹、也不跑命令**：任何机器都必须先 `git clone`，本地才有一份真实目录；
+- **Mac 和服务器可以各有一份 clone**：两块硬盘上的两份文件，不会自动同步（用 GitHub 中转）；
+- **`cd` 只改变你当前登录那台机器的当前目录**：Mac 终端里 `cd llm-course` 进的是 Mac 的目录；
+  `ssh` 之后再 `cd llm-course`，进的是服务器的目录——名字一样，其实是两份文件。
+
+完整版（含服务器工作流 / 文件该放哪里 / 常见报错）：[docs/ENVIRONMENT_AND_WORKFLOW.md](https://github.com/xhr0417/llm-course/blob/main/docs/ENVIRONMENT_AND_WORKFLOW.md)。
 :::
 
 :::files
@@ -113,16 +144,34 @@ starter/
 └── tests/               # 41 个测试，分 8 个步骤文件
 :::
 
-:::run
+:::run 🖥 Mac 或 ☁ Linux Server（任选一台，以下命令全部在同一台上执行）
 ```bash
+# 【第 0 件事】确认你在哪台机器（看提示符不够放心就运行这两条）
+hostname        # 我在哪台机器
+pwd             # 我在哪个目录
+
+# 【如果你还没有这个 repo】先 clone（路径只是示例，可以换成你喜欢的目录）
+cd ~/Projects                       # Mac 示例；服务器可用 mkdir -p ~/workspace && cd ~/workspace
+git clone https://github.com/xhr0417/llm-course.git
+cd llm-course
+
+# 【如果你已经有 repo，只是想确认/回到 repo root】
+cd "$(git rev-parse --show-toplevel)"
+pwd                                 # 记下这个输出 = 你的 repo root
+
+# 【进入 starter】
 cd projects/log-analyzer/starter
+pwd                                 # 必须以 llm-course/projects/log-analyzer/starter 结尾
+                                    # ⚠️ 不是这个结尾就先别继续：你可能在另一台机器或另一个目录
+
+# 【装依赖 + 第一次运行】在哪台机器跑 pytest，就在哪台机器装依赖
 pip install -r requirements.txt
 pytest -q
 ```
 :::
 
 :::expect
-```
+```text
 41 failed in 0.15s
 ```
 （真实记录：本课程在 Python 3.12 + pytest 9 下实测为 `41 failed in 0.15s`；pytest 版本不同时措辞可能略有差异，关键是 41 个失败。）
@@ -130,9 +179,10 @@ pytest -q
 
 :::fail
 如果你看到的是：
-- `No module named pytest` → 依赖没装好，先 `pip install -r requirements.txt`；
-- `collected 0 items` → 你在错误的目录里运行 pytest，检查 `pytest.ini` 是否和 tests/ 同级；
-- `0 failed` 全绿 → 你打开的不是 starter，而是参考实现（检查路径里有没有 `starter/`）。
+- `No module named pytest` → 依赖没装好，先 `pip install -r requirements.txt`（注意：要在**同一台机器**上装）；
+- `collected 0 items` → 你在错误的目录里运行 pytest，先用 `pwd` 确认路径最后是 `projects/log-analyzer/starter`；
+- `0 failed` 全绿 → 你打开的不是 starter，而是参考实现（检查路径里有没有 `starter/`）；
+- `cd: no such file or directory` → 目录名不对或你在另一台机器；用 `pwd` + `ls` 看看自己实际在哪。
 :::
 
 :::hint Hint 1 — 用哪个 Python
@@ -152,6 +202,8 @@ pytest -q
 :::explain
 - 为什么 starter 一上来应该是红的？如果它全绿，问题出在哪？
 - 测试文件为什么按 step 拆成 8 个而不是一个大文件？
+- 在 Mac 终端里 `cd llm-course` 和 ssh 到服务器后 `cd llm-course`，进入的是同一个文件夹吗？为什么？
+- 现在你运行 `pytest` 的这台机器是 Mac 还是服务器？刚才 `pip install` 装到了哪台机器上？
 :::
 :::
 
@@ -189,7 +241,7 @@ lines = text.splitlines()                     # 不带换行符；空行保留�
 - TODO 3：**不要** try/except 吞掉 `FileNotFoundError`——让它抛给调用方。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step1_load.py
 ```
@@ -294,7 +346,7 @@ def step(self) -> Optional[int]: ...                    # 可能没有 step → 
 - TODO 5/6：`parse_lines`（跳过 None）、`parse_log_file`（组合 `load_lines` + `parse_lines`）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step2_parse.py
 ```
@@ -405,7 +457,7 @@ def parse_line(line: str) -> Optional[LogEvent]:
 - TODO 4：不用改代码，但用一行 Python 验证 NaN 行如何进入统计——它的信号在 `message` 里（含 "NaN"），不在 `fields` 里。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step3_messy.py
 ```
@@ -505,7 +557,7 @@ def step(self) -> Optional[int]:
 - TODO 6：`analyze(events, total_lines)`——遍历事件：填 steps / losses / throughput / warnings / errors / nan_events / start_time / end_time。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step4_stats.py
 ```
@@ -601,7 +653,7 @@ WARNING step=550 val_loss increased (2.41 -> 2.46)
 3. 把 `steps` 列表打印出来，数一数它有几个元素？`losses` 呢？
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step5_alignment.py
 ```
@@ -724,7 +776,7 @@ def build_parser() -> argparse.ArgumentParser:
 - TODO 4：文件末尾加 `if __name__ == "__main__": raise SystemExit(main())`。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step6_cli.py
 python -m log_analyzer.cli samples/train.log
@@ -828,7 +880,7 @@ CI / Shell / Airflow 都靠它判断成败。而 logging 决定了线上出问�
 - TODO 5：NaN 事件打到 `stderr`（`print(..., file=sys.stderr)`）。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step7_logging.py
 python -m log_analyzer.cli samples/train_nan.log; echo "exit=$?"
@@ -917,7 +969,7 @@ def main(argv: list[str] | None = None) -> int:
 - TODO 3：CLI 边界（相对路径 / 临时目录里的中文文件名 / `--json` 同时 `--warnings`）→ 行为符合预期。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q tests/test_step8_edge_cases.py
 ```
@@ -959,7 +1011,7 @@ pytest -q tests/test_step8_edge_cases.py
 `pytest -q` 全部通过；对两个真实样例运行 CLI；不看资料回答 5 个复盘问题。
 :::
 
-:::run
+:::run 🎮 Mac / Server
 ```bash
 pytest -q
 python -m log_analyzer.cli samples/train.log
@@ -971,6 +1023,9 @@ python -m log_analyzer.cli samples/train_nan.log --warnings
 ```
 41 passed
 ```
+口径说明：41 = 课程提供的 38 个测试 + **你在 Step 8 自己写的 3 个边界测试**。
+如果这里显示 `38 passed, 3 failed`，说明源码已经完成、但 Step 8 的 3 个占位测试还没换成你自己的用例。
+
 CLI 输出（参考实现的真实记录；你的格式可以不同，但要包含同样的信息）：
 
 ```

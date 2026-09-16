@@ -1,1 +1,29 @@
+# ---------- macOS ----------
 .DS_Store
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# ---------- 密钥 / 环境变量（永远不要提交） ----------
+.env
+.env.*
+!.env.example
+
+# ---------- 实验产物 / 大文件（留在服务器或本地，不进 Git） ----------
+outputs/
+checkpoints/
+datasets/
+wandb/
+.cache/
+
+# ---------- 模型权重文件（repo 只放代码；
+#            确需提交小型 LoRA adapter 时用 git add -f 单独豁免） ----------
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin

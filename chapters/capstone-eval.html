@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capstone 1 · Mini LLM Evaluation Harness · 大模型知识体系</title>
-<meta name="description" content="Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。">
+<title>Capstone 1 · Build Your Own Mini LLM Evaluation Harness · 大模型知识体系</title>
+<meta name="description" content="Guided Capstone：starter + 15 个 Step（79 个分步测试从红变绿）——Adapter × Task × Runner × Reports、并发+重试+SQLite 缓存、bad case 分类、自动报告与真实 C3/XCOPA 评测记录——Checkpoint C。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-eval.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -31,8 +31,8 @@
   <a href="../index.html#/capstone-eval">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：用工业生态跑模型</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-eval">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 27 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 1 · Mini LLM Evaluation Harness</h1><p class="chapter-desc">Adapter × Task × Runner × Reports：真实 C3/XCOPA 评测、并发+重试+SQLite 缓存、bad case 分类、自动报告——Checkpoint C。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-eval">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 27 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 1 · Build Your Own Mini LLM Evaluation Harness</h1><p class="chapter-desc">Guided Capstone：starter + 15 个 Step（79 个分步测试从红变绿）——Adapter × Task × Runner × Reports、并发+重试+SQLite 缓存、bad case 分类、自动报告与真实 C3/XCOPA 评测记录——Checkpoint C。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
 <div class="md">
 <h1>第 27 章 · Capstone 1：Build Your Own Mini LLM Evaluation Harness</h1>
 <div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>评测岗的面试官不会问你「accuracy 怎么算」——他们会问「<strong>你做过评测系统吗？bad case 怎么分类？并发怎么控？缓存 key 怎么设计？</strong>」这一章你要<strong>亲手写出来</strong>：Checkpoint C。</p>
@@ -138,9 +138,13 @@ c3:   accuracy 55.0%（随机 25%）| parse_failure 0 | api_error 0 | 19.2s
 xcopa: accuracy 55.0%（随机 50%）| parse_failure 0 | api_error 0 | 8.2s
 qa:   EM 0% / F1 21.9%          | parse_failure 0 | api_error 0 | 4.9s
 缓存复跑：同一评测第二遍，评测阶段 32.3s → 0.0s（128 条全部命中）</code></pre>
-<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">llm-eval · Guided Build（Capstone 1）</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零构建评测 harness：parser × metrics × task × adapter × runner（缓存/并发/重试）× bad case × reports</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/llm-eval/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">4–8 小时（15 步；Step 10-11 需要理解 asyncio）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">第 23 章评测概念 + 第 25 章工程（asyncio/重试/退出码）+ 第 26 章 HF（Step 7 用）</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">79 测试全绿 + results.json/summary.md/badcases.jsonl + 一份你自己的 bad case 分析</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/capstone-eval">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">Starter：先让 77 个测试红给你看</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>跑通 starter，接受「77 failed, 2 passed」这个起点，并理解为什么这个数字是设计好的。</p>
+<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">llm-eval · Guided Build（Capstone 1）</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零构建评测 harness：parser × metrics × task × adapter × runner（缓存/并发/重试）× bad case × reports</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/llm-eval/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">4–8 小时（15 步；Step 10-11 需要理解 asyncio）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">第 23 章评测概念 + 第 25 章工程（asyncio/重试/退出码）+ 第 26 章 HF（Step 7 用）</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">79 测试全绿 + results.json/summary.md/badcases.jsonl + 一份你自己的 bad case 分析</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/capstone-eval">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div><div class="box-body"><div class="where-rows"><div class="where-row"><span class="where-k">机器</span><span class="where-v"><code>pytest</code>（15 步）与 mock CLI 🖥 Mac / ☁ Server 都可以；真实 HF 评测 ☁ Server 优先；API 评测需联网环境</span></div><div class="where-row"><span class="where-k">执行纪律</span><span class="where-v"><code>pip install</code> 和 <code>pytest</code> 必须在同一台机器上执行；Step 7 额外装 transformers/torch</span></div><div class="where-row"><span class="where-k">Repo Root</span><span class="where-v">你 clone 的 llm-course 目录（<code>pwd</code> 确认）</span></div><div class="where-row"><span class="where-k">Starter</span><span class="where-v">projects/llm-eval/starter（你写代码的地方）</span></div><div class="where-row"><span class="where-k">Reference</span><span class="where-v">projects/llm-eval（完整实现 + 真实评测记录，做完再对照）</span></div><div class="where-row"><span class="where-k">模型缓存</span><span class="where-v"><strong>不在 repo</strong>——HuggingFace 缓存（<code>echo $HF_HOME</code>）</span></div><div class="where-row"><span class="where-k">大文件</span><span class="where-v">无大文件进 repo；评测产出在 <code>outputs/run_*/</code>（已 gitignore，小型 summary 可拷进你自己的仓库）</span></div><div class="where-row"><span class="where-k">密钥</span><span class="where-v">API key 只放环境变量（<code>export OPENAI_API_KEY=...</code>），<strong>绝不提交</strong>；示例里不出现真实 key</span></div><div class="where-row"><span class="where-k">GitHub</span><span class="where-v">先 <code>git status</code>；只提交 src/ tests/ run_eval.py README 等小文件</span></div></div></div></div><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">Starter：先让 77 个测试红给你看</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>在一台明确的机器上跑通 starter（并确认当前目录正确），接受「77 failed, 2 passed」这个起点，
+并理解为什么这个数字是设计好的。</p>
 </div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>这是整个 Track 最大的项目。一上来就 77 个红色很容易让人想放弃——
 所以先做一个心理建设：<strong>它们不是错误，是任务清单</strong>。你会按 Step 一组一组把它们变绿。</p>
+<p>执行位置规则与前两章完全一致（第 25 章 Step 0 有完整讲解）：
+<code>pip install</code> 和 <code>pytest</code> 必须在同一台机器；GitHub 网页不是命令执行环境；
+Mac 和服务器上的两份 clone 通过 GitHub 同步。</p>
 </div></div><div class="box box-files"><div class="box-title">📁 当前已有文件</div><div class="box-body"><p>starter/
 ├── README.md            # Step → 测试表（先读）
 ├── requirements.txt     # httpx + pytest（Step 7 再装 transformers/torch）
@@ -148,7 +152,19 @@ qa:   EM 0% / F1 21.9%          | parse_failure 0 | api_error 0 | 4.9s
 ├── data/mini_*.jsonl    # 教学夹具：c3 12 / xcopa 12 / qa 8
 ├── src/llm_eval/        # ← 你要写代码的地方
 └── tests/               # 79 个用例，按 Step 拆成 15 个文件</p>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">cd projects/llm-eval/starter
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🖥 Mac / ☁ Linux Server（任选一台，以下全部在同一台上执行）</div><div class="box-body"><pre><code class="lang-bash"># 【确认你在哪】提示符 yourname@MacBook ~ % = Mac；user@ubuntu:~$ = 服务器
+hostname
+pwd
+
+# 【回到 repo root】已有 clone 的情况（还没有 clone 就按根 README Quick Start 做一次）
+cd &quot;$(git rev-parse --show-toplevel)&quot;
+pwd
+
+# 【进入 starter】
+cd projects/llm-eval/starter
+pwd        # 必须以 llm-course/projects/llm-eval/starter 结尾；不是就先别继续
+
+# 【装依赖 + 第一次运行】在哪台机器跑 pytest，就在哪台机器装
 pip install -r requirements.txt
 pytest -q</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">77 failed, 2 passed in 3.6s</code></pre>
@@ -166,6 +182,8 @@ Runner/并发那些「难」的部分都在后面，那时你已经热身完毕�
 </div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><ul>
 <li>为什么这个 starter 不把测试文件合并成一个？</li>
 <li>「77 failed」里，有多少是 import 层面的失败、多少是行为层面的失败？为什么这个区别重要？</li>
+<li>你现在这个 starter 的完整路径是什么（<code>pwd</code> 输出）？如果要在另一台机器继续做，需要做哪两件事？</li>
+<li>评测产出的 <code>outputs/run_*/</code> 要不要提交 GitHub？<code>summary.md</code> 这类小报告和模型缓存分别该怎么处理？</li>
 </ul>
 </div></div></div></section><section class="guided-step" data-step-id="s1" data-state="todo"><div class="gs-head"><span class="gs-num">1</span><h3 class="gs-title">Choice Parser：accuracy 的隐形杀手</h3><span class="gs-chip">步骤 1</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>实现 <code>parse_choice()</code> / <code>strip_special()</code>：从模型五花八门的自由文本里可靠地提取选项字母。</p>
 </div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>模型不会乖乖输出一个字母。它可能输出 <code>&quot;C&quot;</code>、<code>&quot;c&quot;</code>、<code>&quot;答案是 C&quot;</code>、<code>&quot;**D**&quot;</code>、<code>&quot;C) 因为……&quot;</code>。
@@ -183,7 +201,7 @@ Runner/并发那些「难」的部分都在后面，那时你已经热身完毕�
 「答案是 X」「我认为选 X」「<strong>X</strong>」「X)」「（X）」等模式；</li>
 <li>TODO 4：<code>valid</code> 之外的结果必须返回 None（评测里 <code>&quot;E&quot;</code> 对 4 选 1 是无效答案）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step1a_parser_basic.py    # 第一版：5 passed
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step1a_parser_basic.py    # 第一版：5 passed
 pytest -q tests/test_step1b_parser_robust.py   # 鲁棒版：15 passed</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">5 passed
 15 passed</code></pre>
@@ -240,7 +258,7 @@ def parse_choice(text: str, valid: str = &quot;ABCDEFGH&quot;) -&gt; str | None:
 <li>TODO 2：<code>exact_match(prediction, golds)</code>——任一 gold 匹配即 1.0；</li>
 <li>TODO 3：<code>f1_score(prediction, gold)</code>——用给出的 <code>_tokenize</code>，注意多重集合（词频）匹配。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step2_metrics.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step2_metrics.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">12 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li><code>accuracy(0,0)</code> 返回 0 → 你的实现漏了空集合分支（测试会明确检查 nan）；</li>
@@ -302,7 +320,7 @@ def exact_match(prediction, golds) -&gt; float:
 <li>TODO 2（XCOPA）：同样的四件套，<code>valid=&quot;AB&quot;</code>——<strong>先自己写，再对照 C3</strong>；</li>
 <li>TODO 3：跑测试时注意夹具答案的均衡性断言（防止全 A / 全 B 造成假高分——这是测试的自我拷问）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step3a_c3_task.py      # 6 passed
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step3a_c3_task.py      # 6 passed
 pytest -q tests/test_step3b_xcopa_task.py   # 4 passed</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">6 passed
 4 passed</code></pre>
@@ -359,7 +377,7 @@ Mock 让「Runner 的逻辑」独立于「模型的推理」被测试——这�
 <li>TODO 1：<code>generate(prompts)</code>——<code>self.calls += len(prompts)</code>；</li>
 <li>TODO 2：返回 <code>[self.policy(p) for p in prompts]</code>（默认 policy 返回 <code>&quot;A&quot;</code>）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step4_mock_adapter.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step4_mock_adapter.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">4 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li><code>calls</code> 计数不对 → 注意按 <strong>prompt 个数</strong>累加（batch 算多次调用）。</li>
@@ -390,7 +408,7 @@ accuracy 会接近 25%（随机水平）还是更高？为什么？</p>
 <li>TODO 3：<code>evaluate_tasks</code>——循环任务、构造 <code>RunReport</code>、<code>finally</code> 里关闭 cache 与 adapter
 （优先 <code>await adapter.aclose()</code>，否则 <code>adapter.close()</code>）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step5_runner.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step5_runner.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">4 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li>accuracy 是 1.0 或 0.0 → 你忘了除以 n（或答案均衡夹具下恰好全对/全错，检查 policy）；</li>
@@ -475,7 +493,7 @@ bad case 分类把「失败」变成「可行动项」。</p>
 <li>TODO 3：<code>error_type</code> 的判定顺序：生成失败（raw == &quot;&quot;）→ <code>api_error</code>；否则调用 <code>task.error_type(raw, prediction, item)</code>；</li>
 <li>TODO 4：生成失败时同时累加 <code>report.api_errors</code>。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step6_badcase.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step6_badcase.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">3 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li>badcase 数量对但 <code>raw_output</code> 是空 → 你保存的是清理前的变量或清理后的变量（要保存<strong>清理前</strong>的原始输出，供事后分析）；</li>
@@ -520,7 +538,9 @@ HF 推理代码包装成 Adapter——你会看到「换模型 = 换 Adapter」�
 <li>TODO 2：<code>_generate_batch</code>——chat template → 批量编码（left padding）→ <code>generate</code> → 只 decode 新 token；</li>
 <li>TODO 3：<code>generate</code>——按 <code>self.batch_size</code> 分块调用。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pip install transformers torch
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🖥 Mac / ☁ Linux Server（需要 transformers/torch；tiny 模型测试很快）</div><div class="box-body"><pre><code class="lang-bash"># 【当前目录】.../llm-course/projects/llm-eval/starter
+pwd
+pip install transformers torch        # 在哪台机器跑测试，就在哪台机器装
 pytest -q tests/test_step7_hf_adapter.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">2 passed</code></pre>
 （测试用 tiny 模型；<code>RUN_MODEL_TESTS=0</code> 时跳过。）</p>
@@ -568,7 +588,7 @@ def make_key(model, prompt, params):
 <li>这个 key 有什么问题？什么时候会「命中旧答案」？</li>
 <li>改动 <code>max_new_tokens</code> 或 <code>temperature</code> 之后，同一个 prompt 应该命中缓存吗？</li>
 </ol>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step8_cache.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step8_cache.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">7 failed（第一版 key）</code></pre>
 测试会明确指出 <code>max_new_tokens</code> / <code>temperature</code> 变化时必须得到不同的 key。修好之后：
 <pre><code class="lang-">7 passed</code></pre></p>
@@ -640,7 +660,7 @@ def get(self, key: str) -&gt; str | None:
 429/5xx 与超时 → <code>AdapterError</code>（可重试）；400/401 → <code>FatalAdapterError</code>；</li>
 <li>TODO 4：<code>agenerate</code>（复用长连接 <code>httpx.AsyncClient</code>）+ <code>aclose</code>（在事件循环内关闭）。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step9_api_adapter.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step9_api_adapter.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">5 passed</code></pre>
 （测试用本地 HTTP 假服务端验证协议，不访问收费 API。）</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
@@ -689,7 +709,7 @@ def get(self, key: str) -&gt; str | None:
 <li>TODO 3：<code>False</code> 时：<code>await asyncio.to_thread(lambda: adapter.generate(prompts))</code>（批量一次调用）；</li>
 <li>TODO 4：把 Step 5 的「一次性 agenerate」替换为「先查缓存 → 生成缺失 → 回填」。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step10_async.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step10_async.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">3 passed</code></pre>
 关键是第二个断言：<code>max_inflight &gt; 1</code>——一个串行 for 循环会让它失败。</p>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
@@ -742,7 +762,7 @@ results = await asyncio.gather(*(one(p) for p in prompts))</code></pre></p>
 <li>TODO 3：退避 <code>await asyncio.sleep(cfg.retry_backoff_s * (2 ** attempt))</code>；</li>
 <li>TODO 4：把两个生成分支（并发/批量）都包进重试。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step11_retry.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step11_retry.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">3 passed</code></pre>
 <ul>
 <li>前 4 次失败的适配器最终成功（<code>api_errors == 0</code>）；</li>
@@ -797,7 +817,7 @@ raise last</code></pre></p>
 结果总览表（任务 / 样本数 / 指标百分比 / parse_failure / api_error / 用时）、bad case 示例、复现命令；</li>
 <li>TODO 4：返回 <code>{&quot;results&quot;: Path, &quot;summary&quot;: Path, &quot;badcases&quot;: Path}</code>。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step12_reports.py</code></pre>
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step12_reports.py</code></pre>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><pre><code class="lang-">4 passed</code></pre>
 </div></div><div class="box box-fail"><div class="box-title">🚨 如果失败，观察这些</div><div class="box-body"><ul>
 <li>summary 里百分比不对 → 指标是 0–1 的小数，展示时要 × 100；</li>
@@ -837,10 +857,21 @@ openai → <code>OpenAICompatibleAdapter(...)</code>；未知类型抛 <code>Val
 <li>TODO 4（可选，需要 transformers/torch）：真实模型评测——
 <code>python run_eval.py --adapter hf --model Qwen/Qwen2.5-0.5B-Instruct --tasks c3 --data c3=data/c3_dialog_60.jsonl --limit 60 --output outputs/run_real</code>。</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash">pytest -q tests/test_step13_cli.py
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / ☁ Server（下面几条都不需要 GPU；真实数据下载需联网）</div><div class="box-body"><pre><code class="lang-bash"># 【当前目录】.../llm-course/projects/llm-eval/starter
+pwd
+
+# 单元测试 + 全量
+pytest -q tests/test_step13_cli.py
 pytest -q                          # 全量：79 passed
+
+# mock 评测（不加载任何真实模型）——产出落在 outputs/run_mock/（gitignore）
 python run_eval.py --adapter mock --tasks c3 xcopa qa --limit 12 --output outputs/run_mock
 ls outputs/run_mock</code></pre>
+</div></div><div class="box box-note"><div class="box-title">📘 真实数据 / 真实模型分别在哪跑？</div><div class="box-body"><ul>
+<li><code>scripts/fetch_data.py</code> 拉取 C3/XCOPA 切片：任意能联网的机器（Mac 或 Server）都可以，产出是小型 JSONL，可以留在 repo 的 <code>data/</code>；</li>
+<li><code>--adapter hf</code> 真实模型评测：<strong>推荐服务器</strong>（模型进 HF 缓存，<code>echo $HF_HOME</code> 查看）；Mac 也能跑，注意磁盘；</li>
+<li><code>--adapter openai</code> API 评测：任意能联网环境；key 只放环境变量（<code>export OPENAI_API_KEY=...</code>），绝不写进代码或提交。</li>
+</ul>
 </div></div><div class="box box-expect"><div class="box-title">👀 预期结果</div><div class="box-body"><p><pre><code class="lang-">2 passed
 79 passed
 outputs/run_mock/ 里出现 results.json summary.md badcases.jsonl</code></pre>
@@ -885,7 +916,7 @@ XCOPA <code>{&quot;id&quot;,&quot;premise&quot;,&quot;question&quot;,&quot;choic
 <li>Q3：API error 有多少条？（本地模型通常是 0；API 模型要关注）</li>
 <li>Q4：哪些错误是系统问题（parser/prompt/并发配置），哪些才是模型能力？</li>
 </ul>
-</div></div><div class="box box-run"><div class="box-title">▶️ 运行</div><div class="box-body"><pre><code class="lang-bash"># 从你的报告里统计（示例）
+</div></div><div class="box box-run"><div class="box-title">▶️ 运行 · 🎮 Mac / Server</div><div class="box-body"><pre><code class="lang-bash"># 从你的报告里统计（示例）
 python - &lt;&lt;&#39;EOF&#39;
 import json
 cases = [json.loads(l) for l in open(&quot;outputs/run_mock/badcases.jsonl&quot;, encoding=&quot;utf-8&quot;)]
@@ -1235,7 +1266,7 @@ pytest -q    # 32 passed（21 个测试函数）</code></pre>
 </div></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 23 章 LLM Evaluation</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 2（RAG 评测）</span><span class="tag">Capstone 3（SFT 前后对比）</span><span class="tag">大模型评测实习面试</span></div></div>
 </div>
-<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：用工业生态跑模型</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/27-capstone-eval.md">content/27-capstone-eval.md</a></div>
+<div class="static-nav"><a href="huggingface.html">← HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/27-capstone-eval.md">content/27-capstone-eval.md</a></div>
 </main>
 </body>
 </html>

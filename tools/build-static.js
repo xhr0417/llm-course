@@ -125,6 +125,7 @@ const BOX_META = {
   predict: { icon: "🔮", title: "先预测，再运行", cls: "box-predict" },
   write: { icon: "✍️", title: "现在你来做", cls: "box-write" },
   run: { icon: "▶️", title: "运行", cls: "box-run" },
+  where: { icon: "📍", title: "执行环境与目录（先看这里）", cls: "box-where" },
   expect: { icon: "👀", title: "预期结果", cls: "box-expect" },
   fail: { icon: "🚨", title: "如果失败，观察这些", cls: "box-fail" },
   inspect: { icon: "🔍", title: "定位与修复", cls: "box-fail" },
@@ -240,12 +241,27 @@ function renderStepStatic(node, ctx, chapterId) {
     "</section>";
 }
 
+function renderWhereStatic(content) {
+  const rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); }).map(function (line) {
+    const m = /^([^:：]{1,16})[:：]\s*(.+)$/.exec(line.trim());
+    const inline = function (text) {
+      return renderMarkdown(text).replace(/^<p>\s*/, "").replace(/<\/p>\s*$/, "");
+    };
+    if (!m) return '<div class="where-row"><span class="where-v where-full">' + inline(line.trim()) + "</span></div>";
+    return '<div class="where-row"><span class="where-k">' + escapeHtml(m[1].trim()) + "</span>" +
+      '<span class="where-v">' + inline(m[2].trim()) + "</span></div>";
+  }).join("");
+  return '<div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div>' +
+    '<div class="box-body"><div class="where-rows">' + rows + "</div></div></div>";
+}
+
 function renderContainer(node, ctx, chapterId) {
   if (!node) return "";
   const kind = node.kind, title = node.title, content = node.content;
 
   if (kind === "lab") return renderLabStatic(node, ctx, chapterId);
   if (kind === "step") return renderStepStatic(node, ctx, chapterId);
+  if (kind === "where") return renderWhereStatic(content);
   if (kind === "hint") {
     return '<details class="hint"><summary>' + escapeHtml(title || "Hint") + "</summary>" +
       '<div class="fold-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
@@ -285,8 +301,10 @@ function renderContainer(node, ctx, chapterId) {
       '<div class="answer-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
   }
   const meta = BOX_META[kind] || { icon: "📄", title: "说明", cls: "box-note" };
+  // run 盒子的标题用作「执行位置」标签（如：🖥 Mac / ☁ Server），保留「运行」前缀
+  const displayTitle = (kind === "run" && title) ? meta.title + " · " + title : (title || meta.title);
   return '<div class="box ' + meta.cls + '">' +
-    '<div class="box-title">' + meta.icon + " " + escapeHtml(title || meta.title) + "</div>" +
+    '<div class="box-title">' + meta.icon + " " + escapeHtml(displayTitle) + "</div>" +
     '<div class="box-body">' + renderContent(content, ctx, chapterId) + "</div></div>";
 }
 

@@ -1095,6 +1095,24 @@ a.tag::after { content: " ↗"; font-size: 10px; color: var(--text-faint); }
 .box-explain { background: var(--purple-soft); border-color: color-mix(in srgb, var(--purple) 35%, transparent); }
 .box-explain .box-title { color: var(--purple); }
 
+/* ---------- Where：执行环境与目录 ---------- */
+.box-where {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.box-where .box-title { color: var(--accent-text); }
+.where-rows { display: flex; flex-direction: column; gap: 5px; }
+.where-row { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.65; align-items: baseline; flex-wrap: wrap; }
+.where-k { flex: none; min-width: 88px; font-size: 12px; font-weight: 700; color: var(--text-faint); }
+.where-v { min-width: 0; }
+.where-v code { font-size: 12.5px; }
+@media (max-width: 640px) {
+  .where-row { flex-direction: column; gap: 0; }
+  .where-k { min-width: 0; }
+  /* 宽表格在窄屏改为「表格内部横向滚动」，避免撑出内容列 / 触屏边缘 */
+  .md table { display: block; overflow-x: auto; }
+}
+
 /* ---------- Hint（可折叠） ---------- */
 details.hint {
   margin: 12px 0;
