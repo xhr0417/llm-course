@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HuggingFace for LLM Engineering：用工业生态跑模型 · 大模型知识体系</title>
+<meta name="description" content="AutoTokenizer、Chat Template、AutoModelForCausalLM、logits、generate、left padding 批量推理、datasets、PEFT/LoRA、save/load——Qwen2.5 真实实验。">
+<link rel="canonical" href="https://llm.xhr0417.cn/chapters/huggingface.html">
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
+  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .static-top a { color: var(--text-soft); text-decoration: none; font-size: 13.5px; }
+  .static-top a:hover { color: var(--accent-text); }
+  .static-top .crumb { font-weight: 700; color: var(--text); font-size: 14px; }
+  .static-top .spacer { margin-left: auto; }
+  .static-banner { margin: 18px 0 8px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 13px; }
+  .static-banner a { color: var(--accent-text); font-weight: 700; }
+  .static-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 26px 0; padding-top: 18px; border-top: 1px solid var(--border); }
+  .static-nav a { color: var(--accent-text); text-decoration: none; font-size: 13.5px; }
+  .static-nav a.static-home { color: var(--text-soft); }
+  .quiz-option { cursor: default; }
+</style>
+</head>
+<body>
+<header class="static-top">
+  <span class="crumb">大模型知识体系</span>
+  <span style="color:var(--text-faint);font-size:13px">第 26 章</span>
+  <span class="spacer"></span>
+  <a href="../index.html#/huggingface">🎮 交互版（含动画演示与测验）</a>
+</header>
+<main class="static-wrap">
+<div class="static-nav"><a href="python-engineering.html">← Python Engineering for AI：写出能跑的项目</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/huggingface">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 26 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">HuggingFace for LLM Engineering：用工业生态跑模型</h1><p class="chapter-desc">AutoTokenizer、Chat Template、AutoModelForCausalLM、logits、generate、left padding 批量推理、datasets、PEFT/LoRA、save/load——Qwen2.5 真实实验。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="md">
+<h1>第 26 章 · HuggingFace for LLM Engineering：用工业生态跑模型</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>你已经知道 Transformer 内部长什么样（第 7 章）——现在学习<strong>真实世界怎么使用</strong> Qwen / LLaMA / Mistral：一行加载模型，一行生成，几十行完成 LoRA 微调。</p>
+</div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 本章代码全部真实运行过</div><div class="box-body"><p>模型：<code>Qwen/Qwen2.5-0.5B-Instruct</code>（CPU，fp32）。页面中所有数字（形状、参数量、loss）都来自 <a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab"><code>projects/hf-mini-lab/</code></a> 的实测输出。</p>
+</div></div>
+<h2>26.1 Tokenizer：模型与文本之间的唯一接口</h2>
+<p>第 6 章你亲手训过 BPE。工业生态里不需要自己训——用 <code>AutoTokenizer</code> 加载现成的：</p>
+<pre><code class="lang-python">from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(&quot;Qwen/Qwen2.5-0.5B-Instruct&quot;)
+
+ids = tokenizer(&quot;你好，世界&quot;)[&quot;input_ids&quot;]          # encode
+tokenizer.decode(ids)                                # decode → &#39;你好，世界&#39;</code></pre>
+<p>实测输出：<code>vocab=151643</code>，<code>pad=&lt;|endoftext|&gt;</code>。</p>
+<p>三个必须理解的概念：</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>作用</th>
+<th>常见错误</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>padding</code></td>
+<td>把不同长度的序列补到等长（batch 推理必需）</td>
+<td>不设 <code>pad_token</code>（很多 LLM 默认没有 pad）</td>
+</tr>
+<tr>
+<td><code>truncation</code></td>
+<td>超长序列截断</td>
+<td>不截断 → 显存爆炸</td>
+</tr>
+<tr>
+<td><code>attention_mask</code></td>
+<td>标记哪些位置是真实 token（1）/ padding（0）</td>
+<td>忘记传给模型 → 模型 attend 到 pad</td>
+</tr>
+</tbody></table>
+<pre><code class="lang-python">tokenizer.pad_token = tokenizer.eos_token       # Qwen 默认没有 pad，用 eos 顶替</code></pre>
+<h2>26.2 Chat Template：最容易被忽视的工程细节</h2>
+<p>模型看到的不是 <code>{&quot;role&quot;: &quot;user&quot;}</code> 这种字典——<strong>模板把它渲染成一段带特殊 token 的文本</strong>：</p>
+<pre><code class="lang-python">messages = [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;什么是过拟合？&quot;}]
+
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)</code></pre>
+<p>本项目实测渲染结果（Qwen 的 ChatML 模板）：</p>
+<pre><code class="lang-">&lt;|im_start|&gt;system
+You are Qwen, created by Alibaba Cloud. You are a helpful assistant.&lt;|im_end|&gt;
+&lt;|im_start|&gt;user
+什么是过拟合？&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：messages → 渲染文本 → token<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换模型模板格式（ChatML / Llama），观察特殊 token 如何包裹每轮对话。</p>
+<p><a class="static-link" href="../index.html#/huggingface">在交互版中打开这个演示 →</a></p></div></div>
+<div class="box box-warning"><div class="box-title">⚠️ 为什么 Chat Template 不对，模型能力会明显下降</div><div class="box-body"><p>模型在预训练/SFT 阶段见到的就是这种「带特殊 token 的文本」。推理时如果格式不一致（少一个 <code>&lt;|im_end|&gt;</code>、system 位置错、手动拼字符串拼错），分布就偏移了——模型可能答非所问、不停顿、或复读。</p>
+<p><strong>工程纪律：永远用 <code>apply_chat_template</code>，不要手拼 ChatML 字符串。</strong></p>
+</div></div>
+<p><code>add_generation_prompt=True</code> 的作用：末尾补上 <code>&lt;|im_start|&gt;assistant\n</code>，告诉模型「该你说了」。</p>
+<h2>26.3 AutoModelForCausalLM：三个参数看住显存</h2>
+<pre><code class="lang-python">import torch
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    &quot;Qwen/Qwen2.5-0.5B-Instruct&quot;,
+    dtype=torch.float32,       # 或 bfloat16 / float16（第 17 章）
+)
+model.to(&quot;cpu&quot;)                # 或 &quot;cuda&quot; / device_map=&quot;auto&quot;</code></pre>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>含义</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>dtype</code></td>
+<td>权重精度</td>
+<td>fp32 精确但费显存；bf16 训练推理常用</td>
+</tr>
+<tr>
+<td><code>device_map</code></td>
+<td>多设备分配（<code>&quot;auto&quot;</code> 自动切分）</td>
+<td>单卡小模型不需要</td>
+</tr>
+<tr>
+<td><code>trust_remote_code</code></td>
+<td>允许执行仓库自带代码</td>
+<td>⚠️ <strong>不要无脑 True</strong>：这是在执行第三方代码，只在信任来源且必要（如新架构未进 transformers）时使用</td>
+</tr>
+</tbody></table>
+<p>实测：0.5B 模型 fp32 加载后 <code>494.0M 参数</code>，CPU 加载约 3 秒。参数量 × 精度字节（0.494B × 4 ≈ 2GB 内存）——这就是第 14 章显存估算的日常应用。</p>
+<h2>26.4 logits：回到第 9 章</h2>
+<pre><code class="lang-python">probe = tokenizer.apply_chat_template(messages, tokenize=True, return_dict=True, return_tensors=&quot;pt&quot;)
+logits = model(**probe).logits</code></pre>
+<p>本项目实测：</p>
+<pre><code class="lang-">input_ids: (1, 27) → logits: (1, 27, 151936)
+最后一位置 top-5 token id: [151644, 151645, 151657, 151658, 68728]</code></pre>
+<p><code>[batch, seq, vocab]</code>——第 9 章推的每一个符号，在工业代码里就是这个张量。<code>logits[0, -1]</code> 就是「下一个 token 的未归一化分数」，softmax 之后就是概率分布。</p>
+<div class="box box-note"><div class="box-title">📘 注意 detail：`logits.shape[-1] = 151936` 而 `tokenizer.vocab_size = 151643`</div><div class="box-body"><p>输出维度是 <code>config.vocab_size</code>，可能因并行/对齐被 pad 到更大。<strong>不要假设两者相等</strong>——这是我们写测试时真实踩到的坑（断言 <code>==</code> 失败，改为 <code>&gt;=</code>）。</p>
+</div></div>
+<h2>26.5 generate：参数与第 9 章数学的对应</h2>
+<pre><code class="lang-python">out = model.generate(**enc, max_new_tokens=64, do_sample=False)         # 贪心
+out = model.generate(**enc, max_new_tokens=64, do_sample=True, temperature=0.7, top_p=0.9)</code></pre>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>对应第 9 章</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>do_sample=False</code></td>
+<td>argmax</td>
+<td>贪心，确定；评测/复现常用</td>
+</tr>
+<tr>
+<td><code>temperature</code></td>
+<td>概率分布锐化/平滑</td>
+<td>越低越确定，越高越随机</td>
+</tr>
+<tr>
+<td><code>top_p</code></td>
+<td>nucleus sampling</td>
+<td>只从累计概率 ≥ p 的最小集合采样</td>
+</tr>
+<tr>
+<td><code>repetition_penalty</code></td>
+<td>对已出现 token 降权</td>
+<td>抑制复读</td>
+</tr>
+<tr>
+<td><code>max_new_tokens</code></td>
+<td>生成长度上限</td>
+<td>不是「输出总长」，是新增 token 数</td>
+</tr>
+</tbody></table>
+<p>真机实测（贪心，0.5B，CPU 约 9.5 token/s）：</p>
+<pre><code class="lang-">Q: 什么是学习率？
+A: 在机器学习和深度学习中，学习率（learning rate）是一个重要的参数。它定义了模型更新权重的速率或幅度。...</code></pre>
+<h2>26.6 批量推理与 left padding</h2>
+<p>单条推理浪费算力。batch 推理要处理「长度不一」：补到等长。</p>
+<pre><code class="lang-">right padding（训练常用）       left padding（decoder 推理常用）
+[问题A tokens][PAD][PAD]       [PAD][PAD][问题A tokens]
+[问题B tokens][问题B tokens]   [问题B tokens][问题B tokens]
+                 ↑ 生成从这里开始？错位          ↑ 生成从末尾开始 → 对齐</code></pre>
+<div class="demo-block"><div class="demo-head">🎮 交互：left vs right padding<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>切换 padding 方向，观察不同长度的 prompt 在 batch 中的对齐方式，以及生成位置是否一致。</p>
+<p><a class="static-link" href="../index.html#/huggingface">在交互版中打开这个演示 →</a></p></div></div>
+<pre><code class="lang-python">tokenizer.padding_side = &quot;left&quot;        # decoder-only 推理惯例
+batch = tokenizer(chats, return_tensors=&quot;pt&quot;, padding=True, truncation=True)</code></pre>
+<p>实测：<code>left pad shape: (2, 7)</code>，两个不同长度的 prompt 被补齐到 7；左对齐保证每个序列的<strong>最后一个位置</strong>都是真实的 prompt 末尾。</p>
+<h2>26.7 datasets：数据在生态里长什么样</h2>
+<pre><code class="lang-python">from datasets import Dataset
+
+ds = Dataset.from_list(rows)                    # 或 load_dataset(&quot;json&quot;, data_files=...)
+ds = ds.map(lambda ex: {&quot;text&quot;: render(ex[&quot;messages&quot;])})
+ds = ds.filter(lambda ex: len(ex[&quot;text&quot;]) &gt; 10)
+ds = ds.shuffle(seed=0)
+split = ds.train_test_split(test_size=0.25, seed=0)</code></pre>
+<p>实测：2 条样本 <code>map</code> + <code>filter</code> 全部正常。注意 <code>map</code> 是<strong>逐样本函数</strong>——不要在 <code>map</code> 里加载模型（它会被每个样本调用一次）。</p>
+<h2>26.8 Data Collator：变长数据如何拼成 batch</h2>
+<p>LLM 的 batch 需要三样东西对齐：<code>input_ids</code> / <code>labels</code> / <code>attention_mask</code>。padding 规则：</p>
+<ul>
+<li><code>input_ids</code>：短序列补 <code>pad_token_id</code>；</li>
+<li><code>attention_mask</code>：真实 token 为 1，补位为 0；</li>
+<li><code>labels</code>：补位和 prompt 部分都置 <code>-100</code>（交叉熵忽略）。</li>
+</ul>
+<p><strong>response-only loss（SFT 的关键）</strong>：只有 assistant 回复参与 loss，prompt 不参与。连接第 21 章 Loss Mask。</p>
+<pre><code class="lang-python">input_ids = tokenizer.apply_chat_template(messages, tokenize=True)
+prompt_ids = tokenizer.apply_chat_template(messages[:-1], tokenize=True, add_generation_prompt=True)
+labels = list(input_ids)
+labels[:len(prompt_ids)] = [-100] * len(prompt_ids)     # 掩掉 prompt</code></pre>
+<p>实测：首条训练样本 <code>62 token</code>，其中参与 loss 的 assistant token = <code>25</code>。</p>
+<h2>26.9 PEFT / LoRA：接通第 17 章</h2>
+<pre><code class="lang-python">from peft import LoraConfig, get_peft_model
+
+lora_cfg = LoraConfig(
+    r=8, lora_alpha=16, lora_dropout=0.0,
+    target_modules=[&quot;q_proj&quot;, &quot;v_proj&quot;],       # 注入哪些线性层
+    task_type=&quot;CAUSAL_LM&quot;,
+)
+peft_model = get_peft_model(model, lora_cfg)</code></pre>
+<p>实测（Qwen2.5-0.5B）：</p>
+<pre><code class="lang-">LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%</code></pre>
+<p><strong>千分之一的可训练参数</strong>——这就是第 17 章讲的 LoRA 在工程里的真实量级。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 真实的坑：PEFT 是「就地注入」</div><div class="box-body"><p><code>get_peft_model(model)</code> 和 <code>PeftModel.from_pretrained(model, path)</code> 会<strong>改造你传入的模型对象</strong>（在目标层上包 LoRA 包装器）。</p>
+<p>我们在项目里真实踩过：训练后拿同一个 <code>model</code> 变量当「base 基线」评测，测出来的其实是<strong>带 adapter 的模型</strong>——base 与 tuned 的 loss 完全相同（Δ=0.0000），差点写进报告。</p>
+<p>正确做法：基线评测用<strong>另一次干净加载</strong>的模型：</p>
+<pre><code class="lang-python">tuned_base = load_model(name)                      # 给 adapter
+tuned_model = PeftModel.from_pretrained(tuned_base, out_dir)
+clean_base = load_model(name)                      # 给基线
+base_eval = eval_loss(clean_base, ...)             # 干净
+tuned_eval = eval_loss(tuned_model, ...)           # 带 adapter</code></pre>
+</div></div>
+<h2>26.10 save / load：base / adapter / merged 三者的区别</h2>
+<table>
+<thead>
+<tr>
+<th>产物</th>
+<th>大小（0.5B 例子）</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>base model</td>
+<td>~2GB（fp32）/ ~1GB（bf16）</td>
+<td>原始权重</td>
+</tr>
+<tr>
+<td><strong>adapter</strong>（LoRA）</td>
+<td><strong>几 MB ~ 几十 MB</strong></td>
+<td>训练产物；分享/切换成本极低</td>
+</tr>
+<tr>
+<td>merged model</td>
+<td>同 base 大小</td>
+<td>合并后推理不带 PEFT 依赖，速度略快</td>
+</tr>
+</tbody></table>
+<p>本实验保存的就是 adapter（<code>outputs/lab_run/adapter_model.safetensors</code> + <code>adapter_config.json</code>），重新加载用：</p>
+<pre><code class="lang-python">from peft import PeftModel
+tuned = PeftModel.from_pretrained(load_model(name), &quot;outputs/lab_run&quot;)</code></pre>
+<h2>26.11 实战 Lab：hf-mini-lab（本课程已验证）</h2>
+<details class="fold" open><summary>目标</summary><div class="fold-body"><p>用 Qwen2.5-0.5B-Instruct 在 CPU 上完整走一遍：加载 → Chat Template → logits → 批量生成 → response-only mask → LoRA 训练 → 保存 → 重载 → 评测对比 → 自动生成实验报告。</p>
+</div></details>
+<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab"><code>projects/hf-mini-lab/</code></a></p>
+<pre><code class="lang-bash">cd projects/hf-mini-lab
+pip install -r requirements.txt
+python scripts/run_lab.py          # 完整实验（CPU 约 1 分钟）
+pytest -q</code></pre>
+<p><strong>实测结果</strong>（真实运行记录）：</p>
+<pre><code class="lang-">模型：Qwen/Qwen2.5-0.5B-Instruct | 494.0M 参数 | float32 | cpu
+LoRA 可训练参数：540,672 / 494,573,440 = 0.1093%
+训练 loss：2.6364 → 1.3052（60 步，batch 2，lr 2e-4，16 条样本）
+held-out response-only loss：base=3.8168 → tuned=3.6102（Δ=-0.2065）
+用时：60.2s（CPU）
+pytest：10 passed</code></pre>
+<p><strong>生成对比</strong>（held-out 问题，贪心解码）：</p>
+<pre><code class="lang-">Q: 用一句话解释什么是 LayerNorm。
+- base ： LayerNorm 是一种在深度学习中用于处理输入数据的标准化方法，它通过将每个样本的均值和方差进行归一化来减少模型中的梯度爆炸或消失问题，...
+- tuned： LayerNorm 调整输入向量的均值和方差，使其分布近似于正态分布，从而消除层内各参数对输出噪声的影响。
+
+Q: 用一句话解释什么是数据去重。
+- base ： 数据去重是指从一组数据中去除重复的记录，确保每个数据项都是唯一的。...
+- tuned： 数据去重就是消除前后一致的记录，让结果集更加干净和独立。</code></pre>
+<p>能看到 tuned 输出更接近训练数据的「一句话解释」风格——这就是 SFT 在真实模型上的效果。<strong>但请注意</strong>：16 条样本 / 60 步只够验证流程，不构成能力结论；正式实验需要更大数据、完整评测与 bad case 分析（Capstone 1 / 3）。</p>
+<p><strong>项目结构</strong>：</p>
+<pre><code class="lang-text">hf-mini-lab/
+├── configs/lora_sft.json     # dataclass + JSON 配置
+├── data/sft_mini.jsonl       # 20 条教学数据（16 train / 4 eval）
+├── src/hf_lab/
+│   ├── config.py             # LabConfig dataclass
+│   ├── loading.py            # tokenizer / model 加载
+│   ├── chat.py               # Chat Template + left padding 批量生成
+│   ├── data.py               # JSONL + response-only labels
+│   ├── train.py              # 最小可读 LoRA 训练循环
+│   └── evaluate.py           # eval loss + 生成对比
+├── scripts/run_lab.py        # 8 步端到端 + 报告生成
+└── tests/test_lab.py         # 10 个 pytest</code></pre>
+<div class="box box-note"><div class="box-title">📘 Checkpoint B 的验收问题</div><div class="box-body"><p>完成后你应能回答：</p>
+<ul>
+<li><code>apply_chat_template</code> 生成的文本长什么样？<code>add_generation_prompt</code> 做了什么？</li>
+<li>为什么 decoder-only 推理用 left padding？</li>
+<li>response-only loss 的 mask 是怎么构造的？为什么 prompt 部分置 <code>-100</code>？</li>
+<li>LoRA 可训练参数为什么只有 0.1%？<code>target_modules</code> 选的是哪两层？</li>
+<li>base 和 tuned 的 loss 怎么公平比较？（同一批 held-out + 同一 mask + 干净加载的 base）</li>
+</ul>
+</div></div>
+<h2>26.12 面试复盘：HuggingFace / 微调</h2>
+<ol>
+<li><code>AutoTokenizer</code> 的 <code>padding</code> 和 <code>truncation</code> 分别解决什么问题？</li>
+<li>Chat Template 错了会发生什么？为什么不能手拼特殊 token？</li>
+<li><code>logits.shape</code> 三个维度分别是什么？最后一维为什么可能大于词表？</li>
+<li><code>temperature=0</code> 和 <code>do_sample=False</code> 是什么关系？</li>
+<li>什么是 response-only loss？训练时为什么要 mask 掉 prompt？</li>
+<li>LoRA 的 <code>r</code>、<code>alpha</code>、<code>target_modules</code> 分别影响什么？可训练参数占比怎么算？</li>
+<li>base / adapter / merged 三种产物怎么选？</li>
+<li>为什么「训练 loss 下降」不代表「模型变好了」？（对照第 23 章评测）</li>
+</ol>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你用 <code>PeftModel.from_pretrained(base, adapter_dir)</code> 重新加载了微调模型，准备与 base 做对比评测。以下哪种做法是正确的？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接评测 `base` 变量（它没被训练过，应该是干净的）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>重新加载一份干净模型作为 base 评测，因为 `from_pretrained` 已就地改造了 `base`</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只测 tuned，不测 base</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>把 base 和 tuned 的 loss 四舍五入到小数点后一位再比较</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PEFT 是就地注入——<code>base</code> 变量引用的模型对象已被装上 LoRA 包装器，直接评测会得到与 tuned 相同的结果（Δ=0.0000），这正是本项目真实踩过的坑。必须用另一次干净加载的模型当基线。</div></details></div>
+<div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
+<thead>
+<tr>
+<th>站点</th>
+<th>核心结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tokenizer</td>
+<td>pad/truncate/attention_mask 三件套；Qwen 需手动设 pad_token</td>
+</tr>
+<tr>
+<td>Chat Template</td>
+<td>永远用 <code>apply_chat_template</code>；格式错 = 分布偏移</td>
+</tr>
+<tr>
+<td>加载</td>
+<td>dtype 控制显存；<code>trust_remote_code</code> 不要无脑开</td>
+</tr>
+<tr>
+<td>logits</td>
+<td>[batch, seq, vocab]；输出维度可能 ≥ 词表</td>
+</tr>
+<tr>
+<td>generate</td>
+<td>参数对应第 9 章采样数学；评测用贪心</td>
+</tr>
+<tr>
+<td>批量</td>
+<td>decoder 推理用 left padding</td>
+</tr>
+<tr>
+<td>LoRA</td>
+<td>0.1% 参数量级；response-only loss 用 -100 掩 prompt</td>
+</tr>
+<tr>
+<td>陷阱</td>
+<td>PEFT 就地注入：基线必须干净加载</td>
+</tr>
+<tr>
+<td>产物</td>
+<td>adapter 是最重要的交付物（几 MB）</td>
+</tr>
+</tbody></table>
+</div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 6 章 Tokenizer</span><span class="tag">第 9 章 GPT</span><span class="tag">第 17 章 LoRA</span><span class="tag">第 21 章 Loss Mask</span><span class="tag">第 25 章 Python 工程</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 1（Eval Harness）</span><span class="tag">Capstone 3（SFT/LoRA 实验）</span><span class="tag">各类实习项目</span></div></div>
+</div>
+<div class="static-nav"><a href="python-engineering.html">← Python Engineering for AI：写出能跑的项目</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/26-huggingface.md">content/26-huggingface.md</a></div>
+</main>
+</body>
+</html>

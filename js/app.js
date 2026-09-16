@@ -43,21 +43,46 @@
     localStorage.setItem("llm-course-theme", next);
   });
 
-  /* ================= Progress ================= */
+  /* ================= Progress（三级：阅读 / Lab / 项目） ================= */
+  var PROGRESS_KEYS = ["read", "lab", "project"];
+  function migrateProgress(raw) {
+    var out = {};
+    Object.keys(raw || {}).forEach(function (id) {
+      var v = raw[id];
+      if (v === true) out[id] = { read: true };
+      else if (v && typeof v === "object") {
+        out[id] = {};
+        PROGRESS_KEYS.forEach(function (k) { if (v[k]) out[id][k] = true; });
+      }
+    });
+    return out;
+  }
   function loadProgress() {
-    try { state.progress = JSON.parse(localStorage.getItem("llm-course-progress") || "{}"); }
-    catch (e) { state.progress = {}; }
+    var raw = {};
+    try { raw = JSON.parse(localStorage.getItem("llm-course-progress") || "{}"); }
+    catch (e) { raw = {}; }
+    var needsWrite = Object.keys(raw).some(function (id) { return raw[id] === true; });
+    state.progress = migrateProgress(raw);
+    if (needsWrite) saveProgress();
   }
   function saveProgress() {
     localStorage.setItem("llm-course-progress", JSON.stringify(state.progress));
   }
+  function isRead(id) { return !!(state.progress[id] && state.progress[id].read); }
+  function countKey(key) {
+    return state.chapters.filter(function (c) { return state.progress[c.id] && state.progress[c.id][key]; }).length;
+  }
   function updateProgressUI() {
-    var done = state.chapters.filter(function (c) { return state.progress[c.id]; }).length;
+    var done = countKey("read");
     var total = state.chapters.length;
-    els.progressText.textContent = done + " / " + total;
+    var labTotal = state.chapters.filter(function (c) { return c.lab; }).length;
+    var projTotal = state.chapters.filter(function (c) { return c.project; }).length;
+    els.progressText.textContent = done + " / " + total +
+      (labTotal ? " · Lab " + countKey("lab") + "/" + labTotal : "") +
+      (projTotal ? " · 项目 " + countKey("project") + "/" + projTotal : "");
     els.progressFill.style.width = total ? (done / total * 100) + "%" : "0%";
     els.nav.querySelectorAll(".nav-item").forEach(function (item) {
-      item.classList.toggle("done", !!state.progress[item.getAttribute("data-id")]);
+      item.classList.toggle("done", isRead(item.getAttribute("data-id")));
     });
   }
   els.resetProgress.addEventListener("click", function () {
@@ -344,7 +369,13 @@
     "PPO": "rl-grpo", "GRPO": "rl-grpo", "KL 散度": "rl-grpo", "Reward Model": "rl-grpo",
     "Policy Ratio": "rl-grpo", "Clip": "rl-grpo", "On-policy": "rl-grpo",
     "LoRA": "efficient", "混合精度": "efficient", "FP16": "efficient", "BF16": "efficient",
-    "量化": "efficient", "显存估算": "efficient"
+    "量化": "efficient", "显存估算": "efficient",
+    "pytest": "python-engineering", "argparse": "python-engineering", "dataclass": "python-engineering",
+    "asyncio": "python-engineering", "logging": "python-engineering", "JSONL": "python-engineering",
+    "pathlib": "python-engineering", "CLI": "python-engineering", "类型注解": "python-engineering",
+    "AutoTokenizer": "huggingface", "HuggingFace": "huggingface", "PEFT": "huggingface",
+    "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
+    "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready"
   };
   function renderRelated(content) {
     var rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); });
@@ -440,16 +471,24 @@
     var idx = state.chapters.indexOf(ch);
     var prev = state.chapters[idx - 1];
     var next = state.chapters[idx + 1];
-    var isDone = !!state.progress[ch.id];
+    if (!state.progress[ch.id]) state.progress[ch.id] = {};
+
+    var toggles = [
+      { key: "read", on: "✓ 已读完（点击取消）", off: "标记本章已读" }
+    ];
+    if (ch.lab) toggles.push({ key: "lab", on: "✓ Lab 已跑通（点击取消）", off: "标记 Lab 已跑通" });
+    if (ch.project) toggles.push({ key: "project", on: "✓ 项目/Checkpoint 完成（点击取消）", off: "标记项目/Checkpoint 完成" });
 
     var head = '<div class="chapter-head">' +
       '<div class="chapter-eyebrow">第 ' + escapeHtml(ch.num || (idx + 1)) + " 章 · " + escapeHtml(ch.group || "") + "</div>" +
       '<h1 class="chapter-title">' + escapeHtml(ch.title) + "</h1>" +
       (ch.desc ? '<p class="chapter-desc">' + escapeHtml(ch.desc) + "</p>" : "") +
       '<div class="chapter-meta">' +
-        '<button class="btn ' + (isDone ? "done" : "primary") + '" id="markRead">' +
-          (isDone ? "✓ 已读完（点击取消）" : "标记本章已读") +
-        "</button>" +
+        toggles.map(function (t, i) {
+          var active = !!(state.progress[ch.id] && state.progress[ch.id][t.key]);
+          return '<button class="btn ' + (active ? "done" : "primary") + '" data-pkey="' + t.key + '">' +
+            (active ? t.on : t.off) + "</button>";
+        }).join("") +
         (ch.source ? '<span class="chapter-source">对应课件：' + escapeHtml(ch.source) + "</span>" : "") +
       "</div></div>";
 
@@ -462,17 +501,21 @@
 
     els.content.innerHTML = head + body + footer;
 
-    // mark-read button
-    var btn = document.getElementById("markRead");
-    btn.addEventListener("click", function () {
-      if (state.progress[ch.id]) delete state.progress[ch.id];
-      else state.progress[ch.id] = true;
-      saveProgress();
-      updateProgressUI();
-      var done = !!state.progress[ch.id];
-      btn.classList.toggle("done", done);
-      btn.classList.toggle("primary", !done);
-      btn.textContent = done ? "✓ 已读完（点击取消）" : "标记本章已读";
+    // 三级进度切换（阅读 / Lab / 项目）
+    els.content.querySelectorAll("[data-pkey]").forEach(function (btn) {
+      var key = btn.getAttribute("data-pkey");
+      var def = toggles.filter(function (t) { return t.key === key; })[0];
+      btn.addEventListener("click", function () {
+        var p = state.progress[ch.id] || (state.progress[ch.id] = {});
+        if (p[key]) delete p[key];
+        else p[key] = true;
+        saveProgress();
+        updateProgressUI();
+        var active = !!p[key];
+        btn.classList.toggle("done", active);
+        btn.classList.toggle("primary", !active);
+        btn.textContent = active ? def.on : def.off;
+      });
     });
 
     // headings + TOC
@@ -540,23 +583,67 @@
       return '<a class="nav-item" style="display:flex;padding:10px 12px" href="#/' + ch.id + '">' +
         '<span class="nav-num">' + escapeHtml(ch.num || "") + "</span>" +
         '<span class="nav-title">' + escapeHtml(ch.title) +
-        (state.progress[ch.id] ? ' <span style="color:var(--green)">✓</span>' : "") +
+        (isRead(ch.id) ? ' <span style="color:var(--green)">✓</span>' : "") +
         "</span></a>";
     }).join("");
+
+    var trackCard = function (title, target, jobs, route) {
+      return '<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;background:var(--bg-panel)">' +
+        '<div style="font-weight:800;margin-bottom:6px">' + title + "</div>" +
+        '<div style="font-size:12.5px;color:var(--text-soft);margin-bottom:8px">' + jobs + "</div>" +
+        '<div style="font-size:12.5px;line-height:1.9;color:var(--text)">' + route + "</div>" +
+        '<div style="margin-top:10px"><a class="tag" href="#/' + target + '">查看路线与 Checkpoint →</a></div>' +
+        "</div>";
+    };
+    var chLink = function (label, id) { return '<a class="tag" href="#/' + id + '">' + label + "</a>"; };
+
+    var jobSection = '<h2>我要找什么实习？</h2>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:10px 0 4px">' +
+      trackCard("Track A · AI 应用开发", "job-ready",
+        "大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台 / LLM Engineer Intern",
+        chLink("Python 工程", "python-engineering") + " → " + chLink("PyTorch", "pytorch") + " → " +
+        chLink("Transformer", "transformer") + " → " + chLink("HuggingFace", "huggingface") + " → " +
+        chLink("Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI → Capstone 1/2（下一批）</span>") +
+      trackCard("Track B · 大模型算法", "job-ready",
+        "大模型算法 / 机器学习算法 / 模型训练与后训练实习",
+        chLink("Transformer", "transformer") + " → " + chLink("Build Small LLM", "build-llm-1") + " → " +
+        chLink("Data Pipeline", "data-pipeline") + " → " + chLink("Pretraining", "pretrain-sft") + " → " +
+        chLink("HuggingFace", "huggingface") + " → " + chLink("SFT/LoRA", "efficient") + " → " +
+        chLink("DPO/GRPO", "rl-grpo") + " → " + chLink("Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>SFT Capstone（下一批）</span>") +
+      trackCard("Track C · AI Infra / ML Systems", "job-ready",
+        "AI Infra / ML Systems / 大模型推理框架 / 性能工程实习",
+        chLink("PyTorch", "pytorch") + " → " + chLink("GPU", "gpu") + " → " +
+        chLink("FlashAttention/Triton", "flash-attention") + " → " + chLink("Distributed", "distributed") + " → " +
+        chLink("Inference", "inference") + " → <span style='color:var(--text-soft)'>Profiling / vLLM Benchmark（下一批，需 CUDA）</span>") +
+      "</div>" +
+      '<p style="font-size:13px;color:var(--text-soft)">完整能力矩阵、Checkpoint 验收标准与四级学习标准见 ' +
+      '<a class="tag" href="#/job-ready">第 24 章 · Job-Ready Track</a>。</p>';
+
+    var guideSection = '<h2>现在应该学什么</h2>' +
+      '<p style="font-size:13.5px">没有实习经历？按这条线走（约 8-10 周），完成后即可投递：</p>' +
+      '<div style="font-size:13.5px;line-height:2.1">' +
+      chLink("25 Python 工程", "python-engineering") + " → " + chLink("11 PyTorch", "pytorch") + " → " +
+      chLink("07 Transformer", "transformer") + " → " + chLink("26 HuggingFace", "huggingface") + " → " +
+      chLink("23 Evaluation", "llm-eval") + " → <span style='color:var(--text-soft)'>RAG → FastAPI/Docker → Capstone 1/2（下一批）→ 开始投递</span>" +
+      "</div>" +
+      '<p style="font-size:13px;color:var(--text-soft)">之后按方向分叉：算法方向走 SFT/Data/后训练；Infra 方向走 GPU/FlashAttention/Distributed/Inference/Profiling。' +
+      "学习进度按「阅读 / Lab / 项目」三级分别记录——读完 Markdown 只点亮第一级。</p>";
 
     var html = '<div class="chapter-head">' +
       '<div class="chapter-eyebrow">LLM 学习路线 · 共 ' + total + " 章</div>" +
       '<h1 class="chapter-title">大模型知识体系 · 本地课程</h1>' +
-      '<p class="chapter-desc">从 深度学习基础 一路走到 GRPO / LoRA / 混合精度，把 9 份课件串成一条完整主线。每章配有交互演示、算例、代码、误区与自测。</p>' +
+      '<p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目做出第一段 AI 实习的作品集。</p>' +
       "</div>" +
       '<div class="callout key"><div class="callout-title">主线一句话</div><p>输入数据 → Tokenizer → Embedding → Transformer → Logits → Softmax → P(next token)；训练 = 前向传播 → 算 Loss → 反向传播 → 算梯度 → Optimizer 更新参数。</p></div>' +
-      '<div class="md"><h2>章节目录</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">' + cards + "</div>" +
+      '<div class="md">' + jobSection + guideSection +
+      '<h2>章节目录</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">' + cards + "</div>" +
       '<h2>怎么用这套课程</h2><ul>' +
+      "<li>求职优先：先看上面「我要找什么实习」，按对应 Track 的顺序补能力。</li>" +
       "<li>按顺序读：从第 1 章开始，每章末尾有「下一章」。</li>" +
       "<li>每个核心知识点按「先懂直觉 → 再看数学 → 工程里怎么用」三级展开，先读直觉。</li>" +
       "<li>遇到 <strong>🎮 交互演示</strong> 一定要动手拖一拖滑块——这是这套课程区别于普通笔记的地方。</li>" +
-      "<li>每章末尾有 <strong>📝 小测验</strong> 和 <strong>🎯 面试常问</strong>，用来检查是否真的学会。</li>" +
-      "<li>按 <strong>/</strong> 搜索任意知识点（如 GRPO、RoPE、交叉熵）。</li>" +
+      "<li>Job-Ready 章节（25/26）配 <strong>projects/ 真实项目</strong>：clone 下来跑一遍、跑测试、改一处代码再跑——这才是「Ran」。</li>" +
+      "<li>按 <strong>/</strong> 搜索任意知识点（如 GRPO、RoPE、Chat Template）。</li>" +
       "</ul></div>" +
       '<div class="chapter-footer"><span></span><a class="footer-link next" href="#/' + (state.chapters[0] ? state.chapters[0].id : "") + '"><span class="fl-label">开始学习 →</span><span class="fl-title">' + (state.chapters[0] ? escapeHtml(state.chapters[0].title) : "") + "</span></a></div>";
 

@@ -7,27 +7,31 @@
 #   2) validate-static 校验渲染结果
 #   3) validate-content 校验内容源
 #   4) validate-batch2 回归测试（第二批）
-#   5) rsync 自有服务器
-#   6) git push GitHub
+#   5) validate-jobs 求职项目门禁
+#   6) rsync 自有服务器
+#   7) git push GitHub
 # 任何一步失败：脚本以非零退出码结束，并明确报告「哪一端成功、哪一端失败」。
 set -e
 cd "$(dirname "$0")/.."
 
 MSG="${1:-update: $(date '+%Y-%m-%d %H:%M')}"
 
-echo "==> [1/6] 生成静态阅读页"
+echo "==> [1/7] 生成静态阅读页"
 node tools/build-static.js
 
-echo "==> [2/6] 校验静态渲染（release gate）"
+echo "==> [2/7] 校验静态渲染（release gate）"
 node tools/validate-static.js
 
-echo "==> [3/6] 校验内容源（release gate）"
+echo "==> [3/7] 校验内容源（release gate）"
 node tools/validate-content.js
 
-echo "==> [4/6] 运行第二批回归测试（release gate）"
+echo "==> [4/7] 运行第二批回归测试（release gate）"
 node tools/validate-batch2.js
 
-echo "==> [5/6] 发布到自有服务器（llm.xhr0417.cn）"
+echo "==> [5/7] 运行 Job-Ready 项目门禁（release gate）"
+node tools/validate-jobs.js
+
+echo "==> [6/7] 发布到自有服务器（llm.xhr0417.cn）"
 if rsync -az --delete --exclude='.DS_Store' --exclude='.git' ./ myserver:/var/www/llm-course/; then
   echo "    ✅ 服务器发布成功：https://llm.xhr0417.cn/"
 else
@@ -35,7 +39,7 @@ else
   exit 1
 fi
 
-echo "==> [6/6] 推送到 GitHub 镜像（xhr0417.github.io/llm-course）"
+echo "==> [7/7] 推送到 GitHub 镜像（xhr0417.github.io/llm-course）"
 git add -A
 if git diff --cached --quiet; then
   echo "    没有新变化，跳过提交"

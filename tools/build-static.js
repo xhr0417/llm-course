@@ -147,7 +147,13 @@ const TOPIC_LINKS = {
   "PPO": "rl-grpo", "GRPO": "rl-grpo", "KL 散度": "rl-grpo", "Reward Model": "rl-grpo",
   "Policy Ratio": "rl-grpo", "Clip": "rl-grpo", "On-policy": "rl-grpo",
   "LoRA": "efficient", "混合精度": "efficient", "FP16": "efficient", "BF16": "efficient",
-  "量化": "efficient", "显存估算": "efficient"
+  "量化": "efficient", "显存估算": "efficient",
+  "pytest": "python-engineering", "argparse": "python-engineering", "dataclass": "python-engineering",
+  "asyncio": "python-engineering", "logging": "python-engineering", "JSONL": "python-engineering",
+  "pathlib": "python-engineering", "CLI": "python-engineering", "类型注解": "python-engineering",
+  "AutoTokenizer": "huggingface", "HuggingFace": "huggingface", "PEFT": "huggingface",
+  "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
+  "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready"
 };
 
 function renderContent(content, ctx, chapterId) {
@@ -379,7 +385,7 @@ const END = "<!-- STATIC-INDEX-END -->";
 const tocHtml = START + "\n" +
   '      <div class="chapter-head">\n' +
   '        <h1 class="chapter-title">' + escapeHtml(SITE_NAME) + " · 静态目录</h1>\n" +
-  '        <p class="chapter-desc">从 深度学习基础 一路走到 GRPO / LoRA / 混合精度，共 ' + manifest.chapters.length + ' 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
+  '        <p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目完成第一段 AI 实习的作品集（projects/ 目录）。共 ' + manifest.chapters.length + ' 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
   "      </div>\n" +
   '      <div class="md">\n' +
   "        <h2>章节目录</h2>\n        <ol>\n" +

@@ -31,7 +31,7 @@
   <a href="../index.html#/llm-eval">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/llm-eval">交互版</a>。</div>
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="job-ready.html">Job-Ready Track：从「会解释」到「能做出来」 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/llm-eval">交互版</a>。</div>
 <div class="chapter-head"><div class="chapter-eyebrow">第 23 章 · 第六部分 · 评估 (Evaluate)</div><h1 class="chapter-title">LLM Evaluation：模型到底有没有变好</h1><p class="chapter-desc">PPL、Exact Match、pass@k、MMLU/C-Eval/GSM8K、LLM-as-a-Judge、置信区间、Contamination、失败案例分析 + 评测 Lab。</p><p class="chapter-source">对应课件：LLM Systems（第二批新增）</p></div>
 <div class="md">
 <blockquote>
@@ -567,7 +567,7 @@ if __name__ == &quot;__main__&quot;:
 <div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">为什么「70% 准确率」在 n=20 与 n=1000 时意义不同？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>没有不同</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>n=20 时 95% 置信区间约 [50%, 90%]，随机波动极大；n=1000 时区间约 [67%, 73%]</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>n 越大分数越低</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>只与模型大小有关</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>二项分布标准误 SE=√(p(1−p)/n) 随样本量减小而增大。小样本下所谓「提升」可能完全在噪声范围内——报告分数必须带样本量与置信区间。</div></details></div>
 <div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 3 章 经典评估</span><span class="tag">第 21 章 PPL</span><span class="tag">第 18 章 去污染</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">模型选型</span><span class="tag">训练迭代决策</span><span class="tag">RLHF 的偏好数据设计</span></div></div>
 </div>
-<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/23-llm-eval.md">content/23-llm-eval.md</a></div>
+<div class="static-nav"><a href="rl-grpo.html">← 强化学习与偏好优化：PPO 与 GRPO</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="job-ready.html">Job-Ready Track：从「会解释」到「能做出来」 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/23-llm-eval.md">content/23-llm-eval.md</a></div>
 </main>
 </body>
 </html>
