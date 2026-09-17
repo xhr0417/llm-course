@@ -56,7 +56,7 @@
       <div class="md">
         <h2>章节目录</h2>
         <ol>
-          <li><a href="chapters/map.html">知识地图与学习主线</a> — 六段式学习路线（理解 → 构建 → 扩展 → 服务 → 对齐 → 评估）、CS336 前置分层与全站导航。</li>
+          <li><a href="chapters/map.html">知识地图与学习主线</a> — 六段式知识地图、当前动手主线（小模型实验室 → 核验助手 → 专项）与岗位查阅分组。</li>
           <li><a href="chapters/basics.html">深度学习基础：回归、Loss、梯度与 Softmax</a> — 线性模型、MSE、梯度下降、反向传播、Softmax、交叉熵、MLP、激活函数——全套地基。</li>
           <li><a href="chapters/optimizers.html">优化器：SGD → Momentum → Adam</a> — SGD、Momentum、Adam 完整推导与算例，AdamW 解耦正则，优化器竞赛演示。</li>
           <li><a href="chapters/evaluation.html">模型评估与泛化：指标、过拟合与正则化</a> — 混淆矩阵计算器、四大指标、不平衡数据陷阱、L2、Dropout（经典 ML 评估，LLM 评测见第 23 章）。</li>
@@ -80,14 +80,14 @@
           <li><a href="chapters/pretrain-sft.html">训练生命周期：Pretrain 与 SFT</a> — 数据清洗、MinHash、配比、warmup/decay、PPL、Chat Template、Loss Mask。</li>
           <li><a href="chapters/rl-grpo.html">强化学习与偏好优化：PPO 与 GRPO</a> — 为什么 SFT 后还要 RL、PPO/GRPO 结构、Group Relative Advantage、Policy Ratio、Clip、KL 散度。</li>
           <li><a href="chapters/llm-eval.html">LLM Evaluation：模型到底有没有变好</a> — PPL、Exact Match、pass@k、MMLU/C-Eval/GSM8K、LLM-as-a-Judge、置信区间、Contamination、失败案例分析 + 评测 Lab。</li>
-          <li><a href="chapters/job-ready.html">Job-Ready Track：从「会解释」到「能做出来」</a> — 三条岗位路线（应用/算法/Infra）、岗位能力矩阵、第一次找实习的学习顺序、Checkpoint 验收与四级学习标准。</li>
-          <li><a href="chapters/python-engineering.html">Python Engineering for AI：从 0 亲手构建第一个真实项目</a> — Guided Build：starter + 10 个 Step（41 个分步测试从红变绿，含你自己写的 3 个边界测试）；配套 Learn 参考手册（项目结构、argparse/dataclass、typing、pathlib/JSONL、logging、异常、asyncio、pytest）与完整参考实现。</li>
-          <li><a href="chapters/huggingface.html">HuggingFace for LLM Engineering：从 0 跑通一个真正的 LLM Workflow</a> — Guided Build：starter + 13 个 Step（38 个分步测试从红变绿）——Tokenizer、Chat Template、logits、generate、left padding、response-only mask、PEFT/LoRA、save/load，最终用 Qwen2.5 跑出你自己的实验报告；含模型缓存/HF_HOME 与执行位置说明。</li>
-          <li><a href="chapters/capstone-eval.html">Capstone 1 · Build Your Own Mini LLM Evaluation Harness</a> — Guided Capstone：starter + 15 个 Step（79 个分步测试从红变绿）——Adapter × Task × Runner × Reports、并发+重试+SQLite 缓存、bad case 分类、自动报告与真实 C3/XCOPA 评测记录——Checkpoint C。</li>
-          <li><a href="chapters/rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识</a> — Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。</li>
-          <li><a href="chapters/capstone-rag.html">Capstone 2 · Search + Rerank + RAG Service</a> — 完整 RAG 服务：FastAPI（/chat、/chat/stream SSE、超时 504、线程池）+ 检索与生成分开评测 + Dockerfile——Checkpoint D。</li>
-          <li><a href="chapters/capstone-sft.html">Capstone 3 · Real SFT / LoRA Experiment</a> — 真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。</li>
-          <li><a href="chapters/capstone-infra.html">Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track）</a> — profiler 算子表、CUDA Event 计时、naive vs SDPA 实测、torch.compile 反例、serving TTFT/TPOT 压测客户端 + vLLM runbook（NOT EXECUTED ON CUDA）。</li>
+          <li><a href="chapters/job-ready.html">岗位查阅：能力矩阵与四级标准</a> — 三条岗位查阅分组（应用/算法/Infra）、能力矩阵、四级标准与历史实验记录。不是旧作业清单。</li>
+          <li><a href="chapters/python-engineering.html">Python Engineering for AI：可测试的工程分层</a> — parser / stats / cli 分层、pathlib、JSONL、dataclass、argparse、logging、pytest 与退出码。历史日志 CLI 仅作可选对照。</li>
+          <li><a href="chapters/huggingface.html">HuggingFace for LLM Engineering：工业生态工作流</a> — Tokenizer、Chat Template、logits、generate、left padding、response-only mask、PEFT/LoRA、save/load 与历史实测数字。不是旧 starter 作业。</li>
+          <li><a href="chapters/capstone-eval.html">评测系统：Mini LLM Evaluation Harness 怎么拆</a> — Adapter × Task × Runner × Reports、parser 与 parse_failure、并发/重试/缓存、bad case 分类，以及 C3/XCOPA 历史实测。不是旧 Capstone。</li>
+          <li><a href="chapters/rag-engineering.html">Retrieval &amp; RAG Engineering：让模型用上外部知识</a> — Chunking、BM25、向量、RRF、精排、Recall@k/MRR/nDCG，以及 22 条查询的历史评测。不是当前 RAG 作业。</li>
+          <li><a href="chapters/capstone-rag.html">RAG 服务化：检索管线怎样对外提供接口</a> — FastAPI（/chat、SSE、超时、线程池）、检索与生成分开评测、Dockerfile 纪律。历史服务实现仅作可选对照。</li>
+          <li><a href="chapters/capstone-sft.html">SFT / LoRA：一次真实实验闭环怎么读</a> — response-only loss、LoRA、best/final checkpoint、三路评测与 experiment.md 纪律。历史训练记录不是当前 Capstone。</li>
+          <li><a href="chapters/capstone-infra.html">推理分析：把「慢」定位到算子与指标</a> — profiler 算子表、计时口径、naive vs SDPA、torch.compile 反例、TTFT/TPOT 与 NOT EXECUTED ON CUDA。不是当前推理基准作业。</li>
         </ol>
       </div>
       <!-- STATIC-INDEX-END -->

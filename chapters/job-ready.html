@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Job-Ready Track：从「会解释」到「能做出来」 · 大模型知识体系</title>
-<meta name="description" content="三条岗位路线（应用/算法/Infra）、岗位能力矩阵、第一次找实习的学习顺序、Checkpoint 验收与四级学习标准。">
+<title>岗位查阅：能力矩阵与四级标准 · 大模型知识体系</title>
+<meta name="description" content="三条岗位查阅分组（应用/算法/Infra）、能力矩阵、四级标准与历史实验记录。不是旧作业清单。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/job-ready.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,30 +32,23 @@
   <a href="../index.html#/job-ready">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="llm-eval.html">← LLM Evaluation：模型到底有没有变好</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="python-engineering.html">Python Engineering for AI：从 0 亲手构建第一个真实项目 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/job-ready">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 24 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Job-Ready Track：从「会解释」到「能做出来」</h1><p class="chapter-desc">三条岗位路线（应用/算法/Infra）、岗位能力矩阵、第一次找实习的学习顺序、Checkpoint 验收与四级学习标准。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="llm-eval.html">← LLM Evaluation：模型到底有没有变好</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="python-engineering.html">Python Engineering for AI：可测试的工程分层 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/job-ready">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 24 章 · 第七部分 · 工程查阅</div><h1 class="chapter-title">岗位查阅：能力矩阵与四级标准</h1><p class="chapter-desc">三条岗位查阅分组（应用/算法/Infra）、能力矩阵、四级标准与历史实验记录。不是旧作业清单。</p><p class="chapter-source">对应课件：工程查阅（原 Job-Ready）</p></div>
 <div class="md">
-<h1>第 24 章 · Job-Ready Track：从「会解释」到「能做出来」</h1>
-<div class="box box-intuition"><div class="box-title">💡 这一章是给谁写的</div><div class="box-body"><p>如果你已经能用中文讲清楚 Attention、LoRA、KV Cache，但<strong>没有跑过一条真正完整的工程链路</strong>、没有 GitHub 上的可运行项目、面试官问「你做过什么」时只能回答「我学过课程」——这一章为你而写。</p>
+<h1>第 24 章 · 岗位查阅：从「会解释」到「能做」仍然要分级</h1>
+<div class="box box-intuition"><div class="box-title">💡 这一章是给谁写的</div><div class="box-body"><p>如果你已经能用中文讲清楚 Attention、LoRA、KV Cache，但还分不清「读过 / 自己写过 / 跑过 / 能讲清」，这一章给一个<strong>查阅用的能力地图</strong>。它不是当前主线的作业清单。</p>
 </div></div>
-<p>前 23 章的 Knowledge Track 解决的是「<strong>懂</strong>」：Understand → Build → Scale → Serve → Train &amp; Align → Evaluate。</p>
-<p>从本章开始的 Job-Ready Track 解决的是「<strong>能做</strong>」：</p>
-<pre><code class="lang-">懂一个概念  →  写成代码  →  跑起来  →  测出来  →  debug  →  写报告  →  放进 GitHub  →  面试讲清楚</code></pre>
-<div class="box box-warning"><div class="box-title">⚠️ 这不是又一批「知识章」</div><div class="box-body"><p>Job-Ready Track 不新增理论主题（不写 MoE 大章、不写 Agent 大章）。它的每一章都绑定：</p>
-<ul>
-<li>一个<strong>真实可运行的项目</strong>（<code>projects/</code> 目录，含 tests）；</li>
-<li>一份<strong>真实运行记录</strong>（跑出来的 loss / 通过数 / 报错与修复）；</li>
-<li>一组<strong>面试复盘问题</strong>（你必须能回答，而不是背过）。</li>
-</ul>
+<div class="box box-note"><div class="box-title">📘 本章在当前主线中的位置</div><div class="box-body"><p>当前主线是「小模型学习实验室 → 技术声明核验助手 / 单 Agent → 算法或 Infra 专项」，入口在「我的学习」。本章以及下面的三条岗位路线只是<strong>查阅分组</strong>：帮你按应用 / 算法 / Infra 去翻教材。不要从这里走进六个旧项目目录，也不要把旧 Capstone 当必修。</p>
 </div></div>
-<h2>24.1 目标岗位与三条路线</h2>
-<p>不同岗位要的能力不同、优先级不同。先选路线，再补能力，不要平均用力。路线顺序、章节标题和岗位描述统一来自 <code>content/tracks.json</code>，本章不再复制一份容易过期的箭头链。</p>
+<p>前 23 章解决「<strong>懂</strong>」：Understand → Build → Scale → Serve → Train &amp; Align → Evaluate。第 25–31 章继续讲工程、HuggingFace、评测、检索、SFT 和推理原理，并保留当时的真实运行记录。那些记录不是现在要交的作业。</p>
+<h2>24.1 三条查阅路线</h2>
+<p>不同岗位要的能力不同。路线顺序、章节标题和岗位描述来自 <code>content/tracks.json</code>。卡片上的章节是推荐阅读顺序，不是「做完六个旧项目」。</p>
 <p>本章的三条路线是 <strong>Track A · AI 应用</strong>、<strong>Track B · 模型训练与算法</strong>、<strong>Track C · AI Infra</strong>。</p>
-<section class="course-routes full"><div class="course-routes-head"><span class="page-label">路线配置 · content/tracks.json</span><p>先选目标，再按顺序学习；每一项都链接到真实章节。</p></div><article class="course-route"><header><span class="course-route-number">01</span><div><h3>AI 应用开发</h3><p>从 Python 工程开始，学会调用、评测模型，再搭建 RAG 服务。</p><p class="course-route-roles">岗位：大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台</p></div></header><p class="course-route-outcome"><strong>产出：</strong>做出可运行的评测工具与 RAG 服务</p><ol><li><a href="python-engineering.html"><span>01</span>Python 工程实作</a></li><li><a href="pytorch.html"><span>02</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>03</span>Transformer</a></li><li><a href="huggingface.html"><span>04</span>HuggingFace 实作</a></li><li><a href="llm-eval.html"><span>05</span>大模型评测</a></li><li><a href="capstone-eval.html"><span>06</span>模型评测工具实作</a></li><li><a href="rag-engineering.html"><span>07</span>RAG 检索基础</a></li><li><a href="capstone-rag.html"><span>08</span>RAG 服务实作</a></li></ol></article><article class="course-route"><header><span class="course-route-number">02</span><div><h3>模型训练与算法</h3><p>理解 Transformer，训练一个小模型，再完成数据、微调与评测实验。</p><p class="course-route-roles">岗位：大模型算法 / 机器学习算法 / 模型训练与后训练</p></div></header><p class="course-route-outcome"><strong>产出：</strong>训练小模型，完成一份微调实验报告</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>02</span>Transformer</a></li><li><a href="build-llm-1.html"><span>03</span>从零构建 LLM · 组件</a></li><li><a href="build-llm-2.html"><span>04</span>从零构建 LLM · 训练</a></li><li><a href="data-pipeline.html"><span>05</span>预训练数据工程</a></li><li><a href="pretrain-sft.html"><span>06</span>预训练与 SFT</a></li><li><a href="huggingface.html"><span>07</span>HuggingFace 实作</a></li><li><a href="efficient.html"><span>08</span>显存、混合精度与 LoRA</a></li><li><a href="capstone-sft.html"><span>09</span>SFT / LoRA 实验</a></li><li><a href="rl-grpo.html"><span>10</span>PPO 与 GRPO</a></li><li><a href="llm-eval.html"><span>11</span>大模型评测</a></li></ol></article><article class="course-route"><header><span class="course-route-number">03</span><div><h3>AI Infra 与推理系统</h3><p>从 GPU 和算子理解性能，逐步掌握分布式训练、推理服务与性能分析。</p><p class="course-route-roles">岗位：AI Infra / ML Systems / 推理框架 / 性能工程</p></div></header><p class="course-route-outcome"><strong>产出：</strong>定位性能瓶颈，完成推理基准测试</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="gpu.html"><span>02</span>GPU 基础</a></li><li><a href="flash-attention.html"><span>03</span>FlashAttention 与 Triton</a></li><li><a href="distributed.html"><span>04</span>分布式训练</a></li><li><a href="inference.html"><span>05</span>推理系统</a></li><li><a href="capstone-infra.html"><span>06</span>推理性能分析</a></li></ol></article></section>
-<div class="box box-note"><div class="box-title">📘 路线阅读规则</div><div class="box-body"><p>路线卡片展示的是推荐顺序，不是强制先修关系。点击某条路线后，页面底部的「下一课」会继续沿当前路线前进；从「全部章节」进入时，才按教材顺序翻页。</p>
+<section class="course-routes full"><div class="course-routes-head"><span class="page-label">路线配置 · content/tracks.json</span><p>岗位查阅分组，不是当前主线。先看目标，再按顺序打开章节。</p></div><article class="course-route"><header><span class="course-route-number">01</span><div><h3>AI 应用开发</h3><p>查阅 Python 工程、调用与评测模型、检索与 RAG 相关教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完应用向章节：工程分层、评测纪律、检索与服务化要点</p><ol><li><a href="python-engineering.html"><span>01</span>Python 工程</a></li><li><a href="pytorch.html"><span>02</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>03</span>Transformer</a></li><li><a href="huggingface.html"><span>04</span>HuggingFace 工作流</a></li><li><a href="llm-eval.html"><span>05</span>大模型评测</a></li><li><a href="capstone-eval.html"><span>06</span>评测系统分层</a></li><li><a href="rag-engineering.html"><span>07</span>RAG 检索基础</a></li><li><a href="capstone-rag.html"><span>08</span>RAG 服务原理</a></li></ol></article><article class="course-route"><header><span class="course-route-number">02</span><div><h3>模型训练与算法</h3><p>查阅 Transformer、小模型训练、数据、微调与评测相关教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：大模型算法 / 机器学习算法 / 模型训练与后训练</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完算法向章节：小模型、SFT/LoRA 纪律与评测</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>02</span>Transformer</a></li><li><a href="build-llm-1.html"><span>03</span>从零构建 LLM · 组件</a></li><li><a href="build-llm-2.html"><span>04</span>从零构建 LLM · 训练</a></li><li><a href="data-pipeline.html"><span>05</span>预训练数据工程</a></li><li><a href="pretrain-sft.html"><span>06</span>预训练与 SFT</a></li><li><a href="huggingface.html"><span>07</span>HuggingFace 工作流</a></li><li><a href="efficient.html"><span>08</span>显存、混合精度与 LoRA</a></li><li><a href="capstone-sft.html"><span>09</span>SFT / LoRA 实验记录</a></li><li><a href="rl-grpo.html"><span>10</span>PPO 与 GRPO</a></li><li><a href="llm-eval.html"><span>11</span>大模型评测</a></li></ol></article><article class="course-route"><header><span class="course-route-number">03</span><div><h3>AI Infra 与推理系统</h3><p>查阅 GPU、算子、分布式训练、推理服务与性能分析教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：AI Infra / ML Systems / 推理框架 / 性能工程</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完 Infra 向章节：瓶颈判断、计时口径与 NOT EXECUTED 纪律</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="gpu.html"><span>02</span>GPU 基础</a></li><li><a href="flash-attention.html"><span>03</span>FlashAttention 与 Triton</a></li><li><a href="distributed.html"><span>04</span>分布式训练</a></li><li><a href="inference.html"><span>05</span>推理系统</a></li><li><a href="capstone-infra.html"><span>06</span>推理性能分析</a></li></ol></article></section>
+<div class="box box-note"><div class="box-title">📘 路线阅读规则</div><div class="box-body"><p>路线卡片是查阅分组。点击某条路线后，「下一课」沿该分组前进；从「全部章节」进入时，按教材顺序翻页。当前主线任务始终以首页「我的学习」为准，不随路线切换。</p>
 </div></div>
 <h2>24.2 岗位能力矩阵</h2>
-<p>先看「哪些是必须」，再决定这个月学什么：</p>
+<p>先看「哪些是必须」，再决定这个月读什么。这是技能地图，不是对你的评价，也不是旧作业打卡表。</p>
 <table>
 <thead>
 <tr>
@@ -148,16 +141,11 @@
 <td>后期必须</td>
 </tr>
 </tbody></table>
-<p>这是<strong>技能矩阵</strong>，不是对任何人的评价：它只回答「这个岗位要什么」，不回答「你适合什么」——那取决于你想做什么。</p>
-<h2>24.3 第一次找 AI 实习：推荐顺序</h2>
-<p>面对 30+ 章节不知道从哪开始？如果你还没有实习经历，按这条线走：</p>
-<p>第一步只需要进入上面的 <strong>Track A · AI 应用开发</strong>，然后沿路线页的「下一课」前进。算法与 Infra 分叉也从同一份路线配置进入，不再在正文另写一条可能过期的顺序。</p>
-<div class="box box-note"><div class="box-title">📘 为什么是这个顺序</div><div class="box-body"><p>Python 工程与 HuggingFace 是所有岗位的<strong>公共分母</strong>：不会其中之一，后面的 RAG / SFT / 评测项目都做不出来。而 RAG 与 FastAPI 是应用类岗位面试中出现频率最高、又最容易在两周内做出作品的方向。</p>
-<p>注意看每段路线里的两种动词：<strong>Learn</strong>（读课程、建立理解）与 <strong>Guided Lab</strong>（下载 starter、亲手写代码、跑测试、过 Checkpoint）。
-「读完」和「做出来」是两件不同的事——本 Track 用两个独立进度条分别记录。</p>
-</div></div>
-<h2>24.4 四级学习标准（本 Track 的验收方式）</h2>
-<p>以后不要说「我看完了」。每章/每个项目用四级标准自评：</p>
+<h2>24.3 第一次找 AI 实习：阅读顺序（不是旧项目顺序）</h2>
+<p>还没有实习经历时，可以从 <strong>Track A · AI 应用开发</strong> 的章节卡片往下读：Python 工程与 HuggingFace 是公共分母，评测与检索是应用岗高频话题。算法与 Infra 分叉也从同一份路线配置进入。</p>
+<p>当前<strong>动手任务</strong>不在这条查阅线上：回到首页做 Attention 空文件练习。第 25–31 章里若仍出现历史仓库链接，一律当作可选对照，标注了「非当前作业」的才去打开。</p>
+<h2>24.4 四级标准（描述能力，不绑定旧 starter）</h2>
+<p>以后不要说「我看完了」。用四级标准自评——这是诚实描述，不是网站自动打分：</p>
 <table>
 <thead>
 <tr>
@@ -167,231 +155,82 @@
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Learned</strong></td>
+<td><strong>读过</strong></td>
 <td>读懂</td>
 <td>能不看材料讲清直觉与关键公式</td>
 </tr>
 <tr>
-<td><strong>Implemented</strong></td>
-<td>自己实现</td>
+<td><strong>自己实现</strong></td>
+<td>本人写过核心代码</td>
 <td>从空白文件写出可运行代码</td>
 </tr>
 <tr>
-<td><strong>Ran</strong></td>
-<td>实际跑过</td>
-<td>有运行输出的截图/日志（含失败与修复）</td>
+<td><strong>验证通过</strong></td>
+<td>按声明做过检查</td>
+<td>有运行输出或书面核对（含失败）</td>
 </tr>
 <tr>
-<td><strong>Explained</strong></td>
+<td><strong>能解释</strong></td>
 <td>不查资料讲清楚</td>
-<td>能回答本章「面试复盘」全部问题</td>
+<td>能回答关键「为什么」</td>
 </tr>
 </tbody></table>
 <p>示例（FlashAttention，本课程当前状态）：</p>
-<pre><code class="lang-">Learned      ✅ （第 19 章）
-Implemented  ✅ （第 19 章 Lab：分块 + online softmax）
-Ran on CUDA  ❌ （无 GPU 环境 → NOT EXECUTED ON CUDA）
-Explained    ✅ （能在白板上推导 online softmax 修正因子）</code></pre>
-<p>网站默认只显示「阅读进度」和「继续上次位置」。进入 Guided Build 后，页面主进度显示「项目步骤 · 已完成 / 总步骤」；Learned / Ran / Explained 等最终验收项收在折叠的自检清单里，避免把学习者的注意力分散到多个按钮。</p>
-<p><strong>Guided Build 章节（25 / 26 / 27）的四级标准怎么记录</strong>：</p>
-<table>
-<thead>
-<tr>
-<th>级别</th>
-<th>对应动作</th>
-<th>网站如何记录</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>Learned</strong></td>
-<td>读完章节正文</td>
-<td>点亮「已读完」</td>
-</tr>
-<tr>
-<td><strong>Implemented</strong></td>
-<td>starter 的测试全部从红变绿</td>
-<td>Guided Build 进度面板自动计算（0 步 / 部分 / 全部）</td>
-</tr>
-<tr>
-<td><strong>Ran</strong></td>
-<td>在本地真实运行过（CLI / 实验）</td>
-<td>展开最终验收自检后手动确认</td>
-</tr>
-<tr>
-<td><strong>Explained</strong></td>
-<td>不看资料回答每步复盘问题</td>
-<td>展开最终验收自检后手动确认</td>
-</tr>
-</tbody></table>
-<p>进度保存在你自己浏览器的 localStorage 里，不上传。<strong>打开 Solution 不会自动算完成</strong>——只有你真的在本地跑通，才有资格点「我已在本地通过」。</p>
-<h2>24.5 Checkpoint 体系</h2>
-<p>每一段路线结束后都有一个<strong>检查点</strong>。检查点不是选择题，而是一个可以给别人演示的最小产物：</p>
-<table>
-<thead>
-<tr>
-<th>Checkpoint</th>
-<th>任务</th>
-<th>通过标准</th>
-<th>Guided Build（starter）</th>
-<th>归属</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>A</strong></td>
-<td>写一个 Python CLI：解析日志、统计指标、正确处理中断</td>
-<td>能跑 + 测试全绿 + 异常路径不崩</td>
-<td>✅ <code>log-analyzer/starter</code>（10 步 / 41 测试）</td>
-<td>第 25 章</td>
-</tr>
-<tr>
-<td><strong>B</strong></td>
-<td>加载 Qwen、批量 generate、算 logits/loss、做一个 LoRA</td>
-<td>有 base vs tuned 的对比数据</td>
-<td>✅ <code>hf-mini-lab/starter</code>（13 步 / 38 测试）</td>
-<td>第 26 章</td>
-</tr>
-<tr>
-<td><strong>C</strong></td>
-<td>写 Eval Harness（adapter/task/parser/metric/report）</td>
-<td>能对两个模型产出可比较的报告</td>
-<td>✅ <code>llm-eval/starter</code>（15 步 / 79 测试）</td>
-<td>第 27 章</td>
-</tr>
-<tr>
-<td><strong>D</strong></td>
-<td>做 RAG + 评测（Recall@k / MRR / faithfulness）</td>
-<td>retrieval 与 generation 指标分开报告</td>
-<td>🔄 迁移中（先做现有 Lab + 参考实现）</td>
-<td>第 28-29 章</td>
-</tr>
-<tr>
-<td><strong>E</strong></td>
-<td>用 profiler 找瓶颈并写出 benchmark 报告</td>
-<td>有 latency/memory 曲线与解释</td>
-<td>🔄 迁移中（先做现有 Lab + 参考实现）</td>
-<td>第 31 章</td>
-</tr>
-</tbody></table>
-<p>「✅」只代表 starter 已随课程交付并被真实运行验证；「🔄 迁移中」是诚实标注——RAG / SFT / Infra 三套 Guided Build 会在下一轮用同一套模板迁移，当前版本请先用现有 Lab + Reference Solution 完成 Checkpoint。</p>
-<h2>24.6 每个项目的三个入口：Learn / Guided Build / Reference</h2>
-<p>从这一版开始，每个 Job-Ready 项目都有<strong>三层产物</strong>。它们不是三个重复的链接，而是三种不同的学习动作：</p>
-<table>
-<thead>
-<tr>
-<th>项目</th>
-<th>Learn（建立理解）</th>
-<th>Guided Build（亲手做）</th>
-<th>Reference（对照完整工程）</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>log-analyzer</strong> · Python 工程</td>
-<td><a href="#/python-engineering">第 25 章 · Python Engineering</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer/starter">Guided Build · starter（10 步 / 41 测试）</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer">projects/log-analyzer</a></td>
-</tr>
-<tr>
-<td><strong>hf-mini-lab</strong> · HuggingFace</td>
-<td><a href="#/huggingface">第 26 章 · HuggingFace</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab/starter">Guided Build · starter（13 步 / 38 测试）</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab">projects/hf-mini-lab</a></td>
-</tr>
-<tr>
-<td><strong>llm-eval</strong> · Eval Harness</td>
-<td><a href="#/capstone-eval">第 27 章 · Capstone 1</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval/starter">Guided Build · starter（15 步 / 79 测试）</a></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval">projects/llm-eval</a></td>
-</tr>
-<tr>
-<td><strong>rag-service</strong> · RAG 服务</td>
-<td><a href="#/rag-engineering">第 28 章</a> + <a href="#/capstone-rag">第 29 章</a></td>
-<td>🔄 迁移中（先用现有 Lab）</td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service">projects/rag-service</a></td>
-</tr>
-<tr>
-<td><strong>sft-lora</strong> · SFT 实验</td>
-<td><a href="#/capstone-sft">第 30 章</a></td>
-<td>🔄 迁移中（先用现有 Lab）</td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora">projects/sft-lora</a></td>
-</tr>
-<tr>
-<td><strong>inference-benchmark</strong> · Profiling</td>
-<td><a href="#/capstone-infra">第 31 章</a></td>
-<td>🔄 迁移中（先用现有 Lab）</td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark">projects/inference-benchmark</a></td>
-</tr>
-</tbody></table>
-<p><strong>怎么用这三个入口</strong>（顺序不能反）：</p>
-<pre><code class="lang-">先读 Learn 章节（或边做边查参考手册）
-   ↓
-下载 starter，运行 pytest —— 看到满屏 failed
-   ↓
-按章节里的 Step 一步一步实现，测试逐组变绿
-   ↓
-（失败 → 看 Hint → 定位 → 修复 → 再跑）
-   ↓
-全绿 + 真实运行一次 → 课程页面的 Guided Build 进度条
-   ↓
-最后才打开 Reference Solution，对照设计差异</code></pre>
-<div class="box box-warning"><div class="box-title">⚠️ 不要打开 Reference 再回头做 starter</div><div class="box-body"><p>抄一遍参考实现会让「Implemented」和「Ran」变成假的。评测/面试时这类「做过」会在追问下原形毕露。
-Reference Solution 的正确用法是：<strong>做完之后对照</strong>，回答「我的实现和它差在哪、为什么」。</p>
-</div></div>
-<h2>24.7 交付状态总览（真实状态，逐项标注）</h2>
+<pre><code class="lang-">读过        ✅ （第 19 章）
+自己实现    ✅ （第 19 章 Lab：分块 + online softmax）
+在 CUDA 上跑过  ❌ （无 GPU 环境 → NOT EXECUTED ON CUDA）
+能解释      ✅ （能在白板上推导 online softmax 修正因子）</code></pre>
+<p>网站目前只显示「阅读进度」和「继续上次位置」。已读不是已掌握。旧的 Guided Build 进度若还在浏览器里，含义不变，但那套步骤已经退出教学流程。</p>
+<h2>24.5 历史实验记录（不是 Checkpoint 作业）</h2>
+<p>第 25–31 章保留过一组真实运行数字。它们证明「当时在什么机器上跑出过什么」，<strong>不是现在要交的旧检查点作业</strong>。</p>
 <table>
 <thead>
 <tr>
 <th>章节</th>
-<th>真实项目</th>
-<th>Guided Build</th>
-<th>已验证内容</th>
+<th>当时验证过什么</th>
+<th>目录（可选参考，非当前作业）</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>25 Python Engineering</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer"><code>projects/log-analyzer/</code></a></td>
-<td>✅ starter（初始 41 failed → 全绿 41 passed）</td>
-<td>14 个 pytest 通过；对健康/发散日志的真实输出</td>
+<td>25 Python 工程</td>
+<td>日志 CLI 的实测输出；parser / stats / cli 分层</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/log-analyzer">log-analyzer</a></td>
 </tr>
 <tr>
-<td><strong>26 HuggingFace</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab"><code>projects/hf-mini-lab/</code></a></td>
-<td>✅ starter（初始 38 failed → 全绿 38 passed）</td>
-<td>Qwen2.5-0.5B-Instruct CPU 全程跑通：训练 loss 2.6364→1.3052；held-out loss 3.8168→3.6102；11 个测试通过</td>
+<td>26 HuggingFace</td>
+<td>Qwen2.5-0.5B CPU：train loss 2.6364→1.3052；held-out 3.8168→3.6102</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab">hf-mini-lab</a></td>
 </tr>
 <tr>
-<td><strong>27 Capstone 1 · Eval Harness</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval"><code>projects/llm-eval/</code></a></td>
-<td>✅ starter（初始 77 failed → 全绿 79 passed）</td>
-<td>128 题真实评测（C3 55.0% / XCOPA 55.0% / QA F1 21.9%）；缓存二次运行 32.3s→0.0s；32 个测试用例通过</td>
+<td>27 评测系统</td>
+<td>128 题：C3 55.0% / XCOPA 55.0% / QA F1 21.9%；缓存 32.3s→0.0s</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/llm-eval">llm-eval</a></td>
 </tr>
 <tr>
-<td><strong>28-29 Retrieval/RAG + Capstone 2</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a></td>
-<td>🔄 下一轮迁移</td>
-<td>841 chunks 课程语料；22 条标注查询：BM25 100%、dense 86.4%、hybrid+rerank MRR 0.932；RAG 6 题检索 6/6 命中；39 个测试用例通过</td>
+<td>28–29 检索与服务</td>
+<td>841 chunks；22 查询 hybrid+rerank MRR 0.932；RAG 6 题检索 6/6</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service">rag-service</a></td>
 </tr>
 <tr>
-<td><strong>30 Capstone 3 · SFT/LoRA</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora"><code>projects/sft-lora/</code></a></td>
-<td>🔄 下一轮迁移</td>
-<td>真实 SFT：train loss 3.89→1.46；val loss 过拟合曲线（best@60）；harness QA F1 20.2%→24.0%；15 个测试</td>
+<td>30 SFT / LoRA</td>
+<td>train 3.89→1.46；val 过拟合 best@60；QA F1 20.2%→24.0%</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/sft-lora">sft-lora</a></td>
 </tr>
 <tr>
-<td><strong>31 Capstone 4 · Profiling Lab</strong></td>
-<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a></td>
-<td>🔄 下一轮迁移</td>
-<td>CPU 实测：SDPA 快 2.7×、理论中间张量 128MB→0、子进程 RSS 差值≈125MB；compile 反例 0.76×；算子表 bmm 72%；15 个测试；CUDA NOT EXECUTED</td>
+<td>31 推理分析</td>
+<td>CPU：SDPA 快 2.7×；compile 反例；CUDA NOT EXECUTED</td>
+<td><a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark">inference-benchmark</a></td>
 </tr>
 </tbody></table>
-<div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对你自己的项目同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 数据纪律（对自己的实验同样适用）</div><div class="box-body"><p>只把<strong>真实运行得到</strong>的 loss / accuracy / latency / 显存写成「实验结果」。</p>
 <ul>
 <li>没有 GPU：写 <code>NOT EXECUTED ON CUDA</code>；</li>
 <li>没有 API key：写「接口已实现，未实测」；</li>
 <li>教学模拟：标注 Teaching Simulation。</li>
 </ul>
-<p>面试官见过太多「复现了 LLaMA 训练」但一问细节就露馅的简历。真实、可复现的小项目 &gt; 夸张的大项目。</p>
+<p>面试官见过太多「复现了 LLaMA 训练」但一问细节就露馅的简历。真实、可复现的小实验 &gt; 夸张的大项目。</p>
 </div></div>
-<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">一道判断题：你已经读完了第 19 章 FlashAttention 的全部内容，但对「这个能力到底算不算会」拿不准。用本课程的评估口径，最严谨的自我描述是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>我掌握了 FlashAttention</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>Learned + Implemented + Explained，但 Ran 未完成（无 CUDA 环境），已在项目里标注 NOT EXECUTED ON CUDA</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>我没学过 FlashAttention</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>等我有 GPU 再说，现在不写进简历</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>四级标准的意义就是让「会」变得可验证、可诚实描述：读过（Learned）、写过（Implemented）、能讲清（Explained）都是真实能力，缺哪级就如实标注。A 夸大了「Ran」维度；C、D 又低估了已完成的 3/4。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">一道判断题：你已经读完了第 19 章 FlashAttention 的全部内容，但对「这个能力到底算不算会」拿不准。用本课程的评估口径，最严谨的自我描述是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>我掌握了 FlashAttention</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>读过 + 自己实现 + 能解释，但 CUDA 上未跑过，已标注 NOT EXECUTED ON CUDA</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>我没学过 FlashAttention</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>等我有 GPU 再说，现在不写进简历</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>四级标准的意义就是让「会」变得可验证、可诚实描述。A 夸大了「跑过」；C、D 又低估了已完成的部分。</div></details></div>
 <div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
 <thead>
 <tr>
@@ -401,19 +240,19 @@ Reference Solution 的正确用法是：<strong>做完之后对照</strong>，�
 </thead>
 <tbody><tr>
 <td>定位</td>
-<td>Knowledge Track 让你「懂」，Job-Ready Track 让你「能做」</td>
+<td>第 0–23 章让你「懂」；第 25–31 章是工程教材与历史记录，不是旧作业清单</td>
 </tr>
 <tr>
 <td>路线</td>
-<td>A 应用 / B 算法 / C Infra——先选路线，再补能力</td>
+<td>A 应用 / B 算法 / C Infra 是查阅分组，不是当前主线</td>
 </tr>
 <tr>
-<td>顺序</td>
-<td>无实习经历：进入 Track A，按路线页的下一课逐步前进</td>
+<td>当前动手</td>
+<td>回到「我的学习」做 Attention；不要进六个旧项目 starter</td>
 </tr>
 <tr>
 <td>标准</td>
-<td>Learned / Implemented / Ran / Explained，缺哪级标哪级</td>
+<td>读过 / 自己实现 / 验证通过 / 能解释，缺哪级标哪级</td>
 </tr>
 <tr>
 <td>纪律</td>
@@ -421,9 +260,9 @@ Reference Solution 的正确用法是：<strong>做完之后对照</strong>，�
 </tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span><span class="tag">第 23 章 Evaluation</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">简历项目</span><span class="tag">实习面试</span><span class="tag">后续 Capstone 1-4</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span><span class="tag">第 23 章 Evaluation</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">查阅岗位能力；当前主线仍从首页进入</span></div></div>
 </div>
-<div class="static-nav"><a href="llm-eval.html">← LLM Evaluation：模型到底有没有变好</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="python-engineering.html">Python Engineering for AI：从 0 亲手构建第一个真实项目 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/24-job-ready.md">content/24-job-ready.md</a></div>
+<div class="static-nav"><a href="llm-eval.html">← LLM Evaluation：模型到底有没有变好</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="python-engineering.html">Python Engineering for AI：可测试的工程分层 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/24-job-ready.md">content/24-job-ready.md</a></div>
 </main>
 </body>
 </html>

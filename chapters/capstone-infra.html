@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track） · 大模型知识体系</title>
-<meta name="description" content="profiler 算子表、CUDA Event 计时、naive vs SDPA 实测、torch.compile 反例、serving TTFT/TPOT 压测客户端 + vLLM runbook（NOT EXECUTED ON CUDA）。">
+<title>推理分析：把「慢」定位到算子与指标 · 大模型知识体系</title>
+<meta name="description" content="profiler 算子表、计时口径、naive vs SDPA、torch.compile 反例、TTFT/TPOT 与 NOT EXECUTED ON CUDA。不是当前推理基准作业。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-infra.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,17 +32,18 @@
   <a href="../index.html#/capstone-infra">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="capstone-sft.html">← Capstone 3 · Real SFT / LoRA Experiment</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-infra">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 31 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track）</h1><p class="chapter-desc">profiler 算子表、CUDA Event 计时、naive vs SDPA 实测、torch.compile 反例、serving TTFT/TPOT 压测客户端 + vLLM runbook（NOT EXECUTED ON CUDA）。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="capstone-sft.html">← SFT / LoRA：一次真实实验闭环怎么读</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-infra">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 31 章 · 第七部分 · 工程查阅</div><h1 class="chapter-title">推理分析：把「慢」定位到算子与指标</h1><p class="chapter-desc">profiler 算子表、计时口径、naive vs SDPA、torch.compile 反例、TTFT/TPOT 与 NOT EXECUTED ON CUDA。不是当前推理基准作业。</p><p class="chapter-source">对应课件：工程查阅（原 Job-Ready）</p></div>
 <div class="md">
-<h1>第 31 章 · Capstone 4：GPU / Inference Profiling Lab（AI Infra Track）</h1>
-<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>Infra 岗的面试从「你用过什么工具」开始，但你真正要证明的是：<strong>给你一个慢的系统，你能定位到哪一行代码、为什么慢、怎么证明改了之后更快</strong>。这一章交付一整套可复现的 profiling / benchmark 工具箱。</p>
+<h1>第 31 章 · 推理分析：把「慢」定位到算子与指标</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>Infra 要证明的不是「用过什么工具」，而是：<strong>给你一个慢的系统，你能定位到哪一行、为什么慢、怎么证明改了之后更快</strong>。本章是 profiling / serving 指标教材，不是当前主线 Capstone。</p>
 </div></div>
-<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a>
-<strong>运行状态</strong>：CPU 实验全部实测 ✅（latency/理论 footprint/子进程 RSS 三口径分离）；<strong>CUDA / vLLM 部分 NOT EXECUTED ON CUDA</strong> ⚠️（命令与模板齐全）。</p>
-<div class="box box-warning"><div class="box-title">⚠️ AI Infra Track 说明</div><div class="box-body"><p>本章属于 <strong>AI Infra / ML Systems 方向</strong>（Track C）。Track A/B 的同学了解即可——面试问到 profiling 与 serving 指标时，至少能讲清原理与指标含义。</p>
+<div class="box box-note"><div class="box-title">📘 本章在当前主线中的位置</div><div class="box-body"><p>当前主线作业仍是 Attention。本章保留计时口径、profiler、naive vs SDPA、compile 反例，以及 <code>NOT EXECUTED ON CUDA</code> 纪律。<a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark"><code>projects/inference-benchmark/</code></a> 是可选历史参考，<strong>非当前作业</strong>。</p>
 </div></div>
-<h2>31.1 工具链与验收</h2>
+<p><strong>运行状态</strong>：CPU 实验全部实测（latency / 理论 footprint / 子进程 RSS 三口径分离）；<strong>CUDA / vLLM 部分 NOT EXECUTED ON CUDA</strong>（命令与模板齐全）。</p>
+<div class="box box-warning"><div class="box-title">⚠️ 阅读范围</div><div class="box-body"><p>本章属于 <strong>AI Infra / ML Systems</strong> 查阅方向（Track C）。Track A/B 了解即可——面试问到 profiling 与 serving 指标时，至少能讲清原理。不要把本章当成必须交的推理基准作业。</p>
+</div></div>
+<h2>31.1 工具链与当时测过什么</h2>
 <table>
 <thead>
 <tr>
@@ -88,7 +89,7 @@ kernel(); end.record(); torch.cuda.synchronize()
 dt_ms = start.elapsed_time(end)</code></pre>
 <p>CUDA 调用是异步的——<code>kernel()</code> 返回时 GPU 可能还没开始算。<strong>不 synchronize 的 benchmark 全部无效</strong>，这是面试中的高频送命题。</p>
 <h2>31.3 Profiler：把「慢」变成一张可读的表</h2>
-<p><code>projects/inference-benchmark/src/ibench/profiler_lab.py</code> 用 <code>torch.profiler</code> 抓 Top 算子。真实输出（naive attention, seq=512, CPU）：</p>
+<p>历史参考实现用 <code>torch.profiler</code> 抓 Top 算子。真实输出（naive attention, seq=512, CPU）：</p>
 <table>
 <thead>
 <tr>
@@ -224,7 +225,7 @@ dt_ms = start.elapsed_time(end)</code></pre>
 <pre><code class="lang-">并发 1：TTFT p50 4.4ms   TPOT 25.9ms   tok/s 40.9
 并发 4：TTFT p50 851ms   TPOT 25.8ms   tok/s 42.2   ← 单线程服务端排队</code></pre>
 <p>并发 4 时 TPOT 不变、TTFT 暴涨——服务端吞吐瓶颈导致的<strong>排队</strong>，不是计算变慢。这个区分在真实排查中非常重要。</p>
-<p>真实 vLLM 实验：见 <a href="https://github.com/xhr0417/llm-course/tree/main/projects/inference-benchmark/docs/vllm_runbook.md"><code>docs/vllm_runbook.md</code></a>（含命令、四问与记录模板）。<strong>没有 GPU 就不填数字</strong>。</p>
+<p>真实 vLLM 实验模板见历史参考目录中的 <code>docs/vllm_runbook.md</code>（命令、四问与记录模板）。<strong>没有 GPU 就不填数字</strong>。那不是当前作业。</p>
 <h2>31.7 四个必答分析问题</h2>
 <ol>
 <li><p><strong>为什么 batch ↑ → 吞吐 ↑ 但延迟可能 ↑？</strong>
@@ -294,9 +295,9 @@ naive 物化完整 <code>[B,H,S,S]</code> 中间矩阵（本机 seq=2048 理论 
 </tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 15 章 GPU/Roofline</span><span class="tag">第 19 章 FlashAttention</span><span class="tag">第 20 章 Inference Systems</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">AI Infra / ML Systems / 推理框架实习面试</span><span class="tag">Capstone 5（后续：Triton/CUDA 深化）</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 15 章 GPU/Roofline</span><span class="tag">第 19 章 FlashAttention</span><span class="tag">第 20 章 Inference Systems</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">AI Infra / ML Systems 阅读</span><span class="tag">后续专项实验（不是旧 Capstone 作业）</span></div></div>
 </div>
-<div class="static-nav"><a href="capstone-sft.html">← Capstone 3 · Real SFT / LoRA Experiment</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/31-capstone-infra.md">content/31-capstone-infra.md</a></div>
+<div class="static-nav"><a href="capstone-sft.html">← SFT / LoRA：一次真实实验闭环怎么读</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><span></span></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/31-capstone-infra.md">content/31-capstone-infra.md</a></div>
 </main>
 </body>
 </html>

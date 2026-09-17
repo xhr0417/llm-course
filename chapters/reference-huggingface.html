@@ -13,7 +13,7 @@
 </head>
 <body>
 <header class="static-top"><strong>大模型知识体系</strong><span class="spacer"></span><a href="huggingface.html">← 返回第 26 章</a><a href="../index.html">回到交互版首页</a></header>
-<main class="static-wrap"><div class="static-nav"><a href="huggingface.html">← 返回主线</a><a href="../index.html">回到交互版首页</a></div><div class="static-banner">这是按需查阅的参考手册，不是主线必读内容。</div><div class="chapter-head"><div class="chapter-eyebrow">参考手册 · 第 26 章</div><h1 class="chapter-title">HuggingFace 工程参考手册与复盘</h1><p class="chapter-desc">按需查阅 Tokenizer、Chat Template、logits、批量推理、数据 collator、PEFT 和实验评测。</p></div><div class="md"><p>这页是第 26 章的查阅区。主线页面保留从加载模型到实验报告的 Guided Build；这里集中放 API 细节、工程陷阱和面试复盘。完整 SFT/LoRA 实验的算法闭环在第 30 章继续。</p>
+<main class="static-wrap"><div class="static-nav"><a href="huggingface.html">← 返回主线</a><a href="../index.html">回到交互版首页</a></div><div class="static-banner">这是按需查阅的参考手册，不是主线必读内容。</div><div class="chapter-head"><div class="chapter-eyebrow">参考手册 · 第 26 章</div><h1 class="chapter-title">HuggingFace 工程参考手册与复盘</h1><p class="chapter-desc">按需查阅 Tokenizer、Chat Template、logits、批量推理、数据 collator、PEFT 和实验评测。</p></div><div class="md"><p>这页是第 26 章的查阅区。主线页面保留工作流地图与历史实测；这里集中放 API 细节、工程陷阱和面试复盘。完整 SFT/LoRA 实验记录在第 30 章。不要把旧 Guided Build 当当前作业。</p>
 <h2>26.3 Learn 参考手册：HuggingFace 工程细节</h2>
 <h3>26.3.1 Tokenizer：模型与文本之间的唯一接口</h3>
 <pre><code class="lang-python">from transformers import AutoTokenizer
@@ -128,9 +128,10 @@ peft_model = get_peft_model(model, lora_cfg)</code></pre>
 <pre><code class="lang-python">tuned_base = load_model(name)
 tuned_model = PeftModel.from_pretrained(tuned_base, adapter_dir)
 clean_base = load_model(name)</code></pre>
-<h2>26.4 Reference Solution</h2>
+<h2>26.4 可选参考实现（非当前作业）</h2>
 <p>完整工程：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/hf-mini-lab">projects/hf-mini-lab</a></p>
-<pre><code class="lang-bash">cd projects/hf-mini-lab
+<pre><code class="lang-bash"># 仅在你明确要对照历史实现时使用
+cd projects/hf-mini-lab
 pip install -r requirements.txt
 python scripts/run_lab.py
 pytest -q</code></pre>
@@ -143,7 +144,7 @@ Q: 用一句话解释什么是数据去重。
 - base ： 数据去重是指从一组数据中去除重复的记录，确保每个数据项都是唯一的。...
 - tuned： 数据去重就是消除前后一致的记录，让结果集更加干净和独立。</code></pre>
 <p>能看到 tuned 输出更接近训练数据的「一句话解释」风格；16 条样本 / 60 步只够验证流程，不构成能力结论。</p>
-<p>参考实现用于回答「我的 starter 和完整工程差在哪里」，不是提前抄写。完整算法实验请以第 30 章为主线。</p>
+<p>参考实现用于对照「工作流每一层写在哪」，不是当前 starter 作业。完整算法实验记录请读第 30 章。</p>
 <h2>26.5 面试复盘：HuggingFace / 微调</h2>
 <ol>
 <li><code>padding</code>、<code>truncation</code> 和 <code>attention_mask</code> 分别解决什么问题？</li>
@@ -157,7 +158,7 @@ Q: 用一句话解释什么是数据去重。
 <li>left padding 的 batch 里，最后一个位置一定是真实 token 吗？为什么？</li>
 <li>PEFT 就地注入 bug：怎么触发、除 Δ=0.0000 外还有什么发现信号、怎么修复？</li>
 </ol>
-<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你用 <code>PeftModel.from_pretrained(base, adapter_dir)</code> 重新加载了微调模型，准备与 base 做对比评测。以下哪种做法是正确的？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接评测 `base` 变量（它没被训练过，应该是干净的）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>重新加载一份干净模型作为 base 评测，因为 `from_pretrained` 已就地改造了 `base`</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只测 tuned，不测 base</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>把 base 和 tuned 的 loss 四舍五入到小数点后一位再比较</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PEFT 是就地注入——<code>base</code> 变量引用的模型对象已被装上 LoRA 包装器，直接评测会得到与 tuned 相同的结果（Δ=0.0000），这正是本项目真实踩过的坑（Step 11）。必须用另一次干净加载的模型当基线。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你用 <code>PeftModel.from_pretrained(base, adapter_dir)</code> 重新加载了微调模型，准备与 base 做对比评测。以下哪种做法是正确的？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接评测 `base` 变量（它没被训练过，应该是干净的）</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>重新加载一份干净模型作为 base 评测，因为 `from_pretrained` 已就地改造了 `base`</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>只测 tuned，不测 base</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>把 base 和 tuned 的 loss 四舍五入到小数点后一位再比较</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>PEFT 是就地注入——<code>base</code> 变量引用的模型对象已被装上 LoRA 包装器，直接评测会得到与 tuned 相同的结果（Δ=0.0000），这是当时真实踩过的坑。必须用另一次干净加载的模型当基线。</div></details></div>
 <div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
 <thead>
 <tr>
@@ -191,7 +192,7 @@ Q: 用一句话解释什么是数据去重。
 </tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 6 章 Tokenizer</span><span class="tag">第 9 章 GPT</span><span class="tag">第 17 章 LoRA</span><span class="tag">第 21 章 Loss Mask</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 30 章 SFT / LoRA</span><span class="tag">Capstone 1 Eval Harness</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 6 章 Tokenizer</span><span class="tag">第 9 章 GPT</span><span class="tag">第 17 章 LoRA</span><span class="tag">第 21 章 Loss Mask</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 30 章 SFT / LoRA 实验记录</span><span class="tag">第 27 章评测分层</span></div></div>
 </div><div class="static-nav"><a href="huggingface.html">← 返回主线</a><a href="../index.html">回到交互版首页</a></div></main>
 </body>
 </html>

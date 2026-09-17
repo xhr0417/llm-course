@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capstone 2 · Search + Rerank + RAG Service · 大模型知识体系</title>
-<meta name="description" content="完整 RAG 服务：FastAPI（/chat、/chat/stream SSE、超时 504、线程池）+ 检索与生成分开评测 + Dockerfile——Checkpoint D。">
+<title>RAG 服务化：检索管线怎样对外提供接口 · 大模型知识体系</title>
+<meta name="description" content="FastAPI（/chat、SSE、超时、线程池）、检索与生成分开评测、Dockerfile 纪律。历史服务实现仅作可选对照。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-rag.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,16 +32,17 @@
   <a href="../index.html#/capstone-rag">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="rag-engineering.html">← Retrieval &amp; RAG Engineering：让模型用上外部知识</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-sft.html">Capstone 3 · Real SFT / LoRA Experiment →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-rag">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 29 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Capstone 2 · Search + Rerank + RAG Service</h1><p class="chapter-desc">完整 RAG 服务：FastAPI（/chat、/chat/stream SSE、超时 504、线程池）+ 检索与生成分开评测 + Dockerfile——Checkpoint D。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="rag-engineering.html">← Retrieval &amp; RAG Engineering：让模型用上外部知识</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-sft.html">SFT / LoRA：一次真实实验闭环怎么读 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/capstone-rag">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 29 章 · 第七部分 · 工程查阅</div><h1 class="chapter-title">RAG 服务化：检索管线怎样对外提供接口</h1><p class="chapter-desc">FastAPI（/chat、SSE、超时、线程池）、检索与生成分开评测、Dockerfile 纪律。历史服务实现仅作可选对照。</p><p class="chapter-source">对应课件：工程查阅（原 Job-Ready）</p></div>
 <div class="md">
-<h1>第 29 章 · Capstone 2：Search + Rerank + RAG Service</h1>
-<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>把第 28 章的检索管线做成一个<strong>能对外提供服务的系统</strong>：<code>/chat</code> 返回 answer + citations + sources + latency，<code>/chat/stream</code> 流式输出，超时可保护、失败可定位——Checkpoint D。</p>
+<h1>第 29 章 · RAG 服务化：检索管线怎样对外提供接口</h1>
+<div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>把第 28 章的检索管线做成服务时，要处理 <code>/chat</code> 的 answer + citations、SSE 流式、超时和失败定位。这是服务化原理，不是当前主线的 Checkpoint 作业。</p>
 </div></div>
-<p><strong>项目位置</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a>
-<strong>真实运行</strong>：课程内容 28 篇 → 841 chunks；22 条标注查询评测；Qwen2.5-0.5B 生成（CPU）。</p>
-<h2>29.1 目标：从「跑通检索」到「交付服务」</h2>
-<p>Checkpoint D 的验收标准：</p>
+<div class="box box-note"><div class="box-title">📘 本章在当前主线中的位置</div><div class="box-body"><p>当前主线不是再交付一个 RAG 服务。本章保留 FastAPI / SSE / 超时 / 线程池原理，以及当时的评测数字。<a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a> 是可选历史参考，<strong>非当前作业</strong>。</p>
+</div></div>
+<p><strong>历史运行</strong>：课程内容 28 篇 → 841 chunks；22 条标注查询；Qwen2.5-0.5B 生成（CPU）。</p>
+<h2>29.1 从「跑通检索」到「能对外服务」</h2>
+<p>当时那次实验覆盖过这些能力（作为阅读清单，不是现在要交的验收表）：</p>
 <table>
 <thead>
 <tr>
@@ -159,9 +160,9 @@ async def chat(req: ChatRequest) -&gt; ChatResponse:
 <td>部署探活、容器编排必需</td>
 </tr>
 </tbody></table>
-<p><strong>测试方式（无需真实 API key）</strong>：FastAPI <code>TestClient</code> 直接打端点——健康检查、检索、chat、SSE 首事件、超时 504，全在 <code>tests/test_rag.py</code> 里（27 个用例）。</p>
+<p><strong>测试思路（无需真实 API key）</strong>：用 FastAPI <code>TestClient</code> 打端点——健康检查、检索、chat、SSE 首事件、超时 504。历史参考实现把这些写在测试里；那不是当前作业。</p>
 <div class="box box-warning"><div class="box-title">⚠️ 常见错误：async def 里跑 CPU 密集任务</div><div class="box-body"><p><code>async def chat()</code> 里直接调用同步的 <code>pipeline.answer()</code>（里面是模型推理）会<strong>阻塞整个事件循环</strong>——所有请求排队，健康检查都会超时。
-正确做法：<code>run_in_threadpool</code>（本项目）。CPU 密集 + async 是 FastAPI 服务最常见的坑。</p>
+正确做法：把同步推理放进 <code>run_in_threadpool</code>。CPU 密集 + async 是 FastAPI 服务最常见的坑。</p>
 </div></div>
 <h2>29.4 流式（SSE）：为什么 ChatGPT 是&quot;打字机&quot;</h2>
 <pre><code class="lang-python">def event_source():
@@ -178,8 +179,7 @@ docker run -p 8000:8000 \
   -v $(pwd)/../../content:/corpus \
   -e RAG_CORPUS=/corpus \
   rag-service</code></pre>
-<div class="box box-note"><div class="box-title">📘 Docker build：由 CI 真实验证</div><div class="box-body"><p>开发机未安装 Docker；本仓库的 GitHub Actions <code>docker-build</code> job 会真实执行 <code>docker build</code>（<strong>当前状态：通过</strong>）。
-Dockerfile 使用 <code>python:3.11-slim</code> + CPU 版 torch 轮子 + uvicorn；本地构建与挂载方式如上（命令：<code>docker build -t rag-service .</code>）。</p>
+<div class="box box-note"><div class="box-title">📘 Docker build（可选对照，非当前作业）</div><div class="box-body"><p>开发机当时未装 Docker；仓库 CI 里仍保留对历史镜像的 <code>docker build</code>，用来检查<strong>还留在磁盘上的代码</strong>能否构建，不是要你交一份 RAG 作业。本地命令仅供对照：<code>docker build -t rag-service .</code></p>
 </div></div>
 <h2>29.6 真实运行：6 题端到端</h2>
 <pre><code class="lang-">检索命中 6/6 | 引用规范 4/6 | 耗时中位数 19.1s（CPU，0.5B 模型）
@@ -235,9 +235,9 @@ Dockerfile 使用 <code>python:3.11-slim</code> + CPU 版 torch 轮子 + uvicorn
 </tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 28 章 Retrieval &amp; RAG</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 27 章 Eval Harness</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 3（bad case 驱动 SFT）</span><span class="tag">AI 应用开发实习面试</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 28 章 Retrieval &amp; RAG</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 27 章 Eval Harness</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 30 章用失败样本看 SFT</span><span class="tag">AI 应用方向阅读</span></div></div>
 </div>
-<div class="static-nav"><a href="rag-engineering.html">← Retrieval &amp; RAG Engineering：让模型用上外部知识</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-sft.html">Capstone 3 · Real SFT / LoRA Experiment →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/29-capstone-rag.md">content/29-capstone-rag.md</a></div>
+<div class="static-nav"><a href="rag-engineering.html">← Retrieval &amp; RAG Engineering：让模型用上外部知识</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-sft.html">SFT / LoRA：一次真实实验闭环怎么读 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/29-capstone-rag.md">content/29-capstone-rag.md</a></div>
 </main>
 </body>
 </html>

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>知识地图与学习主线 · 大模型知识体系</title>
-<meta name="description" content="六段式学习路线（理解 → 构建 → 扩展 → 服务 → 对齐 → 评估）、CS336 前置分层与全站导航。">
+<meta name="description" content="六段式知识地图、当前动手主线（小模型实验室 → 核验助手 → 专项）与岗位查阅分组。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/map.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -33,10 +33,10 @@
 </header>
 <main class="static-wrap">
 <div class="static-nav"><span></span><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="basics.html">深度学习基础：回归、Loss、梯度与 Softmax →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/map">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 0 章 · 总览</div><h1 class="chapter-title">知识地图与学习主线</h1><p class="chapter-desc">六段式学习路线（理解 → 构建 → 扩展 → 服务 → 对齐 → 评估）、CS336 前置分层与全站导航。</p><p class="chapter-source">对应课件：全部课件总纲</p></div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 0 章 · 总览</div><h1 class="chapter-title">知识地图与学习主线</h1><p class="chapter-desc">六段式知识地图、当前动手主线（小模型实验室 → 核验助手 → 专项）与岗位查阅分组。</p><p class="chapter-source">对应课件：全部课件总纲</p></div>
 <div class="md">
 <blockquote>
-<p><strong>本章对应课件</strong>：全站总纲（Job-Ready 更新版）。建议先花 15 分钟读完本章，建立全局地图。本课程定位：<strong>中文交互式 LLM 教材 + 真实工程项目集</strong>，由两条平行主线组成：<strong>Knowledge Track（0-23，懂）</strong> 与 <strong>Job-Ready Track（24-31，能做）</strong>。</p>
+<p><strong>本章对应课件</strong>：全站总纲。建议先花 15 分钟读完，建立全局地图。本课程是<strong>中文交互式 LLM 教材</strong>。动手主线在首页「我的学习」：<strong>小模型学习实验室 → 技术声明核验助手 / 单 Agent → 算法或 Infra 专项</strong>。第 0–23 章是理论主干；第 24–31 章是工程与岗位查阅，不再要求完成六个旧项目。</p>
 </blockquote>
 <h2>0.1 完整学习路线（六段式）</h2>
 <details class="fold" open><summary>先懂直觉</summary><div class="fold-body"><p>这套课程讲一条完整的产业链：<strong>理解模型原理 → 亲手构建模型 → 扩展规模（数据/算力/GPU/内核/分布式）→ 服务推理 → 对齐偏好 → 评估验证</strong>。每一段都有明确的「学完能做什么」。</p>
@@ -59,18 +59,16 @@ vLLM / SGLang</code></pre>
 <p><a class="static-link" href="../index.html#/map">在交互版中打开这个演示 →</a></p></div></div>
 <p>推理主线（贯穿全部章节）：</p>
 <div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>输入</mtext><mo>→</mo><mtext>Tokenizer</mtext><mo>→</mo><mtext>Embedding</mtext><mo>→</mo><mtext>Transformer</mtext><mo>→</mo><mtext>Logits</mtext><mo>→</mo><mtext>Softmax</mtext><mo>→</mo><mi>P</mi><mo stretchy="false">(</mo><mtext>next token</mtext><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{输入} \rightarrow \text{Tokenizer} \rightarrow \text{Embedding} \rightarrow \text{Transformer} \rightarrow \text{Logits} \rightarrow \text{Softmax} \rightarrow P(\text{next token})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord cjk_fallback">输入</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Tokenizer</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Embedding</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Transformer</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Logits</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Softmax</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord text"><span class="mord">next token</span></span><span class="mclose">)</span></span></span></span></span></div>
-<h2>0.1b 两条平行主线</h2>
-<p>上图的六段式是 <strong>Knowledge Track（0-23 章）</strong>。它解决「懂」。从第 24 章开始是 <strong>Job-Ready Track（24-31 章）</strong>，它解决「能做」——每一章绑定一个可运行项目：</p>
-<pre><code class="lang-">Job-Ready Track 24-31
-Engineering（25 Python 工程）→ Framework（26 HuggingFace）
-→ Evaluation（27 Eval Harness）→ Retrieval（28 RAG 工程）→ Service（29 RAG Service）
-→ Fine-tuning（30 SFT/LoRA）→ Profiling（31 Infra Lab）
-
-六个真实项目在 projects/ 目录：
-log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-benchmark</code></pre>
-<p>三条岗位路线不在本章重复维护。下面的路线卡片和第 24 章使用同一份 <code>content/tracks.json</code>；路线页与章节翻页也沿用相同顺序。</p>
+<h2>0.1b 当前主线与查阅分组</h2>
+<p>上图的六段式是教材知识地图（第 0–23 章为主）。它解决「懂」。当前<strong>动手主线</strong>不在六张旧项目卡上，而在首页「我的学习」。</p>
+<pre><code class="lang-">当前主线
+小模型学习实验室（Attention）
+  → 技术声明核验助手 / 单 Agent
+  → 算法或 Infra 专项实验</code></pre>
+<p>第 24–31 章仍可阅读：Python 工程、HuggingFace、评测分层、检索、SFT、推理分析，以及当时留下的真实数字。仓库里的六个旧目录是可选历史参考，<strong>不是必修作业</strong>。</p>
+<p>三条岗位路线不在本章重复维护。下面的路线卡片和第 24 章使用同一份 <code>content/tracks.json</code>，只作查阅分组，不是当前主线。</p>
 <p>路线标识：<strong>Track A · AI 应用</strong>、<strong>Track B · 模型训练与算法</strong>、<strong>Track C · AI Infra</strong>。</p>
-<section class="course-routes compact"><div class="course-routes-head"><span class="page-label">路线配置 · content/tracks.json</span><p>路线顺序由同一份配置生成；进入路线页后，下一课也沿用这份顺序。</p></div><article class="course-route"><header><span class="course-route-number">01</span><div><h3>AI 应用开发</h3><p>从 Python 工程开始，学会调用、评测模型，再搭建 RAG 服务。</p><p class="course-route-roles">岗位：大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台</p></div></header><p class="course-route-outcome"><strong>产出：</strong>做出可运行的评测工具与 RAG 服务</p><ol><li><a href="python-engineering.html"><span>01</span>Python 工程实作</a></li><li><a href="pytorch.html"><span>02</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>03</span>Transformer</a></li><li><a href="huggingface.html"><span>04</span>HuggingFace 实作</a></li><li><a href="llm-eval.html"><span>05</span>大模型评测</a></li><li><a href="capstone-eval.html"><span>06</span>模型评测工具实作</a></li><li><a href="rag-engineering.html"><span>07</span>RAG 检索基础</a></li><li><a href="capstone-rag.html"><span>08</span>RAG 服务实作</a></li></ol></article><article class="course-route"><header><span class="course-route-number">02</span><div><h3>模型训练与算法</h3><p>理解 Transformer，训练一个小模型，再完成数据、微调与评测实验。</p><p class="course-route-roles">岗位：大模型算法 / 机器学习算法 / 模型训练与后训练</p></div></header><p class="course-route-outcome"><strong>产出：</strong>训练小模型，完成一份微调实验报告</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>02</span>Transformer</a></li><li><a href="build-llm-1.html"><span>03</span>从零构建 LLM · 组件</a></li><li><a href="build-llm-2.html"><span>04</span>从零构建 LLM · 训练</a></li><li><a href="data-pipeline.html"><span>05</span>预训练数据工程</a></li><li><a href="pretrain-sft.html"><span>06</span>预训练与 SFT</a></li><li><a href="huggingface.html"><span>07</span>HuggingFace 实作</a></li><li><a href="efficient.html"><span>08</span>显存、混合精度与 LoRA</a></li><li><a href="capstone-sft.html"><span>09</span>SFT / LoRA 实验</a></li><li><a href="rl-grpo.html"><span>10</span>PPO 与 GRPO</a></li><li><a href="llm-eval.html"><span>11</span>大模型评测</a></li></ol></article><article class="course-route"><header><span class="course-route-number">03</span><div><h3>AI Infra 与推理系统</h3><p>从 GPU 和算子理解性能，逐步掌握分布式训练、推理服务与性能分析。</p><p class="course-route-roles">岗位：AI Infra / ML Systems / 推理框架 / 性能工程</p></div></header><p class="course-route-outcome"><strong>产出：</strong>定位性能瓶颈，完成推理基准测试</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="gpu.html"><span>02</span>GPU 基础</a></li><li><a href="flash-attention.html"><span>03</span>FlashAttention 与 Triton</a></li><li><a href="distributed.html"><span>04</span>分布式训练</a></li><li><a href="inference.html"><span>05</span>推理系统</a></li><li><a href="capstone-infra.html"><span>06</span>推理性能分析</a></li></ol></article></section>
+<section class="course-routes compact"><div class="course-routes-head"><span class="page-label">路线配置 · content/tracks.json</span><p>查阅分组由同一份配置生成；进入路线页后，下一课也沿用这份顺序。不是当前主线作业。</p></div><article class="course-route"><header><span class="course-route-number">01</span><div><h3>AI 应用开发</h3><p>查阅 Python 工程、调用与评测模型、检索与 RAG 相关教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完应用向章节：工程分层、评测纪律、检索与服务化要点</p><ol><li><a href="python-engineering.html"><span>01</span>Python 工程</a></li><li><a href="pytorch.html"><span>02</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>03</span>Transformer</a></li><li><a href="huggingface.html"><span>04</span>HuggingFace 工作流</a></li><li><a href="llm-eval.html"><span>05</span>大模型评测</a></li><li><a href="capstone-eval.html"><span>06</span>评测系统分层</a></li><li><a href="rag-engineering.html"><span>07</span>RAG 检索基础</a></li><li><a href="capstone-rag.html"><span>08</span>RAG 服务原理</a></li></ol></article><article class="course-route"><header><span class="course-route-number">02</span><div><h3>模型训练与算法</h3><p>查阅 Transformer、小模型训练、数据、微调与评测相关教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：大模型算法 / 机器学习算法 / 模型训练与后训练</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完算法向章节：小模型、SFT/LoRA 纪律与评测</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>02</span>Transformer</a></li><li><a href="build-llm-1.html"><span>03</span>从零构建 LLM · 组件</a></li><li><a href="build-llm-2.html"><span>04</span>从零构建 LLM · 训练</a></li><li><a href="data-pipeline.html"><span>05</span>预训练数据工程</a></li><li><a href="pretrain-sft.html"><span>06</span>预训练与 SFT</a></li><li><a href="huggingface.html"><span>07</span>HuggingFace 工作流</a></li><li><a href="efficient.html"><span>08</span>显存、混合精度与 LoRA</a></li><li><a href="capstone-sft.html"><span>09</span>SFT / LoRA 实验记录</a></li><li><a href="rl-grpo.html"><span>10</span>PPO 与 GRPO</a></li><li><a href="llm-eval.html"><span>11</span>大模型评测</a></li></ol></article><article class="course-route"><header><span class="course-route-number">03</span><div><h3>AI Infra 与推理系统</h3><p>查阅 GPU、算子、分布式训练、推理服务与性能分析教材。这是岗位阅读分组，不是当前主线作业。</p><p class="course-route-roles">岗位：AI Infra / ML Systems / 推理框架 / 性能工程</p></div></header><p class="course-route-outcome"><strong>查阅范围：</strong>读完 Infra 向章节：瓶颈判断、计时口径与 NOT EXECUTED 纪律</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="gpu.html"><span>02</span>GPU 基础</a></li><li><a href="flash-attention.html"><span>03</span>FlashAttention 与 Triton</a></li><li><a href="distributed.html"><span>04</span>分布式训练</a></li><li><a href="inference.html"><span>05</span>推理系统</a></li><li><a href="capstone-infra.html"><span>06</span>推理性能分析</a></li></ol></article></section>
 <h2>0.2 课程分层：哪些必须先学，哪些可以边学边补</h2>
 <div class="box box-warning"><div class="box-title">⚠️ 重要：不要把 CS336 全部内容当成「前置」</div><div class="box-body"><p>本课程按三层组织。<strong>只有 Core Prerequisite 是真正的「开始前必备」</strong>；其余可以在学习/使用过程中逐步补齐。</p>
 </div></div>
@@ -94,7 +92,7 @@ log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-
 </tr>
 <tr>
 <td>🟣 <strong>Systems Extension</strong></td>
-<td>20 Inference Systems · 31 Profiling Lab（vLLM runbook 待 GPU 验证）</td>
+<td>20 Inference Systems · 31 推理分析（vLLM runbook 待 GPU 验证）</td>
 <td>走向工程/系统方向：<strong>不是开始 CS336 的必要条件</strong></td>
 </tr>
 </tbody></table>
@@ -149,19 +147,19 @@ log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-
 <td>读懂 benchmark 分数、做失败分析、跑评测 Lab</td>
 </tr>
 <tr>
-<td>⑦ 求职实战</td>
-<td>24 Job-Ready 总览 · 25 Python 工程 · 26 HuggingFace</td>
-<td>定路线（A/B/C）、工程化 Python、工业生态跑模型</td>
+<td>⑦ 工程查阅</td>
+<td>24 岗位能力地图 · 25 Python 工程 · 26 HuggingFace</td>
+<td>查阅分组、工程化 Python、工业生态工作流（非旧作业）</td>
 </tr>
 <tr>
-<td>⑦ 求职实战</td>
-<td>27 Eval Harness · 28 RAG 工程 · 29 RAG Service</td>
-<td>评测系统、混合检索与精排、FastAPI/SSE 服务</td>
+<td>⑦ 工程查阅</td>
+<td>27 评测系统 · 28 RAG 工程 · 29 RAG 服务原理</td>
+<td>评测分层、混合检索与精排、服务化要点</td>
 </tr>
 <tr>
-<td>⑦ 求职实战</td>
-<td>30 SFT/LoRA 实验 · 31 Profiling Lab</td>
-<td>训练闭环（best checkpoint + 三路评测）、profiling 与 serving benchmark</td>
+<td>⑦ 工程查阅</td>
+<td>30 SFT/LoRA 记录 · 31 推理分析</td>
+<td>训练闭环纪律、profiling 与 serving 指标（含 NOT EXECUTED）</td>
 </tr>
 </tbody></table>
 <h2>0.4 学完能回答的问题（验收清单）</h2>
@@ -278,14 +276,14 @@ log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-
 </tr>
 </thead>
 <tbody><tr>
-<td>P0 · Knowledge</td>
+<td>P0 · 教材主干</td>
 <td>Transformer、手写实现、Scaling Laws、GPU、分布式、数据管线、FlashAttention、推理系统、评测</td>
 <td>✅ 已上线（0-23）</td>
 </tr>
 <tr>
-<td>P0 · Job-Ready</td>
-<td>Python 工程、HuggingFace、Eval Harness、RAG 工程、RAG Service、SFT/LoRA、Profiling Lab（6 个项目）</td>
-<td>✅ 已上线（24-31）</td>
+<td>P0 · 工程查阅</td>
+<td>Python 工程、HuggingFace、评测分层、RAG、SFT/LoRA、推理分析（理论与历史记录；六个旧作业已退出必修）</td>
+<td>✅ 教材可读（24-31）</td>
 </tr>
 <tr>
 <td>后续深化</td>

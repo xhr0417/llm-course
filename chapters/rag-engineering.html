@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Retrieval &amp; RAG Engineering：让模型用上外部知识 · 大模型知识体系</title>
-<meta name="description" content="Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。">
+<meta name="description" content="Chunking、BM25、向量、RRF、精排、Recall@k/MRR/nDCG，以及 22 条查询的历史评测。不是当前 RAG 作业。">
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/rag-engineering.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
@@ -32,13 +32,14 @@
   <a href="../index.html#/rag-engineering">🎮 交互版（含动画演示与测验）</a>
 </header>
 <main class="static-wrap">
-<div class="static-nav"><a href="capstone-eval.html">← Capstone 1 · Build Your Own Mini LLM Evaluation Harness</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">Capstone 2 · Search + Rerank + RAG Service →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rag-engineering">交互版</a>。</div>
-<div class="chapter-head"><div class="chapter-eyebrow">第 28 章 · 第七部分 · 求职实战 (Job-Ready)</div><h1 class="chapter-title">Retrieval &amp; RAG Engineering：让模型用上外部知识</h1><p class="chapter-desc">Chunking 三策略、BGE 向量、FAISS、BM25 从零实现、RRF 融合、cross-encoder 精排、Recall@k/MRR/nDCG、失败分类——22 条标注查询真实评测。</p><p class="chapter-source">对应课件：Job-Ready Track（新增）</p></div>
+<div class="static-nav"><a href="capstone-eval.html">← 评测系统：Mini LLM Evaluation Harness 怎么拆</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">RAG 服务化：检索管线怎样对外提供接口 →</a></div><div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。交互演示与答题功能请前往 <a href="../index.html#/rag-engineering">交互版</a>。</div>
+<div class="chapter-head"><div class="chapter-eyebrow">第 28 章 · 第七部分 · 工程查阅</div><h1 class="chapter-title">Retrieval &amp; RAG Engineering：让模型用上外部知识</h1><p class="chapter-desc">Chunking、BM25、向量、RRF、精排、Recall@k/MRR/nDCG，以及 22 条查询的历史评测。不是当前 RAG 作业。</p><p class="chapter-source">对应课件：工程查阅（原 Job-Ready）</p></div>
 <div class="md">
 <h1>第 28 章 · Retrieval &amp; RAG Engineering：让模型用上外部知识</h1>
 <div class="box box-intuition"><div class="box-title">💡 一句话</div><div class="box-body"><p>模型权重里没有你的私有知识、也不知道昨天发生的事、更没法给出「这句话出自哪」。RAG 用一条检索管线补上这三件事——而<strong>检索本身是一门可评测的工程</strong>。</p>
 </div></div>
-<p><strong>配套项目</strong>：<a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a>（本批交付，含 27 个测试用例与真实评测数据）。</p>
+<div class="box box-note"><div class="box-title">📘 本章在当前主线中的位置</div><div class="box-body"><p>当前主线作业不是再做一个 RAG 服务。本章讲检索管线与评测纪律；841 chunks / 22 条查询等数字是历史实测。<a href="https://github.com/xhr0417/llm-course/tree/main/projects/rag-service"><code>projects/rag-service/</code></a> 仅为可选参考，<strong>非当前作业</strong>。</p>
+</div></div>
 <h2>28.1 为什么纯 LLM 不够</h2>
 <table>
 <thead>
@@ -104,7 +105,7 @@
 <td>实现稍复杂</td>
 </tr>
 </tbody></table>
-<p>本项目选用 <strong>recursive + size 512 + overlap 64</strong>：课程内容 28 篇 markdown → <strong>841 chunks</strong>。</p>
+<p>历史实验选用 <strong>recursive + size 512 + overlap 64</strong>：课程内容 28 篇 markdown → <strong>841 chunks</strong>。</p>
 <div class="box box-warning"><div class="box-title">⚠️ 切分是超参数，不是常量</div><div class="box-body"><ul>
 <li>切太碎：每块信息不足，检索噪声大；</li>
 <li>切太大：一块里混多个主题，相关性被稀释，还挤占上下文预算；</li>
@@ -119,9 +120,9 @@ cosine(q, d1)   # ≫
 cosine(q, d2)   # 相关文档在向量空间里更近</code></pre>
 <p>三个工程要点：</p>
 <ol>
-<li><strong>查询与文档要按模型要求区分编码</strong>（本项目用 BGE，查询侧加指令前缀，文档侧不加）；</li>
-<li><strong>归一化后内积 = 余弦相似度</strong>（本项目向量全部 L2 归一化）；</li>
-<li>embedding 模型也是一个要选型的组件——本项目用 <code>BAAI/bge-small-zh-v1.5</code>（24M 参数，CPU 可跑）。</li>
+<li><strong>查询与文档要按模型要求区分编码</strong>（历史实验用 BGE，查询侧加指令前缀，文档侧不加）；</li>
+<li><strong>归一化后内积 = 余弦相似度</strong>（向量全部 L2 归一化）；</li>
+<li>embedding 模型也是一个要选型的组件——当时用 <code>BAAI/bge-small-zh-v1.5</code>（24M 参数，CPU 可跑）。</li>
 </ol>
 <h2>28.4 向量检索：FAISS 最小实现</h2>
 <pre><code class="lang-python">import faiss
@@ -131,10 +132,10 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <ul>
 <li><code>IndexFlatIP</code> 是<strong>精确检索</strong>：全量算相似度，小规模（几万块）足够快；</li>
 <li>上亿规模再考虑 IVF/HNSW/量化等近似索引——<strong>先把它跑对，再谈规模</strong>；</li>
-<li>本项目在无 FAISS 环境自动回退 numpy 精确实现（接口不变）。</li>
+<li>无 FAISS 时可以回退 numpy 精确实现（接口不变）。这是实现策略，不是当前作业要求。</li>
 </ul>
 <h2>28.5 BM25：关键词检索不是落后技术</h2>
-<p>BM25 是经典的稀疏检索：<strong>词频（TF）× 逆文档频率（IDF）× 文档长度归一化</strong>。本项目从零实现（约 40 行，见 <code>bm25.py</code>），中文用 jieba 分词。</p>
+<p>BM25 是经典的稀疏检索：<strong>词频（TF）× 逆文档频率（IDF）× 文档长度归一化</strong>。中文常用 jieba 分词。历史参考实现约 40 行，见可选目录中的 <code>bm25.py</code>。</p>
 <p>它在什么场景赢过向量检索？</p>
 <ul>
 <li>「RTX 5090」「pass@k」「0x80070005」这类<strong>精确术语</strong>；</li>
@@ -269,11 +270,11 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 </tbody></table>
 <div class="box box-warning"><div class="box-title">⚠️ Hit@k ≠ Recall@k（本轮实测修正的真实问题）</div><div class="box-body"><p>早期实现把「top-k 命中至少一条相关」当作 Recall——那其实是 <strong>Hit@k</strong>。
 当 ground truth 有多个相关文档时（例如 <code>gold=[A,B]</code>、top-k 只找到 A），正确的 Recall = <strong>0.5</strong> 而不是 100%。
-本项目已修正定义并全部重跑，同时增加了 12 个指标单元测试（含多 gold 用例）。</p>
+历史参考实现已按此定义重跑，并留下指标单元测试（含多 gold 用例）。</p>
 </div></div>
 <div class="demo-block"><div class="demo-head">🎮 交互：三个指标怎么算<span class="demo-tag">交互演示 · 静态阅读版</span></div><div class="demo-caption"><p>点击结果行切换「相关/不相关」，拖动 k，观察指标变化。</p>
 <p><a class="static-link" href="../index.html#/rag-engineering">在交互版中打开这个演示 →</a></p></div></div>
-<p>本项目评测规范（可在 <code>eval/retrieval_eval.py</code> 复现）：</p>
+<p>历史评测规范（可选参考实现里的 <code>eval/retrieval_eval.py</code>，非当前作业）：</p>
 <ul>
 <li>语料：课程内容 28 篇 → 841 chunks；</li>
 <li>查询集：人工标注 22 条（<code>data/eval_queries.jsonl</code>），<strong>标注到文档级 ground truth</strong>；</li>
@@ -290,7 +291,7 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <tr>
 <th>维度</th>
 <th>问题</th>
-<th>本项目检查方式</th>
+<th>检查方式</th>
 </tr>
 </thead>
 <tbody><tr>
@@ -311,14 +312,14 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <tr>
 <td>Faithfulness</td>
 <td>回答有没有超出资料？</td>
-<td>当前版本限制（见 Known Limitations）</td>
+<td>当时版本的已知限制</td>
 </tr>
 </tbody></table>
 <p>对 6 道题的真实评测（Qwen2.5-0.5B，检索+精排+生成全链路）：</p>
 <pre><code class="lang-">检索命中 6/6 | 引用规范 4/6 | 用时中位数 19.1s（CPU）</code></pre>
 <p><strong>检索 100% 命中而生成 2/6 失败</strong>——瓶颈定位到生成侧，不是检索侧。</p>
 <h2>28.10 失败案例：四类，各有各的修法</h2>
-<p>来自本项目真实运行（含 prompt 迭代过程）：</p>
+<p>来自当时真实运行（含 prompt 迭代过程）：</p>
 <table>
 <thead>
 <tr>
@@ -340,7 +341,7 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <tr>
 <td><code>citation_only</code></td>
 <td>只输出 <code>[1][2]</code>，没有答案正文</td>
-<td>格式脚手架 / SFT（Capstone 3）</td>
+<td>格式脚手架 / SFT</td>
 </tr>
 <tr>
 <td><code>uncited_answer</code></td>
@@ -358,7 +359,7 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <li>加 few-shot 示例 → 更糟（4/6 citation_only）；</li>
 <li>换成<strong>格式脚手架</strong>（<code>回答：&lt;完整内容&gt;\n引用：[n]</code>）→ 4/6 规范作答。</li>
 </ol>
-<p>结论：<strong>小模型的指令遵循是 RAG 生成侧的瓶颈，检索修不了它</strong>——这正是下一批 Capstone 3（SFT/LoRA）的动机：用真实 bad case 驱动微调。</p>
+<p>结论：<strong>小模型的指令遵循是 RAG 生成侧的瓶颈，检索修不了它</strong>。这是第 30 章用失败样本看 SFT 的阅读动机，不是再开一张 Capstone 作业卡。</p>
 </div></div>
 <h2>28.11 面试复盘：RAG</h2>
 <ol>
@@ -370,7 +371,7 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 <li>引用（citation）怎么保证对得上？模型不配合怎么办？</li>
 <li>你的检索评测集怎么建的？标注错了会发生什么？</li>
 </ol>
-<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你的 RAG 系统上线后用户反馈「回答经常不对」。排查时第一个该看的指标是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接换一个更大的生成模型</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>检索命中率（Recall@k）——先确认正确文档是否进了上下文</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>把 temperature 调到 0</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>增加 system prompt 的字数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>必须先拆开评。本项目实测：检索 6/6 命中、生成 2/6 失败——如果只看「回答不对」就换模型，可能掩盖检索失败的真实原因；反之若检索就先挂了，再强的生成模型也无解。先定位环节，再优化该环节。</div></details></div>
+<div class="quiz"><div class="quiz-head"><span>📝 小测验</span></div><div class="quiz-question">你的 RAG 系统上线后用户反馈「回答经常不对」。排查时第一个该看的指标是？</div><div class="quiz-options"><div class="quiz-option"><span class="quiz-key">A</span><span>直接换一个更大的生成模型</span></div><div class="quiz-option"><span class="quiz-key">B</span><span>检索命中率（Recall@k）——先确认正确文档是否进了上下文</span></div><div class="quiz-option"><span class="quiz-key">C</span><span>把 temperature 调到 0</span></div><div class="quiz-option"><span class="quiz-key">D</span><span>增加 system prompt 的字数</span></div></div><details class="fold"><summary>显示答案与解析</summary><div class="fold-body"><p><strong>正确答案：B</strong></p>必须先拆开评。历史实测：检索 6/6 命中、生成 2/6 失败——如果只看「回答不对」就换模型，可能掩盖检索失败的真实原因；反之若检索就先挂了，再强的生成模型也无解。先定位环节，再优化该环节。</div></details></div>
 <div class="box box-key"><div class="box-title">🔑 本章必须记住</div><div class="box-body"><table>
 <thead>
 <tr>
@@ -408,9 +409,9 @@ scores, idxs = index.search(query_vector, k=20)</code></pre>
 </tr>
 </tbody></table>
 </div></div>
-<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 23 章 LLM Evaluation</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">Capstone 2（rag-service）</span><span class="tag">Capstone 3（用 bad case 驱动 SFT）</span><span class="tag">RAG 类实习面试</span></div></div>
+<div class="related"><div class="related-title">🔗 知识关联</div><div class="related-row"><span class="related-label">依赖</span><span class="tag">第 23 章 LLM Evaluation</span><span class="tag">第 25 章 Python 工程</span><span class="tag">第 26 章 HuggingFace</span></div><div class="related-row"><span class="related-label">用于</span><span class="tag">第 29 章服务化要点</span><span class="tag">第 30 章用失败样本看 SFT</span><span class="tag">后续核验助手的检索阅读</span></div></div>
 </div>
-<div class="static-nav"><a href="capstone-eval.html">← Capstone 1 · Build Your Own Mini LLM Evaluation Harness</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">Capstone 2 · Search + Rerank + RAG Service →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/28-rag-engineering.md">content/28-rag-engineering.md</a></div>
+<div class="static-nav"><a href="capstone-eval.html">← 评测系统：Mini LLM Evaluation Harness 怎么拆</a><a href="../index.html" class="static-home">🏠 回到交互版首页</a><a href="capstone-rag.html">RAG 服务化：检索管线怎样对外提供接口 →</a></div><div class="static-banner">本章完。原始 Markdown：<a href="../content/28-rag-engineering.md">content/28-rag-engineering.md</a></div>
 </main>
 </body>
 </html>
