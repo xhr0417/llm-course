@@ -95,7 +95,12 @@
       var selected = (href === "#/" && path === "home") || href === "#/" + path;
       if (selected) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
     });
-    if (path === "home") return entry(pages.home(readLast()), "我的学习");
+    if (path === "home") {
+      entry(pages.home(readLast()), "我的学习");
+      var retryPlan = byId("retryPlan");
+      if (retryPlan) retryPlan.addEventListener("click", loadLearningPlan);
+      return;
+    }
     if (path === "catalog") return entry(pages.catalog(), "全部章节");
     if (path === "projects") return entry(pages.projects(), "已退出主线");
     if (path.startsWith("track/") && activeTrack) return entry(pages.track(activeTrack), activeTrack.title);
@@ -169,12 +174,9 @@
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
   }
   initShell(); progress.load();
-  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json"), fetchJson("content/learning-plan.json")]).then(function (data) {
-    chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
-    renderer.setCatalog({ chapters: chapters, tracks: tracks });
-    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: data[3], references: references, progress: progress, escapeHtml: escape });
+  function startRoutingAndSearch() {
+    if (search) return;
     window.addEventListener("hashchange", route);
-    route();
     search = CourseSearch.create({ chapters: chapters, references: references,
       fetchChapter: fetchChapter, fetchReference: fetchReference, escapeHtml: escape,
       chapterHref: function (id) { return routes.href(id, activeTrack); },
@@ -185,6 +187,28 @@
         else pendingSection = { id: path, title: title };
       } });
     search.start();
+  }
+  function applyPlan(plan, error) {
+    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: plan, planError: error,
+      references: references, progress: progress, escapeHtml: escape });
+    startRoutingAndSearch();
+    route();
+  }
+  function loadLearningPlan() {
+    return fetchJson("content/learning-plan.json").then(function (plan) {
+      applyPlan(plan, null);
+    }, function (error) {
+      applyPlan(null, error);
+    });
+  }
+  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json")]).then(function (data) {
+    chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
+    renderer.setCatalog({ chapters: chapters, tracks: tracks });
+    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: null, planError: null,
+      references: references, progress: progress, escapeHtml: escape });
+    startRoutingAndSearch();
+    route();
+    return loadLearningPlan();
   }).catch(function (error) {
     root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '<p>请通过 HTTP 服务打开课程，然后刷新重试。</p></div>';
   });

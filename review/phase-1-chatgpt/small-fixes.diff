@@ -1,0 +1,375 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index eac164d..74ac1fc 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -28,4 +28,4 @@ Keep existing purposeful interactions and diagrams. New transitions only change
+ Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+ 
+ ## 8. Accessibility and verification
+-Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
++Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index 080a7a2..10f1578 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -154,11 +154,11 @@
+         },
+         {
+           "title": "检查单头结果",
+-          "body": "打印每一步 shape。用一组固定小张量（例如 B=1、T=4）。把未来某个位置的输入改掉，确认更早位置的输出不变。可选：看权重上三角是否接近 0。写完后再对照 7.12 的手算表，不要先抄。"
++          "body": "关闭 dropout。打印每一步 shape。用一组固定小张量（单头可用 7.12 的 3 token × 2 维例子）。把未来某个位置的输入改掉，确认更早位置的输出不变。再把输出与手算表或一份你信任的参考实现按容差比较（例如对应位置相差不超过 1e-5）。不要先抄 7.13。"
+         },
+         {
+           "title": "再读多头并扩展",
+-          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H，以及因果约束对每个头仍然成立。"
++          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H。关闭 dropout，用另一组固定小张量单独检查多头：因果性仍成立，并与可信参考输出按同样容差比较。单头通过不能代替多头检查。"
+         },
+         {
+           "title": "对照而不是抄袭",
+@@ -168,18 +168,27 @@
+       "criteria": [
+         {
+           "id": "rewrite",
++          "label": "自己重写",
+           "conceptId": "attention",
+           "text": "不看参考代码，在空文件中重写注意力核心计算（先单头，再多头）。"
+         },
+         {
+           "id": "shapes",
++          "label": "形状",
+           "conceptId": "tensor-shape",
+-          "text": "能口述或写出每一步的 shape：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。"
++          "text": "能口述或写出每一步的形状：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。"
+         },
+         {
+           "id": "causal",
++          "label": "因果性",
+           "conceptId": "causal-mask",
+-          "text": "改变未来 token 后，更早位置的输出不变。这是本任务的验收，不因为以前读过因果掩码章节就自动算过。"
++          "text": "改变未来 token 后，更早位置的输出不变。"
++        },
++        {
++          "id": "numeric",
++          "label": "数值正确性",
++          "conceptId": "attention",
++          "text": "关闭 dropout。用固定小张量分别检查单头和多头：输出与 7.12 手算或一份你信任的参考实现按容差比较（例如最大绝对误差不超过 1e-5）。单头通过不能代替多头。本站不运行 Python，也不提供核心算法答案。"
+         }
+       ]
+     }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 6860ec8..7622d19 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -1,8 +1,6 @@
+ # 分阶段实施方案
+ 
+-需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地（展示当前任务并让旧项目退出主入口）。不要自动进入阶段 2，不发布。**
+-
+-学习机制分三层，**不要并进阶段 1**：
++需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。** `main` 推送已触发并成功部署 GitHub Pages；**未运行** `tools/publish.sh`，因此自有服务器发布脚本未执行。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 2。未明确要求时不要再次推送或发布。
+ 
+ 学习机制分三层，**不要并进阶段 1**：
+ 
+@@ -82,7 +80,7 @@
+ - 手机与桌面布局可读。
+ - `node --test tools/test-course.js`；按改动范围跑现有 validator（本阶段仍留下 `projects/` 目录，不要为了过门禁把新主线接回六项目）。
+ 
+-**完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2，不发布。
++**完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2。GitHub Pages 可由 `main` 推送自动部署；自有服务器仍只在明确运行 `tools/publish.sh` 时更新。
+ 
+ **本阶段明确不做：** 机制层 B/C；改写 25/26/27 的全部 Guided 步骤；新 Attention 练习仓库；启用 92 项选修库 UI；拷贝 Repo-Mastery / Atlas / Study Agent / continuous-learning 的代码。未核验的 Atlas 机制按本站设计实现，不阻塞本阶段。
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index c6c3a71..2d384f8 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -121,7 +121,7 @@
+ - **输入：** 单头为 Q/K/V，形状 `[B, T, D]`；多头再按 H 拆成 `[B, H, T, Dh]`，`Dh = D / H`；位置 t 只能看 0…t
+ - **输出：** 与 Q 同形状的上下文向量 `[B, T, D]`
+ - **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头 → 自检 → 读 7.14 扩多头 → 再自检。7.12 / 7.13 只在写完后对照，不要先抄完整实现
+-- **检查：** 打印每步 shape；改未来 token，过去位置输出不变
++- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定小张量分别核对单头和多头数值（与手算或可信参考按容差比较）。本站不运行 Python，不提供核心算法答案。
+ - **教材链接：** 必须指向第 7、11 章中实际存在的小节标题（由计划 JSON 的 `section` 字段与 Markdown `##` 对齐）
+ - 补基础：class / reshape / broadcasting 链到第 11 章对应小节
+ - SpongebobLite 仅作对照入口，标「对照用，不是本周作业仓库」
+@@ -133,8 +133,9 @@
+ | `rewrite` | `attention` | 空文件中重写核心计算（先单头后多头） |
+ | `shapes` | `tensor-shape` | 能讲清每一步 shape |
+ | `causal` | `causal-mask` | 未来不影响过去 |
++| `numeric` | `attention` | 关闭 dropout；固定小张量；单头和多头分别与手算或可信参考按容差比较 |
+ 
+-这三条是 `lab.attention.causal-mha` 的验收，不因为 `causal-mask` 曾经有过阅读记录就自动完成。
++这四条是 `lab.attention.causal-mha` 的验收，不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
+ 
+ **用户之后可记录（第二机制层）**
+ 
+@@ -185,11 +186,12 @@
+ 
+ 打开站点主入口必须同时满足：
+ 
+-1. 能看到当前任务属于 **小模型学习实验室—Attention**（缩放点积注意力、causal mask、多头；完成标准与一年计划第 1 周一致）。页面列出当前目标、必要教材、实现步骤（含写在哪里、输入输出、先单头后多头）、验收条件和关联知识点。教材链接指向实际存在的小节。
+-2. 六个旧项目不出现在主导航、主线任务列表和项目完成进度里。`#/projects` 改为说明页，旧书签不产生死链。
+-3. 目录与搜索仍可打开原理论章节；不物理删除 `projects/`。
+-4. 已有「已读」记录仍在；界面不把它们显示成已掌握。
+-5. **本阶段不做：** 证据表单、卡点、复习队列、自动测试写入、引入参考仓库的代码。
++1. 能看到当前任务属于 **小模型学习实验室—Attention**。页面用自然中文列出当前目标、必要教材、实现步骤（含写在哪里、输入输出、先单头后多头）、验收条件和相关概念。教材链接指向实际存在的小节。首页不显示 taskId、criterionId、知识点英文 id，也不写工程阶段口号，不暗示本页会按验收自动切换练习。
++2. 验收含形状、因果性，以及数值正确性（固定小张量、关闭 dropout、单头和多头分别与手算或可信参考按容差比较）。不代写核心算法，不在网站运行 Python。
++3. 六个旧项目不出现在主导航、主线任务列表和项目完成进度里。`#/projects` 改为说明页，旧书签不产生死链。
++4. 目录与搜索仍可打开原理论章节；不物理删除 `projects/`。`learning-plan.json` 加载失败时，首页给出可理解错误和重试，目录、章节路由和搜索仍初始化。
++5. 已有「已读」记录仍在；界面不把它们显示成已掌握。
++6. **本阶段不做：** 证据表单、卡点、复习队列、自动测试写入、引入参考仓库的代码。
+ 
+ ## 9. 文档轮次验收
+ 
+diff --git a/js/app.js b/js/app.js
+index 5ca86e5..605e818 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -95,7 +95,12 @@
+       var selected = (href === "#/" && path === "home") || href === "#/" + path;
+       if (selected) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+     });
+-    if (path === "home") return entry(pages.home(readLast()), "我的学习");
++    if (path === "home") {
++      entry(pages.home(readLast()), "我的学习");
++      var retryPlan = byId("retryPlan");
++      if (retryPlan) retryPlan.addEventListener("click", loadLearningPlan);
++      return;
++    }
+     if (path === "catalog") return entry(pages.catalog(), "全部章节");
+     if (path === "projects") return entry(pages.projects(), "已退出主线");
+     if (path.startsWith("track/") && activeTrack) return entry(pages.track(activeTrack), activeTrack.title);
+@@ -169,12 +174,9 @@
+     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
+   }
+   initShell(); progress.load();
+-  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json"), fetchJson("content/learning-plan.json")]).then(function (data) {
+-    chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
+-    renderer.setCatalog({ chapters: chapters, tracks: tracks });
+-    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: data[3], references: references, progress: progress, escapeHtml: escape });
++  function startRoutingAndSearch() {
++    if (search) return;
+     window.addEventListener("hashchange", route);
+-    route();
+     search = CourseSearch.create({ chapters: chapters, references: references,
+       fetchChapter: fetchChapter, fetchReference: fetchReference, escapeHtml: escape,
+       chapterHref: function (id) { return routes.href(id, activeTrack); },
+@@ -185,6 +187,28 @@
+         else pendingSection = { id: path, title: title };
+       } });
+     search.start();
++  }
++  function applyPlan(plan, error) {
++    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: plan, planError: error,
++      references: references, progress: progress, escapeHtml: escape });
++    startRoutingAndSearch();
++    route();
++  }
++  function loadLearningPlan() {
++    return fetchJson("content/learning-plan.json").then(function (plan) {
++      applyPlan(plan, null);
++    }, function (error) {
++      applyPlan(null, error);
++    });
++  }
++  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json")]).then(function (data) {
++    chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
++    renderer.setCatalog({ chapters: chapters, tracks: tracks });
++    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: null, planError: null,
++      references: references, progress: progress, escapeHtml: escape });
++    startRoutingAndSearch();
++    route();
++    return loadLearningPlan();
+   }).catch(function (error) {
+     root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '<p>请通过 HTTP 服务打开课程，然后刷新重试。</p></div>';
+   });
+diff --git a/js/pages.js b/js/pages.js
+index 9300959..c485bea 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -31,12 +31,26 @@
+       return task.materials.filter(function (item) { return item.role === role; });
+     }
+     function home(last) {
++      if (options.planError) {
++        return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
++          '<section class="task-panel" role="alert"><p>没有加载到学习计划，所以这一页无法展示当前练习。</p>' +
++          '<p class="page-note">' + escape(options.planError.message || "学习计划加载失败。") + '</p>' +
++          '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
++          '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
++      }
+       var stage = plan && plan.stages.find(function (item) { return item.id === plan.currentStageId; });
+       var task = plan && plan.tasks.find(function (item) { return item.id === plan.currentTaskId; });
+       var conceptsById = {};
+       (plan && plan.concepts || []).forEach(function (item) { conceptsById[item.id] = item; });
+       if (!stage || !task) {
+-        return header("我的学习", "计划数据未能加载。") + '<p class="page-note">请确认 content/learning-plan.json 可访问后刷新。</p>';
++        if (plan) {
++          return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
++            '<section class="task-panel" role="alert"><p>学习计划不完整，所以这一页无法展示当前练习。</p>' +
++            '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
++            '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
++        }
++        return header("我的学习", "正在载入当前练习。") +
++          '<p class="page-note" role="status">教材目录、章节和搜索已经可用。</p>';
+       }
+       var required = listByRole(task, "required");
+       var parallel = listByRole(task, "parallel");
+@@ -46,12 +60,12 @@
+       var previous = last && chapter(last.chapterId);
+       var lastTrack = last && routes.trackFor(tracks, last.trackId);
+       var resume = previous ? '<section class="resume-panel"><span class="page-label">上次打开的教材</span><h2>' +
+-        escape(name(previous)) + '</h2><p>这是阅读位置，不是当前任务完成，也不表示已掌握。</p>' +
++        escape(name(previous)) + '</h2><p>这是阅读位置，不是练习完成，也不表示已掌握。</p>' +
+         action("继续阅读", routes.href(previous.id, lastTrack)) + '</section>' : "";
+       return header("小模型学习实验室—Attention",
+-        "同一主线上的阶段 " + stage.order + " · 周预算第 " + task.weekBudget + " 周。未通过本任务验收前，首页停在这里。",
+-        "我的学习 · " + stage.title) +
+-        '<section class="task-panel"><span class="page-label">当前主要任务</span><h2>' + escape(task.title) + '</h2>' +
++        "当前练习：在空文件里写出因果多头注意力，并检查形状、因果性和数值。",
++        "我的学习") +
++        '<section class="task-panel"><span class="page-label">当前练习</span><h2>' + escape(task.title) + '</h2>' +
+         '<p>' + escape(task.goal) + '</p>' +
+         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
+         '</section>' +
+@@ -68,27 +82,25 @@
+         }).join("") + "</ol></section>" +
+         '<section class="entry-section"><h2>如何检查结果</h2><ol class="task-list">' +
+         after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ol><p class="page-note">本页不代写核心算法。先自己写、先自检，再打开对照小节。</p></section>' +
++        '</ol><p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先自己写、先自检，再打开对照小节。</p></section>' +
+         '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
+         task.criteria.map(function (item) {
+-          var concept = conceptsById[item.conceptId];
+-          return '<li><span class="page-label">' + escape(item.id) +
+-            (concept ? " · " + escape(concept.name) : "") + "</span><p>" + escape(item.text) + "</p></li>";
++          return "<li><strong>" + escape(item.label || "验收") + "</strong><p>" + escape(item.text) + "</p></li>";
+         }).join("") +
+-        '</ol><p class="page-note">验收绑定本任务的 taskId 与 criterionId。某个知识点以前有过阅读或练习记录，不会自动完成本任务。</p></section>' +
+-        '<section class="entry-section"><h2>关联知识点</h2><ul class="concept-list">' +
++        '</ol></section>' +
++        '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
+         task.conceptIds.map(function (id) {
+           var concept = conceptsById[id];
+-          return "<li><code>" + escape(id) + "</code> " + escape(concept ? concept.name : id) + "</li>";
++          return "<li>" + escape(concept ? concept.name : "未命名概念") + "</li>";
+         }).join("") + "</ul></section>" +
+         '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
+         parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时打开对应小节。补基础不挡当前任务，也不改当前任务。</p></section>' +
++        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p></section>' +
+         (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
+           reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+           "</ul></section>" : "") +
+         resume +
+-        '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握，本阶段没有证据表单、卡点或自动评分。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
++        '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
+     }
+     function trackPage(track) {
+       var items = track.chapters.map(chapter);
+@@ -116,7 +128,7 @@
+         '<section class="task-panel"><p>当前主线从<a href="#/">我的学习</a>进入，任务是小模型学习实验室—Attention。旧书签打开本页不会失效。</p>' +
+         '<p>理论教材、交互演示和搜索仍在。需要查阅章节时打开<a href="#/catalog">全部章节</a>。</p>' +
+         action("回到我的学习", "#/") + '</section>' +
+-        '<p class="page-note">第 25–31 章仍可当教材阅读，其中的 Guided Build 仍指向旧目录；那不是本阶段主线，请不要把它们当成当前作业。</p>';
++        '<p class="page-note">第 25–31 章仍可当教材阅读，其中的 Guided Build 仍指向旧目录；那不是当前练习，请不要把它们当成现在要做的作业。</p>';
+     }
+     function footer(item, track) {
+       var adjacent = routes.neighbors(chapters, track, item.id);
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 914e22c..867aba7 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -176,8 +176,17 @@ test('learning plan current task is executable Attention and points at real head
+   });
+   const criterionIds = task.criteria.map(item => item.id);
+   assert.equal(new Set(criterionIds).size, criterionIds.length);
++  ['rewrite', 'shapes', 'causal', 'numeric'].forEach(id => {
++    assert.ok(criterionIds.includes(id), id);
++  });
++  const numeric = task.criteria.find(item => item.id === 'numeric');
++  assert.match(numeric.text, /dropout/i);
++  assert.match(numeric.text, /单头/);
++  assert.match(numeric.text, /多头/);
++  assert.match(numeric.text, /容差|1e-5/);
++  assert.doesNotMatch(numeric.text, /softmax\(|QK/);
+   task.criteria.forEach(item => {
+-    assert.ok(item.id && item.text);
++    assert.ok(item.id && item.text && item.label);
+     if (item.conceptId) assert.ok(plan.concepts.some(concept => concept.id === item.conceptId), item.conceptId);
+   });
+   assert.match(task.workspace.where, /空文件/);
+@@ -200,37 +209,66 @@ test('learning plan current task is executable Attention and points at real head
+   });
+ });
+ 
+-test('primary entry shows the Attention lab and retires homework projects from main nav', () => {
++function loadPages(plan, planError) {
+   const vm = require('node:vm');
+-  const indexHtml = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+   const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
+-  const plan = require('../content/learning-plan.json');
+-  assert.match(indexHtml, /<a href="#\/">我的学习<\/a>/);
+-  assert.match(indexHtml, /<a href="#\/catalog">全部章节<\/a>/);
+-  assert.doesNotMatch(indexHtml, /href="#\/projects">实战项目/);
+   const sandbox = { window: { CourseRoutes: routes } };
+   vm.runInNewContext(pagesSource, sandbox);
+-  const pages = sandbox.window.CoursePages({
++  return sandbox.window.CoursePages({
+     chapters,
+     tracks,
+     plan,
++    planError,
+     references,
+     progress: { isRead: () => false },
+     escapeHtml: value => String(value)
+       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+       .replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
+   });
++}
++
++test('primary entry shows the Attention lab and retires homework projects from main nav', () => {
++  const indexHtml = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
++  const plan = require('../content/learning-plan.json');
++  assert.match(indexHtml, /<a href="#\/">我的学习<\/a>/);
++  assert.match(indexHtml, /<a href="#\/catalog">全部章节<\/a>/);
++  assert.doesNotMatch(indexHtml, /href="#\/projects">实战项目/);
++  const pages = loadPages(plan);
+   const home = pages.home(null);
+   assert.match(home, /小模型学习实验室—Attention/);
+   assert.match(home, /手写因果多头注意力/);
+   assert.match(home, /必要教材/);
+   assert.match(home, /验收条件/);
++  assert.match(home, /数值正确性/);
+   assert.match(home, /#\/transformer\?section=/);
+   assert.doesNotMatch(home, /自动测试通过/);
+   assert.doesNotMatch(home, /project-start/);
+   assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
++  assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
++  assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
+   const retired = pages.projects();
+   assert.match(retired, /已退出主线/);
+   assert.doesNotMatch(retired, /project-start/);
+   assert.doesNotMatch(retired, /N 个可运行项目|个可运行项目/);
+ });
++
++test('catalog search and chapters boot even if learning-plan.json fails', () => {
++  const app = fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8');
++  const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
++  const coreAll = app.match(/Promise\.all\(\[fetchJson\("content\/manifest\.json"\), fetchJson\("content\/tracks\.json"\), fetchJson\("content\/references\.json"\)\]\)/);
++  assert.ok(coreAll, '教材目录三件套应单独 Promise.all，不能和 learning-plan 绑死');
++  assert.match(app, /function loadLearningPlan/);
++  assert.match(app, /startRoutingAndSearch/);
++  assert.match(app, /byId\("retryPlan"\)/);
++  assert.match(pagesSource, /id="retryPlan"/);
++  const pages = loadPages(null, { message: '无法加载 content/learning-plan.json' });
++  const home = pages.home(null);
++  assert.match(home, /没有加载到学习计划/);
++  assert.match(home, /id="retryPlan"/);
++  assert.match(home, /全部章节/);
++  assert.match(home, /搜索仍然可用/);
++  assert.doesNotMatch(home, /手写因果多头注意力/);
++  const catalog = pages.catalog();
++  assert.match(catalog, /全部章节/);
++  assert.ok(catalog.includes('Transformer') || catalog.includes('课程'));
++});

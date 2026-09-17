@@ -176,8 +176,17 @@ test('learning plan current task is executable Attention and points at real head
   });
   const criterionIds = task.criteria.map(item => item.id);
   assert.equal(new Set(criterionIds).size, criterionIds.length);
+  ['rewrite', 'shapes', 'causal', 'numeric'].forEach(id => {
+    assert.ok(criterionIds.includes(id), id);
+  });
+  const numeric = task.criteria.find(item => item.id === 'numeric');
+  assert.match(numeric.text, /dropout/i);
+  assert.match(numeric.text, /单头/);
+  assert.match(numeric.text, /多头/);
+  assert.match(numeric.text, /容差|1e-5/);
+  assert.doesNotMatch(numeric.text, /softmax\(|QK/);
   task.criteria.forEach(item => {
-    assert.ok(item.id && item.text);
+    assert.ok(item.id && item.text && item.label);
     if (item.conceptId) assert.ok(plan.concepts.some(concept => concept.id === item.conceptId), item.conceptId);
   });
   assert.match(task.workspace.where, /空文件/);
@@ -200,37 +209,66 @@ test('learning plan current task is executable Attention and points at real head
   });
 });
 
-test('primary entry shows the Attention lab and retires homework projects from main nav', () => {
+function loadPages(plan, planError) {
   const vm = require('node:vm');
-  const indexHtml = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
   const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
-  const plan = require('../content/learning-plan.json');
-  assert.match(indexHtml, /<a href="#\/">我的学习<\/a>/);
-  assert.match(indexHtml, /<a href="#\/catalog">全部章节<\/a>/);
-  assert.doesNotMatch(indexHtml, /href="#\/projects">实战项目/);
   const sandbox = { window: { CourseRoutes: routes } };
   vm.runInNewContext(pagesSource, sandbox);
-  const pages = sandbox.window.CoursePages({
+  return sandbox.window.CoursePages({
     chapters,
     tracks,
     plan,
+    planError,
     references,
     progress: { isRead: () => false },
     escapeHtml: value => String(value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
   });
+}
+
+test('primary entry shows the Attention lab and retires homework projects from main nav', () => {
+  const indexHtml = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  const plan = require('../content/learning-plan.json');
+  assert.match(indexHtml, /<a href="#\/">我的学习<\/a>/);
+  assert.match(indexHtml, /<a href="#\/catalog">全部章节<\/a>/);
+  assert.doesNotMatch(indexHtml, /href="#\/projects">实战项目/);
+  const pages = loadPages(plan);
   const home = pages.home(null);
   assert.match(home, /小模型学习实验室—Attention/);
   assert.match(home, /手写因果多头注意力/);
   assert.match(home, /必要教材/);
   assert.match(home, /验收条件/);
+  assert.match(home, /数值正确性/);
   assert.match(home, /#\/transformer\?section=/);
   assert.doesNotMatch(home, /自动测试通过/);
   assert.doesNotMatch(home, /project-start/);
   assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
+  assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+  assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
   const retired = pages.projects();
   assert.match(retired, /已退出主线/);
   assert.doesNotMatch(retired, /project-start/);
   assert.doesNotMatch(retired, /N 个可运行项目|个可运行项目/);
+});
+
+test('catalog search and chapters boot even if learning-plan.json fails', () => {
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8');
+  const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
+  const coreAll = app.match(/Promise\.all\(\[fetchJson\("content\/manifest\.json"\), fetchJson\("content\/tracks\.json"\), fetchJson\("content\/references\.json"\)\]\)/);
+  assert.ok(coreAll, '教材目录三件套应单独 Promise.all，不能和 learning-plan 绑死');
+  assert.match(app, /function loadLearningPlan/);
+  assert.match(app, /startRoutingAndSearch/);
+  assert.match(app, /byId\("retryPlan"\)/);
+  assert.match(pagesSource, /id="retryPlan"/);
+  const pages = loadPages(null, { message: '无法加载 content/learning-plan.json' });
+  const home = pages.home(null);
+  assert.match(home, /没有加载到学习计划/);
+  assert.match(home, /id="retryPlan"/);
+  assert.match(home, /全部章节/);
+  assert.match(home, /搜索仍然可用/);
+  assert.doesNotMatch(home, /手写因果多头注意力/);
+  const catalog = pages.catalog();
+  assert.match(catalog, /全部章节/);
+  assert.ok(catalog.includes('Transformer') || catalog.includes('课程'));
 });

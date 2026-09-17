@@ -1,8 +1,6 @@
 # 分阶段实施方案
 
-需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地（展示当前任务并让旧项目退出主入口）。不要自动进入阶段 2，不发布。**
-
-学习机制分三层，**不要并进阶段 1**：
+需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。** `main` 推送已触发并成功部署 GitHub Pages；**未运行** `tools/publish.sh`，因此自有服务器发布脚本未执行。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 2。未明确要求时不要再次推送或发布。
 
 学习机制分三层，**不要并进阶段 1**：
 
@@ -82,7 +80,7 @@
 - 手机与桌面布局可读。
 - `node --test tools/test-course.js`；按改动范围跑现有 validator（本阶段仍留下 `projects/` 目录，不要为了过门禁把新主线接回六项目）。
 
-**完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2，不发布。
+**完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2。GitHub Pages 可由 `main` 推送自动部署；自有服务器仍只在明确运行 `tools/publish.sh` 时更新。
 
 **本阶段明确不做：** 机制层 B/C；改写 25/26/27 的全部 Guided 步骤；新 Attention 练习仓库；启用 92 项选修库 UI；拷贝 Repo-Mastery / Atlas / Study Agent / continuous-learning 的代码。未核验的 Atlas 机制按本站设计实现，不阻塞本阶段。
 

@@ -31,12 +31,26 @@
       return task.materials.filter(function (item) { return item.role === role; });
     }
     function home(last) {
+      if (options.planError) {
+        return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
+          '<section class="task-panel" role="alert"><p>没有加载到学习计划，所以这一页无法展示当前练习。</p>' +
+          '<p class="page-note">' + escape(options.planError.message || "学习计划加载失败。") + '</p>' +
+          '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
+          '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
+      }
       var stage = plan && plan.stages.find(function (item) { return item.id === plan.currentStageId; });
       var task = plan && plan.tasks.find(function (item) { return item.id === plan.currentTaskId; });
       var conceptsById = {};
       (plan && plan.concepts || []).forEach(function (item) { conceptsById[item.id] = item; });
       if (!stage || !task) {
-        return header("我的学习", "计划数据未能加载。") + '<p class="page-note">请确认 content/learning-plan.json 可访问后刷新。</p>';
+        if (plan) {
+          return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
+            '<section class="task-panel" role="alert"><p>学习计划不完整，所以这一页无法展示当前练习。</p>' +
+            '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
+            '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
+        }
+        return header("我的学习", "正在载入当前练习。") +
+          '<p class="page-note" role="status">教材目录、章节和搜索已经可用。</p>';
       }
       var required = listByRole(task, "required");
       var parallel = listByRole(task, "parallel");
@@ -46,12 +60,12 @@
       var previous = last && chapter(last.chapterId);
       var lastTrack = last && routes.trackFor(tracks, last.trackId);
       var resume = previous ? '<section class="resume-panel"><span class="page-label">上次打开的教材</span><h2>' +
-        escape(name(previous)) + '</h2><p>这是阅读位置，不是当前任务完成，也不表示已掌握。</p>' +
+        escape(name(previous)) + '</h2><p>这是阅读位置，不是练习完成，也不表示已掌握。</p>' +
         action("继续阅读", routes.href(previous.id, lastTrack)) + '</section>' : "";
       return header("小模型学习实验室—Attention",
-        "同一主线上的阶段 " + stage.order + " · 周预算第 " + task.weekBudget + " 周。未通过本任务验收前，首页停在这里。",
-        "我的学习 · " + stage.title) +
-        '<section class="task-panel"><span class="page-label">当前主要任务</span><h2>' + escape(task.title) + '</h2>' +
+        "当前练习：在空文件里写出因果多头注意力，并检查形状、因果性和数值。",
+        "我的学习") +
+        '<section class="task-panel"><span class="page-label">当前练习</span><h2>' + escape(task.title) + '</h2>' +
         '<p>' + escape(task.goal) + '</p>' +
         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
         '</section>' +
@@ -68,27 +82,25 @@
         }).join("") + "</ol></section>" +
         '<section class="entry-section"><h2>如何检查结果</h2><ol class="task-list">' +
         after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-        '</ol><p class="page-note">本页不代写核心算法。先自己写、先自检，再打开对照小节。</p></section>' +
+        '</ol><p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先自己写、先自检，再打开对照小节。</p></section>' +
         '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
         task.criteria.map(function (item) {
-          var concept = conceptsById[item.conceptId];
-          return '<li><span class="page-label">' + escape(item.id) +
-            (concept ? " · " + escape(concept.name) : "") + "</span><p>" + escape(item.text) + "</p></li>";
+          return "<li><strong>" + escape(item.label || "验收") + "</strong><p>" + escape(item.text) + "</p></li>";
         }).join("") +
-        '</ol><p class="page-note">验收绑定本任务的 taskId 与 criterionId。某个知识点以前有过阅读或练习记录，不会自动完成本任务。</p></section>' +
-        '<section class="entry-section"><h2>关联知识点</h2><ul class="concept-list">' +
+        '</ol></section>' +
+        '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
         task.conceptIds.map(function (id) {
           var concept = conceptsById[id];
-          return "<li><code>" + escape(id) + "</code> " + escape(concept ? concept.name : id) + "</li>";
+          return "<li>" + escape(concept ? concept.name : "未命名概念") + "</li>";
         }).join("") + "</ul></section>" +
         '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
         parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时打开对应小节。补基础不挡当前任务，也不改当前任务。</p></section>' +
+        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p></section>' +
         (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
           reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
           "</ul></section>" : "") +
         resume +
-        '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握，本阶段没有证据表单、卡点或自动评分。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
+        '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
     }
     function trackPage(track) {
       var items = track.chapters.map(chapter);
@@ -116,7 +128,7 @@
         '<section class="task-panel"><p>当前主线从<a href="#/">我的学习</a>进入，任务是小模型学习实验室—Attention。旧书签打开本页不会失效。</p>' +
         '<p>理论教材、交互演示和搜索仍在。需要查阅章节时打开<a href="#/catalog">全部章节</a>。</p>' +
         action("回到我的学习", "#/") + '</section>' +
-        '<p class="page-note">第 25–31 章仍可当教材阅读，其中的 Guided Build 仍指向旧目录；那不是本阶段主线，请不要把它们当成当前作业。</p>';
+        '<p class="page-note">第 25–31 章仍可当教材阅读，其中的 Guided Build 仍指向旧目录；那不是当前练习，请不要把它们当成现在要做的作业。</p>';
     }
     function footer(item, track) {
       var adjacent = routes.neighbors(chapters, track, item.id);
