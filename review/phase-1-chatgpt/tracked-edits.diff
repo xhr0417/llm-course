@@ -1,0 +1,565 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index 0cd1a2a..eac164d 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -1,7 +1,7 @@
+ # LLM Course design contract
+ 
+ ## 1. Identity
+-Preserve the existing Chinese textbook appearance, light/dark themes and interactive demonstrations. The primary reader wants one clear next lesson; returning readers need to resume; experienced readers need a searchable reference. Reduce repeated navigation and administrative learning terminology. This is an extraction of the current system, not a visual rebrand.
++Preserve the existing Chinese textbook appearance, light/dark themes and interactive demonstrations. The primary reader follows one personal learning spine; the next action comes from「我的学习」and its current task, not from choosing among three job tracks. Returning readers need to resume a textbook chapter without that resume being treated as mastery. Experienced readers need a searchable reference. Reduce repeated navigation and administrative learning terminology. This is an extraction of the current system, not a visual rebrand.
+ 
+ ## 2. Color
+ Use the existing paired light/dark variables in `css/style.css`: `--bg`, `--bg-panel`, `--bg-soft`, `--text`, `--text-soft`, `--text-faint`, `--border`, `--accent`, `--accent-soft`, `--accent-text`, `--green`, `--green-soft`, `--amber`, `--amber-soft`, `--red`, `--red-soft`, `--purple`, `--purple-soft`, `--code-bg`, `--shadow`. New navigation uses the accent only for links, current state and the primary action. Text conveying information uses `--text` or `--text-soft`, not the faint decorative color. Preserve semantic colors in existing teaching diagrams.
+@@ -14,12 +14,12 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
+ 
+ ## 5. Shared components
+ - Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+-- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state.
+-- Route list: semantic list of three direction links, each with title, short outcome, chapter count and arrow. Shared rows on home and route detail; no duplicated long chains.
+-- Lesson list: ordered steps from `content/tracks.json`; current lesson and read status are text as well as color. Footer navigation retains route context. Catalog navigation explicitly follows the full book.
++- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links.
++- Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
++- Lesson list: the current task comes from `content/learning-plan.json`. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
+ - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+ - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+-- Secondary navigation: Start / Chapters / Projects, current page marked with `aria-current`. No empty home TOC.
++- Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
+ 
+ ## 6. Interaction
+ Keep existing purposeful interactions and diagrams. New transitions only change opacity/transform over 150ms; no entrance animation, no decorative motion. All new controls have visible `:focus-visible`, hover and active states. Respect `prefers-reduced-motion`. Search opens collapsed references when navigating to their heading. Storage failure leaves a usable session and an honest persistence notice.
+@@ -28,4 +28,4 @@ Keep existing purposeful interactions and diagrams. New transitions only change
+ Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+ 
+ ## 8. Accessibility and verification
+-Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify homepage, three routes, catalog, projects and all chapter pages at 375/768/1280, plus route-aware next/previous, reload/resume, search, progress, disclosure and theme states. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
++Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
+diff --git a/README.md b/README.md
+index 9281196..57dd61d 100644
+--- a/README.md
++++ b/README.md
+@@ -6,27 +6,20 @@
+ 
+ 📚 **32 Chapters** · 🧪 **6 Runnable Projects** · **Track A / Track B / Track C**
+ 
+-这是一套中文交互式大模型课程：每章包含正文、交互演示和测验；Job-Ready 部分配套可运行项目、starter 和实验记录。课程不伪造实验结果，未在 CUDA 上执行的内容会明确标注 `NOT EXECUTED ON CUDA`。
++这是一套中文交互式大模型课程：每章包含正文、交互演示和测验。网站按一条个人学习主线组织，当前入口是「我的学习」。六个可运行项目目录仍在仓库中，但已退出主导航和主要学习入口。课程不伪造实验结果，未在 CUDA 上执行的内容会明确标注 `NOT EXECUTED ON CUDA`。
+ 
+ ## 从哪里开始
+ 
+-打开在线课程首页，选择一条路线：
++打开课程首页的 [我的学习](https://llm.xhr0417.cn/#/)，当前任务是 **小模型学习实验室—Attention**。页面会给出要读的教材小节、在空文件里先写单头再写多头的步骤，以及如何检查结果。本站不代写核心算法。
+ 
+-| 路线 | 适合谁 | 主要产出 |
+-| --- | --- | --- |
+-| [AI 应用开发](https://llm.xhr0417.cn/#/track/application) | 想做 LLM 应用、评测和 RAG | Eval Harness、RAG Service |
+-| [模型训练与算法](https://llm.xhr0417.cn/#/track/algorithm) | 想理解训练、微调和后训练 | 小模型、SFT/LoRA 实验报告 |
+-| [AI Infra 与推理系统](https://llm.xhr0417.cn/#/track/infra) | 想做性能、推理和系统工程 | Profiling Lab、推理基准 |
+-
+-路线的唯一配置在 [`content/tracks.json`](content/tracks.json)。首页、路线页和章节的上一课/下一课都从这里读取。
+-
+-不想按路线学习时：
++教材、交互演示和搜索仍可用：
+ 
+ - [浏览全部章节](https://llm.xhr0417.cn/#/catalog)
+-- [查看实战项目](https://llm.xhr0417.cn/#/projects)
+ - 章节中的“按需查阅”入口会打开独立的参考手册，不占主线阅读路径
+ - [直接阅读静态章节页](chapters/)
+ 
++旧的 `#/projects` 书签会打开说明页，提示这些作业已退出主线。三条岗位路线（Track A / Track B / Track C）仍可作为查阅分组打开，配置在 [`content/tracks.json`](content/tracks.json)，但它们不是当前主线。
++
+ ## 3 分钟运行
+ 
+ ```bash
+@@ -35,27 +28,17 @@ cd llm-course
+ python3 -m http.server 8000
+ ```
+ 
+-浏览器打开 <http://127.0.0.1:8000>。课程网站是静态站，不需要安装前端依赖。
+-
+-第一次做项目，可以从 Python Guided Build 开始：
+-
+-```bash
+-cd projects/log-analyzer/starter
+-pip install -r requirements.txt
+-pytest -q                 # 初始为红灯，这是教学设计
+-```
+-
+-然后打开第 25 章，按 Step 把测试逐组变绿。starter 的完整说明在各项目的 `starter/README.md` 中。
++浏览器打开 <http://127.0.0.1:8000>。课程网站是静态站，不需要安装前端依赖。打开首页即可看到当前 Attention 任务。
+ 
+-## 项目学习方式
++## 仓库中仍保留的项目目录
+ 
+-每个 Guided 项目分为三层：
++六个作业目录已退出主导航和主要学习入口，物理目录暂留，待后续审计。若仍要查看旧 Guided Build，分层是：
+ 
+-1. **Learn**：课程正文和参考手册，先理解问题。
++1. **Learn**：课程正文和参考手册。
+ 2. **Guided Build**：从不完整 starter 开始，按步骤实现并运行测试。
+ 3. **Reference**：完成后再对照完整工程和实验报告。
+ 
+-项目目录：
++目录：
+ 
+ | 项目 | 入口章节 | 说明 |
+ | --- | --- | --- |
+diff --git a/css/course.css b/css/course.css
+index 669ff23..8e5a5fa 100644
+--- a/css/course.css
++++ b/css/course.css
+@@ -19,9 +19,18 @@
+ .entry-page h2 { font-size: var(--text-lg); line-height: 1.5; margin: 0 0 var(--space-3); }
+ .entry-page .chapter-title { font-size: clamp(24px, 3vw, var(--text-title)); line-height: 1.35; }
+ .entry-page .chapter-desc { max-width: 40em; }
+-.resume-panel { padding: var(--space-8); background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius); }
+-.resume-panel h2 { margin-top: var(--space-2); }
+-.resume-panel p { color: var(--text-soft); max-width: 38em; margin: var(--space-2) 0 var(--space-6); }
++.resume-panel, .task-panel { padding: var(--space-8); background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius); }
++.resume-panel h2, .task-panel h2 { margin-top: var(--space-2); }
++.resume-panel p, .task-panel p { color: var(--text-soft); max-width: 38em; margin: var(--space-2) 0 var(--space-6); }
++.task-panel .btn, .resume-panel .btn { margin-top: var(--space-2); }
++.task-list, .concept-list { margin: 0; padding-left: 1.25em; max-width: 46em; }
++.task-list li, .concept-list li { margin: 0 0 var(--space-3); }
++.task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
++.task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
++.task-spec { margin: 0; max-width: 46em; }
++.task-spec dt { font-weight: 600; margin-top: var(--space-4); }
++.task-spec dd { margin: var(--space-1) 0 0; color: var(--text-soft); }
++.concept-list code { font-size: var(--text-xs); color: var(--accent-text); }
+ .page-label { color: var(--text-soft); font-size: var(--text-xs); font-weight: 600; }
+ .entry-section { margin-top: var(--space-8); }
+ .entry-section > h2 { font-size: var(--text-base); color: var(--text-soft); }
+@@ -38,6 +47,8 @@
+ .lesson-status { font-size: var(--text-xs); color: var(--text-soft); flex: none; }
+ .page-note { color: var(--text-soft); font-size: var(--text-sm); line-height: 1.75; }
+ .page-note a { color: var(--accent-text); margin-inline: var(--space-1); }
++.task-panel + .entry-section { margin-top: var(--space-8); }
++.resume-panel { margin-top: var(--space-8); }
+ .entry-page > .page-note, .entry-page .content > .page-note { margin-top: var(--space-6); }
+ .route-intro { margin-bottom: var(--space-6); }
+ .route-intro .btn { margin-top: var(--space-2); }
+@@ -91,7 +102,7 @@
+ details.hint { border-color: var(--amber); background: var(--amber-soft); }
+ details.hint > summary { color: var(--amber); }
+ @media (max-width: 768px) {
+-  .resume-panel { padding: var(--space-6); }
++  .resume-panel, .task-panel { padding: var(--space-6); }
+   .project-list { grid-template-columns: 1fr; }
+   .route-row { gap: var(--space-3); }
+ }
+diff --git a/index.html b/index.html
+index 3eb236f..8d2b3d9 100644
+--- a/index.html
++++ b/index.html
+@@ -3,8 +3,8 @@
+ <head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-  <title>开始学习 · LLM Course</title>
+-  <meta name="description" content="中文交互式大模型课程。从模型原理到评测、微调和推理系统，沿学习路线完成可运行的项目。">
++  <title>我的学习 · LLM Course</title>
++  <meta name="description" content="个人中文大模型学习站点。当前主线是小模型学习实验室，从 Attention 开始。">
+   <link rel="stylesheet" href="vendor/katex/katex.min.css">
+   <link rel="stylesheet" href="css/style.css">
+   <link rel="stylesheet" href="css/course.css">
+@@ -32,7 +32,7 @@
+ 
+   <div class="layout">
+     <aside class="sidebar" id="sidebar">
+-      <nav class="site-nav" aria-label="主导航"><a href="#/">开始学习</a><a href="#/catalog">全部章节</a><a href="#/projects">实战项目</a></nav>
++      <nav class="site-nav" aria-label="主导航"><a href="#/">我的学习</a><a href="#/catalog">全部章节</a></nav>
+       <div class="progress-card">
+         <div class="progress-head">
+           <span>阅读进度</span>
+@@ -51,7 +51,7 @@
+       <!-- STATIC-INDEX-START -->
+       <div class="chapter-head">
+         <h1 class="chapter-title">大模型知识体系 · 静态目录</h1>
+-        <p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目完成第一段 AI 实习的作品集（projects/ 目录）。共 32 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>
++        <p class="chapter-desc">交互版首页是「我的学习」，当前主线从 Attention 开始。共 32 章教材仍可查阅。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>
+       </div>
+       <div class="md">
+         <h2>章节目录</h2>
+diff --git a/js/app.js b/js/app.js
+index 93d287e..5ca86e5 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -91,17 +91,18 @@
+     activeTrack = path.startsWith("track/") ? routes.trackFor(tracks, path.slice(6)) : routes.context(tracks, locationRoute);
+     renderNav();
+     document.querySelectorAll(".site-nav a").forEach(function (link) {
+-      var selected = link.getAttribute("href") === (path === "home" || path.startsWith("track/") ? "#/" : "#/" + path);
++      var href = link.getAttribute("href");
++      var selected = (href === "#/" && path === "home") || href === "#/" + path;
+       if (selected) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+     });
+-    if (path === "home") return entry(pages.home(readLast()), "开始学习");
++    if (path === "home") return entry(pages.home(readLast()), "我的学习");
+     if (path === "catalog") return entry(pages.catalog(), "全部章节");
+-    if (path === "projects") return entry(pages.projects(), "实战项目");
++    if (path === "projects") return entry(pages.projects(), "已退出主线");
+     if (path.startsWith("track/") && activeTrack) return entry(pages.track(activeTrack), activeTrack.title);
+     if (path.startsWith("reference/")) {
+       var reference = references.find(function (item) { return item.id === path.slice(10); });
+       var referenceChapter = reference && chapters.find(function (item) { return item.id === reference.chapter; });
+-      if (!reference || !referenceChapter) return entry('<h1>没有找到这一页</h1><p><a href="#/">返回开始学习</a></p>', "页面不存在");
++      if (!reference || !referenceChapter) return entry('<h1>没有找到这一页</h1><p><a href="#/">返回我的学习</a></p>', "页面不存在");
+       current = referenceChapter;
+       document.body.classList.remove("entry-page");
+       byId("tocPanel").hidden = false;
+@@ -112,7 +113,8 @@
+         root.innerHTML = pages.reference(reference, referenceChapter, renderer.renderMarkdown(text, "reference/" + reference.id));
+         reader.init(referenceChapter.id);
+         updateProgress(); window.scrollTo({ top: 0, behavior: "instant" });
+-        if (pendingSection && pendingSection.id === path) { reader.focusSection(pendingSection.title); pendingSection = null; }
++        var referenceSection = locationRoute.section || (pendingSection && pendingSection.id === path && pendingSection.title);
++        if (referenceSection) { reader.focusSection(referenceSection); pendingSection = null; }
+       }).catch(function (error) {
+         if (token !== requestId) return;
+         root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '</div>';
+@@ -120,7 +122,7 @@
+       return;
+     }
+     var chapter = chapters.find(function (item) { return item.id === path; });
+-    if (!chapter) return entry('<h1>没有找到这一页</h1><p><a href="#/">返回开始学习</a></p>', "页面不存在");
++    if (!chapter) return entry('<h1>没有找到这一页</h1><p><a href="#/">返回我的学习</a></p>', "页面不存在");
+     current = chapter;
+     document.body.classList.remove("entry-page");
+     byId("tocPanel").hidden = false;
+@@ -135,7 +137,8 @@
+       reader.init(chapter.id);
+       remember("llm-course-last", JSON.stringify({ chapterId: chapter.id, trackId: activeTrack ? activeTrack.id : null }));
+       updateProgress(); window.scrollTo({ top: 0, behavior: "instant" });
+-      if (pendingSection && pendingSection.id === chapter.id) { reader.focusSection(pendingSection.title); pendingSection = null; }
++      var chapterSection = locationRoute.section || (pendingSection && pendingSection.id === chapter.id && pendingSection.title);
++      if (chapterSection) { reader.focusSection(chapterSection); pendingSection = null; }
+     }).catch(function (error) {
+       if (token !== requestId) return;
+       root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '<p><button class="btn" id="retryChapter">重新加载</button></p></div>';
+@@ -166,10 +169,10 @@
+     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
+   }
+   initShell(); progress.load();
+-  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json")]).then(function (data) {
++  Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json"), fetchJson("content/learning-plan.json")]).then(function (data) {
+     chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
+     renderer.setCatalog({ chapters: chapters, tracks: tracks });
+-    pages = CoursePages({ chapters: chapters, tracks: tracks, projects: data[1].projects, references: references, progress: progress, escapeHtml: escape });
++    pages = CoursePages({ chapters: chapters, tracks: tracks, plan: data[3], references: references, progress: progress, escapeHtml: escape });
+     window.addEventListener("hashchange", route);
+     route();
+     search = CourseSearch.create({ chapters: chapters, references: references,
+diff --git a/js/course.js b/js/course.js
+index c126d5e..245ae28 100644
+--- a/js/course.js
++++ b/js/course.js
+@@ -7,7 +7,7 @@
+     var parts = hash.replace(/^#\/?/, "").split("?");
+     var path = parts[0] || "home";
+     var params = new URLSearchParams(parts[1] || "");
+-    return { page: path, trackId: params.get("track") || null };
++    return { page: path, trackId: params.get("track") || null, section: params.get("section") || null };
+   }
+   function trackFor(tracks, id) {
+     return tracks.find(function (track) { return track.id === id; }) || null;
+@@ -16,9 +16,11 @@
+     var track = trackFor(tracks, route.trackId);
+     return track && track.chapters.includes(route.page) ? track : null;
+   }
+-  function href(id, track) {
+-    return "#/" + encodeURIComponent(id) +
+-      (track && track.chapters.includes(id) ? "?track=" + encodeURIComponent(track.id) : "");
++  function href(id, track, section) {
++    var query = [];
++    if (track && track.chapters.includes(id)) query.push("track=" + encodeURIComponent(track.id));
++    if (section) query.push("section=" + encodeURIComponent(section));
++    return "#/" + encodeURIComponent(id) + (query.length ? "?" + query.join("&") : "");
+   }
+   function neighbors(chapters, track, id) {
+     var ids = track ? track.chapters : chapters.map(function (chapter) { return chapter.id; });
+diff --git a/js/pages.js b/js/pages.js
+index bfb0246..9300959 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -1,7 +1,8 @@
+ (function () {
+   "use strict";
+   window.CoursePages = function (options) {
+-    var chapters = options.chapters, tracks = options.tracks, projects = options.projects, references = options.references || [];
++    var chapters = options.chapters, tracks = options.tracks, references = options.references || [];
++    var plan = options.plan;
+     var escape = options.escapeHtml, progress = options.progress, routes = window.CourseRoutes;
+     function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
+     function referenceFor(chapterId) { return references.find(function (item) { return item.chapter === chapterId; }) || null; }
+@@ -18,32 +19,87 @@
+           '</span><span class="lesson-status">' + (progress.isRead(item.id) ? "已读" : "进入") + '</span></a></li>';
+       }).join("") + '</ol>';
+     }
++    function materialHref(item) {
++      if (item.href) return item.href;
++      return routes.href(item.chapterId, null, item.section);
++    }
++    function materialLink(item) {
++      var attrs = item.external ? ' target="_blank" rel="noopener"' : "";
++      return '<a href="' + materialHref(item) + '"' + attrs + ">" + escape(item.label) + "</a>";
++    }
++    function listByRole(task, role) {
++      return task.materials.filter(function (item) { return item.role === role; });
++    }
+     function home(last) {
++      var stage = plan && plan.stages.find(function (item) { return item.id === plan.currentStageId; });
++      var task = plan && plan.tasks.find(function (item) { return item.id === plan.currentTaskId; });
++      var conceptsById = {};
++      (plan && plan.concepts || []).forEach(function (item) { conceptsById[item.id] = item; });
++      if (!stage || !task) {
++        return header("我的学习", "计划数据未能加载。") + '<p class="page-note">请确认 content/learning-plan.json 可访问后刷新。</p>';
++      }
++      var required = listByRole(task, "required");
++      var parallel = listByRole(task, "parallel");
++      var after = listByRole(task, "check-after");
++      var reference = listByRole(task, "reference");
++      var start = required[0];
+       var previous = last && chapter(last.chapterId);
+-      var track = last && routes.trackFor(tracks, last.trackId);
+-      var lead = previous ? '<section class="resume-panel"><span class="page-label">上次学到</span><h2>' +
+-        escape(name(previous)) + '</h2><p>' + escape(track ? track.title : "全部章节") + '</p>' +
+-        action("继续学习", routes.href(previous.id, track)) + '</section>' :
+-        '<section class="resume-panel"><span class="page-label">第一次来，从这里开始</span><h2>做出你的第一个 LLM 项目</h2>' +
+-        '<p>从 Python 工程起步，逐步完成模型评测和 RAG 服务。已有基础可以跳过熟悉的课程。</p>' +
+-        action("开始学习", "#/track/application") + '</section>';
+-      return header("一步一步，学会大模型", "理解原理，动手实验，做出能运行的项目。选一条适合你的路线开始。") + lead +
+-        '<section class="entry-section"><h2>按目标选择路线</h2><ul class="route-list">' + tracks.map(function (item, index) {
+-          return '<li><a class="route-row" href="#/track/' + item.id + '"><span class="lesson-number">0' + (index + 1) +
+-            '</span><span><strong>' + escape(item.title) + '</strong><span class="route-description">' + escape(item.outcome) +
+-            '</span></span><span class="route-meta">' + item.chapters.length + ' 课 <span aria-hidden="true">→</span></span></a></li>';
+-        }).join("") + '</ul></section>' +
+-        '<p class="page-note">想查一个知识点？使用顶部搜索，或浏览<a href="#/catalog">全部章节</a>。想直接动手？查看<a href="#/projects">实战项目</a>。</p>';
++      var lastTrack = last && routes.trackFor(tracks, last.trackId);
++      var resume = previous ? '<section class="resume-panel"><span class="page-label">上次打开的教材</span><h2>' +
++        escape(name(previous)) + '</h2><p>这是阅读位置，不是当前任务完成，也不表示已掌握。</p>' +
++        action("继续阅读", routes.href(previous.id, lastTrack)) + '</section>' : "";
++      return header("小模型学习实验室—Attention",
++        "同一主线上的阶段 " + stage.order + " · 周预算第 " + task.weekBudget + " 周。未通过本任务验收前，首页停在这里。",
++        "我的学习 · " + stage.title) +
++        '<section class="task-panel"><span class="page-label">当前主要任务</span><h2>' + escape(task.title) + '</h2>' +
++        '<p>' + escape(task.goal) + '</p>' +
++        (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
++        '</section>' +
++        '<section class="entry-section"><h2>必要教材</h2><ol class="task-list">' +
++        required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++        '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p></section>' +
++        '<section class="entry-section"><h2>在哪里写、输入输出是什么</h2>' +
++        '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
++        '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
++        '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl></section>' +
++        '<section class="entry-section"><h2>实现步骤</h2><ol class="task-list task-steps">' +
++        task.steps.map(function (step) {
++          return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
++        }).join("") + "</ol></section>" +
++        '<section class="entry-section"><h2>如何检查结果</h2><ol class="task-list">' +
++        after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++        '</ol><p class="page-note">本页不代写核心算法。先自己写、先自检，再打开对照小节。</p></section>' +
++        '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
++        task.criteria.map(function (item) {
++          var concept = conceptsById[item.conceptId];
++          return '<li><span class="page-label">' + escape(item.id) +
++            (concept ? " · " + escape(concept.name) : "") + "</span><p>" + escape(item.text) + "</p></li>";
++        }).join("") +
++        '</ol><p class="page-note">验收绑定本任务的 taskId 与 criterionId。某个知识点以前有过阅读或练习记录，不会自动完成本任务。</p></section>' +
++        '<section class="entry-section"><h2>关联知识点</h2><ul class="concept-list">' +
++        task.conceptIds.map(function (id) {
++          var concept = conceptsById[id];
++          return "<li><code>" + escape(id) + "</code> " + escape(concept ? concept.name : id) + "</li>";
++        }).join("") + "</ul></section>" +
++        '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
++        parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时打开对应小节。补基础不挡当前任务，也不改当前任务。</p></section>' +
++        (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
++          reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          "</ul></section>" : "") +
++        resume +
++        '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握，本阶段没有证据表单、卡点或自动评分。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
+     }
+     function trackPage(track) {
+       var items = track.chapters.map(chapter);
+       var next = items.find(function (item) { return !progress.isRead(item.id); }) || items[0];
+       var read = items.filter(function (item) { return progress.isRead(item.id); }).length;
+-      return header(track.title, track.description, "学习路线 · " + items.length + " 课") +
+-        '<div class="route-intro"><p><strong>学完的产出：</strong>' + escape(track.outcome) +
+-        '</p><p class="page-note">已读 ' + read + ' / ' + items.length + ' 课。按顺序前进，也可以直接进入熟悉的阶段。</p>' +
+-        action(read ? "继续这条路线" : "从第一课开始", routes.href(next.id, track)) + '</div>' +
+-        lessonRows(items, track) + '<p class="page-note">阅读标记只记录阅读进度；项目需要按步骤运行测试并完成验收。<a href="#/job-ready">查看项目验收说明</a></p>';
++      return header(track.title, track.description, "查阅分组 · " + items.length + " 课") +
++        '<div class="route-intro"><p class="page-note">这是旧岗位路线留下的查阅分组，不是当前主线。当前任务在<a href="#/">我的学习</a>。</p>' +
++        '<p><strong>这条分组覆盖：</strong>' + escape(track.outcome) +
++        '</p><p class="page-note">已读 ' + read + ' / ' + items.length + ' 课。阅读标记只表示读过。</p>' +
++        action("打开下一篇未读", routes.href(next.id, track)) + '</div>' +
++        lessonRows(items, track);
+     }
+     function catalog() {
+       var groups = [];
+@@ -52,19 +108,15 @@
+         if (!group) { group = { title: item.group, items: [] }; groups.push(group); }
+         group.items.push(item);
+       });
+-      return header("全部章节", "按主题查阅，随时回到学习路线。这里的章节顺序按教材编排。", chapters.length + " 章 · 知识手册") +
++      return header("全部章节", "按主题查阅教材。主线当前任务在「我的学习」，这里的顺序按全书编排。", chapters.length + " 章 · 知识手册") +
+         groups.map(function (group) { return '<section class="entry-section"><h2>' + escape(group.title) + '</h2>' + lessonRows(group.items, null) + '</section>'; }).join("");
+     }
+     function projectPage() {
+-      return header("实战项目", "选择一个项目，进入课程开始动手。带练习起点的项目可以跟着步骤完成，参考实现随时可查。", projects.length + " 个可运行项目") +
+-        '<div class="project-list">' + projects.map(function (item) {
+-          var repo = "https://github.com/xhr0417/llm-course/tree/main/projects/" + item.id;
+-          return '<article class="project-card"><span class="page-label">' + escape(item.id) + '</span><h2>' + escape(item.title) +
+-            '</h2><p>' + escape(item.description) + '</p><a class="project-start" href="' + routes.href(item.chapter, null) + '">' +
+-            (item.starter ? "开始分步实作" : "进入项目课程") + ' →</a><div class="project-links">' +
+-            (item.starter ? '<a href="' + repo + '/starter" target="_blank" rel="noopener">练习起点</a>' : '') +
+-            '<a href="' + repo + '" target="_blank" rel="noopener">参考实现与运行记录</a></div></article>';
+-        }).join("") + '</div>';
++      return header("已退出主线", "六个旧作业项目不再作为主要学习入口。目录仍留在仓库中，待后续审计后再处理。", "说明") +
++        '<section class="task-panel"><p>当前主线从<a href="#/">我的学习</a>进入，任务是小模型学习实验室—Attention。旧书签打开本页不会失效。</p>' +
++        '<p>理论教材、交互演示和搜索仍在。需要查阅章节时打开<a href="#/catalog">全部章节</a>。</p>' +
++        action("回到我的学习", "#/") + '</section>' +
++        '<p class="page-note">第 25–31 章仍可当教材阅读，其中的 Guided Build 仍指向旧目录；那不是本阶段主线，请不要把它们当成当前作业。</p>';
+     }
+     function footer(item, track) {
+       var adjacent = routes.neighbors(chapters, track, item.id);
+@@ -74,7 +126,7 @@
+       }
+       return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, "上一课", "") : '<span></span>') +
+         (adjacent.next ? link(adjacent.next, "下一课", "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
+-          '"><span class="fl-label">已到最后一课</span><span class="fl-title">返回' + (track ? "学习路线" : "章节目录") + '</span></a>') + '</nav>';
++          '"><span class="fl-label">已到最后一课</span><span class="fl-title">返回' + (track ? "查阅分组" : "章节目录") + '</span></a>') + '</nav>';
+     }
+     function lesson(item, track, body, reference) {
+       var read = progress.isRead(item.id);
+@@ -82,17 +134,17 @@
+       return '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
+         header(item.title, item.desc, "课程") + '<div class="chapter-actions"><button class="btn' + (read ? " done" : "") +
+         '" id="markRead" aria-pressed="' + read + '">' + (read ? "已读完 · 点击取消" : "标记已读") + '</button>' +
+-        '<span class="page-note">进度保存在此浏览器</span>' +
++        '<span class="page-note">已读只保存在此浏览器，不是已掌握</span>' +
+         (reference ? '<a class="reference-link" href="#/reference/' + reference.id + '">按需查阅本章参考手册 →</a>' : "") +
+         '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track);
+     }
+     function referencePage(reference, item, body) {
+       return '<div class="lesson-context"><a href="#/' + item.id + '">返回第 ' + escape(item.num) + ' 章</a>' +
+         '<span> / 参考手册</span></div>' + header(reference.title, reference.desc, "按需查阅 · 第 " + escape(item.num) + " 章") +
+-        '<div class="reference-note">这部分不是主线必读内容。遇到具体问题时再打开；完整项目仍以课程中的 starter 和实验验收为准。</div>' +
++        '<div class="reference-note">这部分不是主线必读内容。遇到具体问题时再打开。</div>' +
+         '<div class="md" id="mdBody">' + body + '</div>' +
+         '<nav class="chapter-footer" aria-label="参考手册导航"><a class="footer-link next" href="#/' + item.id + '">' +
+-        '<span class="fl-label">返回主线</span><span class="fl-title">' + escape(name(item)) + '</span></a></nav>';
++        '<span class="fl-label">返回教材</span><span class="fl-title">' + escape(name(item)) + '</span></a></nav>';
+     }
+     return { home: home, track: trackPage, catalog: catalog, projects: projectPage, lesson: lesson,
+       reference: referencePage, referenceFor: referenceFor };
+diff --git a/tools/build-static.js b/tools/build-static.js
+index 81ddb2a..9f458a3 100644
+--- a/tools/build-static.js
++++ b/tools/build-static.js
+@@ -142,7 +142,7 @@ function main() {
+   const tocHtml = start + "\n" +
+     '      <div class="chapter-head">\n' +
+     '        <h1 class="chapter-title">' + escapeHtml(SITE_NAME) + " · 静态目录</h1>\n" +
+-    '        <p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目完成第一段 AI 实习的作品集（projects/ 目录）。共 ' + manifest.chapters.length + ' 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
++    '        <p class="chapter-desc">交互版首页是「我的学习」，当前主线从 Attention 开始。共 ' + manifest.chapters.length + ' 章教材仍可查阅。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
+     "      </div>\n" +
+     '      <div class="md">\n' +
+     "        <h2>章节目录</h2>\n        <ol>\n" +
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 47ffe84..914e22c 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -147,3 +147,90 @@ test('小节定位的滚动必须显式指定 behavior', () => {
+   assert.doesNotMatch(read('js/app.js'), /updateProgress\(\); window\.scrollTo\(\{ top: 0 \}\)/,
+     'route() 渲染后的归零滚动紧接着 focusSection，必须是 instant，否则两个动画互相取消');
+ });
++
++test('chapter links can carry a section query for textbook headings', () => {
++  const href = routes.href('transformer', null, '7.4 Self-Attention 是什么 ★');
++  const parsed = routes.parse(href);
++  assert.equal(parsed.page, 'transformer');
++  assert.equal(parsed.trackId, null);
++  assert.equal(parsed.section, '7.4 Self-Attention 是什么 ★');
++  const withTrack = routes.href('pytorch', routes.trackFor(tracks, 'application'), '11.3 形状变换四件套（LLM 代码的重灾区）');
++  const parsedTrack = routes.parse(withTrack);
++  assert.equal(parsedTrack.trackId, 'application');
++  assert.equal(parsedTrack.section, '11.3 形状变换四件套（LLM 代码的重灾区）');
++});
++
++test('learning plan current task is executable Attention and points at real headings', () => {
++  const plan = require('../content/learning-plan.json');
++  const byId = Object.fromEntries(chapters.map(chapter => [chapter.id, chapter]));
++  assert.equal(plan.currentStageId, 'lab');
++  assert.equal(plan.currentTaskId, 'lab.attention.causal-mha');
++  assert.equal(plan.dataBoundary.evidenceSystemImplemented, false);
++  assert.deepEqual(plan.dataBoundary.criterionEvidenceKey, ['taskId', 'criterionId']);
++  assert.equal(plan.dataBoundary.conceptEvidenceDoesNotCompleteTasks, true);
++  const task = plan.tasks.find(item => item.id === plan.currentTaskId);
++  assert.ok(task);
++  assert.equal(task.stageId, 'lab');
++  ['attention', 'causal-mask', 'tensor-shape'].forEach(id => {
++    assert.ok(task.conceptIds.includes(id), id);
++  });
++  const criterionIds = task.criteria.map(item => item.id);
++  assert.equal(new Set(criterionIds).size, criterionIds.length);
++  task.criteria.forEach(item => {
++    assert.ok(item.id && item.text);
++    if (item.conceptId) assert.ok(plan.concepts.some(concept => concept.id === item.conceptId), item.conceptId);
++  });
++  assert.match(task.workspace.where, /空文件/);
++  assert.match(task.workspace.inputs, /\[B, T, D\]/);
++  assert.match(task.workspace.outputs, /\[B, T, D\]/);
++  assert.ok(task.steps.length >= 4);
++  const headingCache = {};
++  function headingsFor(file) {
++    if (!headingCache[file]) {
++      const markdown = fs.readFileSync(path.join(CONTENT, file), 'utf8');
++      headingCache[file] = [...markdown.matchAll(/^#{2,6}\s+(.+?)\s*$/gm)].map(match => match[1].replace(/\s+#+\s*$/, '').trim());
++    }
++    return headingCache[file];
++  }
++  task.materials.forEach(item => {
++    if (item.href) return;
++    const chapter = byId[item.chapterId];
++    assert.ok(chapter, item.chapterId);
++    assert.ok(headingsFor(chapter.file).includes(item.section), `${item.chapterId} 缺少小节 ${item.section}`);
++  });
++});
++
++test('primary entry shows the Attention lab and retires homework projects from main nav', () => {
++  const vm = require('node:vm');
++  const indexHtml = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
++  const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
++  const plan = require('../content/learning-plan.json');
++  assert.match(indexHtml, /<a href="#\/">我的学习<\/a>/);
++  assert.match(indexHtml, /<a href="#\/catalog">全部章节<\/a>/);
++  assert.doesNotMatch(indexHtml, /href="#\/projects">实战项目/);
++  const sandbox = { window: { CourseRoutes: routes } };
++  vm.runInNewContext(pagesSource, sandbox);
++  const pages = sandbox.window.CoursePages({
++    chapters,
++    tracks,
++    plan,
++    references,
++    progress: { isRead: () => false },
++    escapeHtml: value => String(value)
++      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
++      .replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
++  });
++  const home = pages.home(null);
++  assert.match(home, /小模型学习实验室—Attention/);
++  assert.match(home, /手写因果多头注意力/);
++  assert.match(home, /必要教材/);
++  assert.match(home, /验收条件/);
++  assert.match(home, /#\/transformer\?section=/);
++  assert.doesNotMatch(home, /自动测试通过/);
++  assert.doesNotMatch(home, /project-start/);
++  assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
++  const retired = pages.projects();
++  assert.match(retired, /已退出主线/);
++  assert.doesNotMatch(retired, /project-start/);
++  assert.doesNotMatch(retired, /N 个可运行项目|个可运行项目/);
++});

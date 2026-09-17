@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "dataBoundary": {
+    "conceptRecordsReusable": true,
+    "criterionEvidenceKey": ["taskId", "criterionId"],
+    "criterionMayReferenceConceptId": true,
+    "conceptEvidenceDoesNotCompleteTasks": true,
+    "evidenceSystemImplemented": false
+  },
+  "stages": [
+    {
+      "id": "lab",
+      "title": "小模型学习实验室",
+      "order": 1
+    },
+    {
+      "id": "claim-agent",
+      "title": "技术声明核验助手 / 单 Agent",
+      "order": 2
+    },
+    {
+      "id": "specialization",
+      "title": "算法或 Infra 专项实验",
+      "order": 3
+    }
+  ],
+  "currentStageId": "lab",
+  "currentTaskId": "lab.attention.causal-mha",
+  "concepts": [
+    {
+      "id": "attention",
+      "name": "缩放点积注意力"
+    },
+    {
+      "id": "causal-mask",
+      "name": "因果掩码"
+    },
+    {
+      "id": "tensor-shape",
+      "name": "Q/K/V 与多头拆分的 shape"
+    },
+    {
+      "id": "python-index",
+      "name": "函数、索引、调试"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "lab.attention.causal-mha",
+      "stageId": "lab",
+      "weekBudget": 1,
+      "title": "手写因果多头注意力",
+      "goal": "在空文件里不看参考实现写出因果多头注意力；能讲清每一步 shape；改变未来 token 不改变之前位置的输出。",
+      "conceptIds": ["attention", "causal-mask", "tensor-shape", "python-index"],
+      "workspace": {
+        "where": "在本机任意目录新建空文件，例如 ~/llm-lab/attn.py。不要写进本站 projects/ 下的六个旧作业目录。本页只给练习说明，不提供核心算法答案。",
+        "inputs": "先做单头：输入已投影的 Q、K、V，形状 [B, T, D]（也可以从 x 自己做三个线性投影得到）。再做多头：同一组输入，按头数 H 拆成 [B, H, T, Dh]，其中 Dh = D / H。位置 t 只能使用 0…t 的键和值。",
+        "outputs": "与 Q 相同形状的上下文向量 [B, T, D]。注意力权重矩阵可选，只用于自查，不是必须交付物。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.4 Self-Attention 是什么 ★",
+          "label": "7.4 Self-Attention 是什么"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.5 Q、K、V：三个投影 ★",
+          "label": "7.5 Q、K、V：三个投影"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.9 为什么除 √d_k ★",
+          "label": "7.9 为什么除 √d_k"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.10 Softmax：对哪个维度做 ★",
+          "label": "7.10 Softmax：对哪个维度做"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.17 Causal Mask ★",
+          "label": "7.17 Causal Mask"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.14 Multi-Head Attention ★",
+          "label": "7.14 Multi-Head Attention"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "transformer",
+          "section": "7.12 完整手算：3 token × 2 维的 Attention ★",
+          "label": "7.12 完整手算（自检对照，不要先抄）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "transformer",
+          "section": "7.13 公式 ↔ 代码逐行对应 ★",
+          "label": "7.13 公式与代码对应（写完后再看）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.2 Tensor：shape / dtype / device",
+          "label": "11.2 Tensor：shape / dtype / device"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.3 形状变换四件套（LLM 代码的重灾区）",
+          "label": "11.3 形状变换四件套"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.4 广播：不加循环做批量运算",
+          "label": "11.4 广播"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.6 nn.Module 与 Parameter：组织模型",
+          "label": "11.6 nn.Module 与 Parameter"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.13 调试清单：shape 断言与最小复现",
+          "label": "11.13 调试清单"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/Harris-Xie/SpongebobLite",
+          "external": true,
+          "label": "SpongebobLite（对照用，不是本周作业仓库）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读单头所需教材",
+          "body": "打开第 7 章 7.4、7.5、7.9、7.10、7.17。先搞清 Q/K/V、缩放、softmax 作用的维度，以及因果掩码要挡的是什么。章内演示可帮助建立直觉，但演示不能代替自己写函数。"
+        },
+        {
+          "title": "在空文件写单头因果注意力",
+          "body": "只写单头：给定 Q、K、V，得到与 Q 同形状的输出。需要查 PyTorch API 可以，不要打开 7.13 的完整实现，也不要让 AI 直接给出核心函数。"
+        },
+        {
+          "title": "检查单头结果",
+          "body": "打印每一步 shape。用一组固定小张量（例如 B=1、T=4）。把未来某个位置的输入改掉，确认更早位置的输出不变。可选：看权重上三角是否接近 0。写完后再对照 7.12 的手算表，不要先抄。"
+        },
+        {
+          "title": "再读多头并扩展",
+          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H，以及因果约束对每个头仍然成立。"
+        },
+        {
+          "title": "对照而不是抄袭",
+          "body": "自检通过后再看 7.13。若卡在 class、reshape 或 broadcasting，并行打开第 11 章对应小节，补完当前函数，不要改去做六个旧作业项目。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "rewrite",
+          "conceptId": "attention",
+          "text": "不看参考代码，在空文件中重写注意力核心计算（先单头，再多头）。"
+        },
+        {
+          "id": "shapes",
+          "conceptId": "tensor-shape",
+          "text": "能口述或写出每一步的 shape：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。"
+        },
+        {
+          "id": "causal",
+          "conceptId": "causal-mask",
+          "text": "改变未来 token 后，更早位置的输出不变。这是本任务的验收，不因为以前读过因果掩码章节就自动算过。"
+        }
+      ]
+    }
+  ]
+}
