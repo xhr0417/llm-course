@@ -78,6 +78,7 @@
 - 刷新后已读章节仍显示已读，且没有被标成已掌握。
 - 不出现证据表单、复习到期列表、或「自动测试通过」文案。
 - 手机与桌面布局可读。
+- `learning-plan.json` 失败时首页可重试，目录与搜索仍可用；计划稍后返回时，已打开的章节/目录/参考手册不重绘。
 - `node --test tools/test-course.js`；按改动范围跑现有 validator（本阶段仍留下 `projects/` 目录，不要为了过门禁把新主线接回六项目）。
 
 **完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2。GitHub Pages 可由 `main` 推送自动部署；自有服务器仍只在明确运行 `tools/publish.sh` 时更新。

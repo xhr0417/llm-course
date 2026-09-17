@@ -192,7 +192,7 @@
     pages = CoursePages({ chapters: chapters, tracks: tracks, plan: plan, planError: error,
       references: references, progress: progress, escapeHtml: escape });
     startRoutingAndSearch();
-    route();
+    if (currentPath === "home") route();
   }
   function loadLearningPlan() {
     return fetchJson("content/learning-plan.json").then(function (plan) {

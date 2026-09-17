@@ -10,57 +10,44 @@
 
 审核时请对照 `files/docs/PERSONAL_LEARNING_OS.md` 第 8 节，以及 `files/DESIGN.md`。
 
+`files/` 始终是**当前最新完整稿**。
+
 ## 怎么看
 
 1. 先读本文件「本轮改了什么」，再读 `files/docs/PERSONAL_LEARNING_OS.md`。
-2. 功能改动看 `files/js/pages.js`、`files/js/app.js`、`files/content/learning-plan.json`。
-3. 第一功能阶段相对改造前的行级差异：`tracked-edits.diff`。
-4. **本轮小修**相对 `38b4197` 的行级差异：`small-fixes.diff`。
-5. GitHub 上同一文件：`https://github.com/xhr0417/llm-course/blob/main/<path>`
-
-`files/` 始终是**当前最新完整稿**，不是某一旧 commit 的快照。
+2. 功能改动看 `files/js/app.js`、`files/js/pages.js`、`files/content/learning-plan.json`、`files/tools/test-course.js`、`files/tools/test-app-harness.js`。
+3. 第一功能阶段相对改造前：`tracked-edits.diff`。
+4. 上一轮小修（计划失败可重试、中文验收、数值 1e-5 误用 7.12 的那一版）：`small-fixes.diff`。
+5. **本轮**相对上一提交的行级差异：`round-3.diff`。
+6. GitHub 上同一文件：`https://github.com/xhr0417/llm-course/blob/main/<path>`
 
 ---
 
-## 本轮改了什么（相对 38b4197）
+## 本轮改了什么（阶段 1 最后一轮修正）
 
-作者要求：阶段 1 小修，不进入阶段 2。本轮只改展示与加载容错。
+不进入阶段 2，不扩功能。只修正数值验收表述、计划返回时的路由，以及行为测试。
 
-### 1. 计划 JSON 加载失败不再挡住教材
+### 1. 数值验收不再把 7.12 当因果 1e-5 标准
 
-`js/app.js` 不再把 `learning-plan.json` 和教材目录三件套绑在同一个 `Promise.all` 里。
+7.12 是**无因果掩码**的手算，结果只保留三位小数，不能直接当因果注意力的 1e-5 对照。
 
-- 先加载 `manifest.json` / `tracks.json` / `references.json`，立刻启动路由和搜索。
-- 再单独加载 `learning-plan.json`。
-- 失败时首页出现可理解错误和「重新加载当前练习」；目录、章节、搜索仍可用。
-- 加载中首页写「正在载入当前练习」，不把待加载误报成失败。
+- 教材链接改成「无掩码理解材料，不是因果数值标准」。
+- 因果数值验收：固定输入、关闭 dropout；对照必须与实现使用同一套掩码、缩放、dtype；多头还要统一拆头顺序和输出投影约定。
+- 写明 atol 看接近 0 的差、rtol 看相对误差，两道门都过才算数值一致。
+- 仍不提供核心算法答案，站点仍不运行 Python。
 
-### 2. 验收补上数值正确性
+### 2. applyPlan 只在首页刷新
 
-`content/learning-plan.json` 增加 `numeric` 一条，中文标签「数值正确性」。
+计划数据到达或失败后，**仅当当前页是首页**才调用 `route()`。用户已在章节、参考手册或目录时，不重绘、不重置滚动和交互。之后回到首页会显示最新计划。
 
-- 关闭 dropout。
-- 固定小张量。
-- 单头和多头分别与 7.12 手算或可信参考按容差比较（例如 1e-5）。
-- 单头通过不能代替多头。
-- 明确：站点不运行 Python，不提供核心算法答案。
-- 形状、因果性两条保留。
+### 3. 行为测试不再只靠源码正则
 
-### 3. 首页改成自然中文，去掉内部 ID 和工程口号
+`tools/test-app-harness.js` 真正启动 `js/app.js`，用可控的 `fetch`：
 
-`js/pages.js`：
+- 计划第一次失败，目录可进，搜索「GRPO-TOKEN」有结果，点重试后首页出现 Attention。
+- 计划延迟返回期间进入章节；成功或失败都不增加章节 `innerHTML` 写入次数。回到首页才看到最新计划或错误。
 
-- 不再显示 `taskId`、`criterionId`、知识点英文 id。
-- 验收用 JSON 里的中文 `label`（自己重写 / 形状 / 因果性 / 数值正确性）。
-- 相关概念只显示中文名称。
-- 去掉「阶段 1」「周预算」「未通过验收前首页停在这里」。
-- 不暗示本页会按验收自动切换练习。
-
-### 4. 文档与门禁同步
-
-- `docs/PERSONAL_LEARNING_OS.md` 第 8 节按上面三条改验收。
-- `docs/IMPLEMENTATION_PLAN.md`、`DESIGN.md` 区分 Pages 自动部署与 `publish.sh`，并写计划加载失败时的界面要求。
-- `tools/test-course.js` 增加：数值正确性条文、首页不得出现内部 id / 阶段口号、计划失败时仍能渲染目录。
+`node --test tools/test-course.js`：16 通过。
 
 ### 本轮未做
 
@@ -68,23 +55,22 @@
 - 没有删除 `projects/`。
 - 没有做证据表单、卡点、复习队列、自动评分。
 - 没有代写 Attention 核心算法。
-- 没有运行 `tools/publish.sh`。本次会再推 `main`，GitHub Pages 可能随之更新；自有服务器不会因此更新。
+- 没有运行 `tools/publish.sh`。
 
-### 本轮浏览器里实际看到的
+### 浏览器里实际看到的
 
-在本地 `http://localhost:8765/?v=phase1fix#/`（Cursor 内置浏览器）核对过：
+本地 `http://localhost:8766/?v=phase1round3`（Cursor 内置浏览器）：
 
-- 首页标题是「小模型学习实验室—Attention」，有「数值正确性」，没有 `taskId` / `criterionId` / 「阶段 1」。
-- 点「打开必要教材：7.4」落到第 7 章 7.4 小节（标题在视口内）。
-- 搜索「GRPO」约 17 条；点「22.7 GRPO 的目标函数」落到该小节。
-- 「全部章节」可打开；浅色/深色可切换；1440 宽无横向撑开。
-- 同会话「标记已读」会把阅读进度改成 1/32，目录里对应章显示「已读」。文案仍写「已读不是已掌握」。
+- 首页标题仍是「小模型学习实验室—Attention」；验收含 atol/rtol、无掩码说明；没有把 7.12 和 1e-5 写在一起。
+- **375px 首页**：`scrollWidth == clientWidth`，无横向撑开；H1 完整；主按钮可点。
+- **375px 第 7 章**：仍有约 20px 横向溢出（顶栏与教材表格），不是本轮改 CSS 引入的。
+- 同会话标记已读会变成「已读完 · 点击取消」、进度 1/32。
 
-未在这次浏览器里做完的：
+**不能声称通过：**
 
-- 没有用 Network 拦截真实验证「计划 JSON 失败 + 点重试」；这条靠 `tools/test-course.js` 门禁覆盖。
-- 没有单独截 375 宽截图；654 宽时侧栏收成「目录」按钮，无横向撑开。
-- Cursor 内置浏览器一直提示「当前浏览器无法保存进度」。磁盘 `localStorage` 里仍有旧的 transformer/pytorch 已读，但这个浏览器的界面没有把它们加载出来。因此**没有在用户本机 Chrome 验证旧阅读记录刷新后仍在**。
+- **刷新后仍保留已读。** 同一 origin 下点「标记已读」再 `location.reload()`，按钮回到「标记已读」，进度回到 0/32。`llm-course-last` 能写入；`llm-course-progress` 在此内置浏览器里写不进去。页面一直提示「当前浏览器无法保存进度」。未在系统 Chrome 复测。
+- 未在真机 Safari / 系统 Chrome 做计划 JSON 失败的 Network 拦截。失败与延迟不打断章节由 Node 行为测试覆盖。
+- 未声称顶栏汉堡按钮达到 44px（测得约 36px，原有尺寸）。
 
 ---
 
@@ -92,39 +78,35 @@
 
 | 路径 | 状态 | 作用 |
 | --- | --- | --- |
-| `AGENTS.md` | 新建 | Agent 约定：源文件 vs 构建产物、不把已读当成掌握 |
-| `DESIGN.md` | 修改 | 身份、主导航、主按钮；本轮补上计划加载失败的验证要求 |
-| `README.md` | 修改 | 从 Attention 开始，而不是三条路线 / 六个作业 |
-| `content/learning-plan.json` | 新建 | 发布用计划；本轮加数值正确性和中文 label |
-| `css/course.css` | 修改 | 当前任务面板、步骤/验收列表 |
-| `index.html` | 修改 | 主导航改为「我的学习 / 全部章节」；静态目录文案 |
-| `js/app.js` | 修改 | 本轮：计划与目录分开加载；失败可重试 |
-| `js/course.js` | 修改 | `href` / `parse` 支持教材小节 |
-| `js/pages.js` | 修改 | 本轮：中文首页、失败/加载中状态、数值正确性展示 |
-| `tools/build-static.js` | 修改 | 静态目录不再把六个项目当主线作品集 |
-| `tools/test-course.js` | 修改 | 本轮：数值条文、隐藏 id、计划失败门禁 |
-| `docs/PERSONAL_LEARNING_OS.md` | 新建 | 产品需求；本轮更新第 8 节验收 |
-| `docs/IMPLEMENTATION_PLAN.md` | 新建 | 分阶段工程；本轮纠正 Pages vs publish.sh |
-| `docs/LEARNING_PLAN.md` | 新建 | 一年计划归档（第 12 节已被产品决定取代） |
-| `docs/research/PROJECT_RESEARCH.md` | 新建 | 92 项调研，不是作业 |
-
-`files/` 目录按仓库相对路径保存了上表全部完整文件。
+| `AGENTS.md` | 新建 | Agent 约定 |
+| `DESIGN.md` | 修改 | 本轮：计划稍后返回时不得重绘已打开的章节/目录 |
+| `README.md` | 修改 | 从 Attention 开始 |
+| `content/learning-plan.json` | 新建 | 本轮：7.12 降为无掩码理解材料；数值验收改 atol/rtol |
+| `css/course.css` | 修改 | 当前任务面板 |
+| `index.html` | 修改 | 主导航「我的学习 / 全部章节」 |
+| `js/app.js` | 修改 | 本轮：`applyPlan` 仅首页 `route()` |
+| `js/course.js` | 修改 | 教材小节 query |
+| `js/pages.js` | 修改 | 中文首页、失败/加载中状态 |
+| `tools/build-static.js` | 修改 | 静态目录文案 |
+| `tools/test-course.js` | 修改 | 本轮：数值条文 + 真实 fetch 行为测试 |
+| `tools/test-app-harness.js` | 新建 | 本轮：启动 app.js 的测试壳 |
+| `docs/PERSONAL_LEARNING_OS.md` | 新建 | 本轮更新第 4 / 8 节数值验收 |
+| `docs/IMPLEMENTATION_PLAN.md` | 新建 | 本轮补充计划延迟返回的验证 |
+| `docs/LEARNING_PLAN.md` | 新建 | 一年计划归档 |
+| `docs/research/PROJECT_RESEARCH.md` | 新建 | 92 项调研 |
 
 ## 请 ChatGPT 重点核对
 
-1. 首页是否是「小模型学习实验室—Attention」，是否写出写在哪里、输入输出、先单头后多头、如何检查，且链到真实教材小节。
-2. 验收是否同时有形状、因果性、**数值正确性**；是否关闭 dropout、固定小张量、单头和多头分开比、给了容差；是否仍不代写核心算法、不在浏览器跑 Python。
-3. 首页是否还露出 `taskId`、`criterionId`、英文概念 id、工程阶段口号，或暗示会自动切换练习（不应露出）。
-4. `learning-plan.json` 失败时，首页是否有人能看懂的错误和重试；目录、章节路由、搜索是否仍先初始化。
-5. 六个旧项目是否退出主导航和主入口；`#/projects` 是否仍可打开且不是死链。
-6. 是否把 `llm-course-progress` 的「已读」显示成已掌握 / 自动测试通过。
-7. 任务验收是否约定为 `taskId + criterionId`（写在计划 JSON / OS 文档里即可）；概念旧证据是否被写成会自动完成新任务（阶段 1 只应写约定，不应实现证据系统）。
-8. 机制来源是否误把 `ckorhonen` / `danielbodnar` / `HumphreySun98` 当成用户指定的三个仓库。
-9. 是否误删 `projects/` 或开始做阶段 2。
-10. 文档是否把 GitHub Pages 自动部署和未运行 `tools/publish.sh` 混成「没有发布」。
+1. 7.12 是否仍被当成因果注意力的 1e-5 数值标准（不应）。是否标明无掩码、三位小数、只作理解材料。
+2. 数值验收是否要求固定输入、关 dropout、对照与掩码/缩放/dtype 一致；多头是否要求拆头顺序和输出投影约定；atol/rtol 是否只说明用途、没有核心算法答案。
+3. 计划 JSON 在章节页返回时，是否会 `route()` 重绘章节（不应）。回首页是否能看到最新计划。
+4. 行为测试是否真的 mock fetch、点重试、检查搜索结果和章节 `innerHTML` 写入次数；是否仍只用 `js/app.js` 源码正则冒充验证（不应）。
+5. 首页是否还露出内部 id 或工程阶段口号。
+6. 是否误删 `projects/` 或开始做阶段 2。
+7. 文档是否把 GitHub Pages 自动部署和未运行 `tools/publish.sh` 混成「没有发布」。
 
 ## 本包未收录（有意）
 
-- `chapters/*.html`、`sitemap.xml`、`robots.txt`、`llms.txt`：构建产物，由 `tools/build-static.js` 生成。
+- `chapters/*.html`、`sitemap.xml`、`robots.txt`、`llms.txt`：构建产物。
 - `projects/`：六个旧目录未改、未删。
-- 教材 Markdown 正文（第 7 / 11 章）未改，只被计划 JSON 链接。
+- 教材 Markdown 正文未改，只改了计划 JSON 对 7.12 的用法说明。

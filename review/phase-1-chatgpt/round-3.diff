@@ -1,0 +1,751 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index 74ac1fc..d2a0212 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -28,4 +28,4 @@ Keep existing purposeful interactions and diagrams. New transitions only change
+ Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+ 
+ ## 8. Accessibility and verification
+-Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
++Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index 10f1578..128640b 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -98,7 +98,7 @@
+           "role": "check-after",
+           "chapterId": "transformer",
+           "section": "7.12 完整手算：3 token × 2 维的 Attention ★",
+-          "label": "7.12 完整手算（自检对照，不要先抄）"
++          "label": "7.12 完整手算（无掩码理解材料，不是因果数值标准）"
+         },
+         {
+           "role": "check-after",
+@@ -154,11 +154,11 @@
+         },
+         {
+           "title": "检查单头结果",
+-          "body": "关闭 dropout。打印每一步 shape。用一组固定小张量（单头可用 7.12 的 3 token × 2 维例子）。把未来某个位置的输入改掉，确认更早位置的输出不变。再把输出与手算表或一份你信任的参考实现按容差比较（例如对应位置相差不超过 1e-5）。不要先抄 7.13。"
++          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较：atol 看接近 0 的差，rtol 看相对误差，两道门都过才算数值一致。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
+         },
+         {
+           "title": "再读多头并扩展",
+-          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H。关闭 dropout，用另一组固定小张量单独检查多头：因果性仍成立，并与可信参考输出按同样容差比较。单头通过不能代替多头检查。"
++          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H。关闭 dropout，用另一组固定输入单独检查多头。对照时拆头顺序和输出投影约定必须与参考一致（先按哪一维拆头、拼头之后有没有 W_O）。因果性仍成立。单头通过不能代替多头检查。"
+         },
+         {
+           "title": "对照而不是抄袭",
+@@ -188,7 +188,7 @@
+           "id": "numeric",
+           "label": "数值正确性",
+           "conceptId": "attention",
+-          "text": "关闭 dropout。用固定小张量分别检查单头和多头：输出与 7.12 手算或一份你信任的参考实现按容差比较（例如最大绝对误差不超过 1e-5）。单头通过不能代替多头。本站不运行 Python，也不提供核心算法答案。"
++          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。比较时用 atol 看接近 0 的差，用 rtol 看相对误差；两道门都通过才算数值一致。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
+         }
+       ]
+     }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 7622d19..4436457 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -78,6 +78,7 @@
+ - 刷新后已读章节仍显示已读，且没有被标成已掌握。
+ - 不出现证据表单、复习到期列表、或「自动测试通过」文案。
+ - 手机与桌面布局可读。
++- `learning-plan.json` 失败时首页可重试，目录与搜索仍可用；计划稍后返回时，已打开的章节/目录/参考手册不重绘。
+ - `node --test tools/test-course.js`；按改动范围跑现有 validator（本阶段仍留下 `projects/` 目录，不要为了过门禁把新主线接回六项目）。
+ 
+ **完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2。GitHub Pages 可由 `main` 推送自动部署；自有服务器仍只在明确运行 `tools/publish.sh` 时更新。
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index 2d384f8..e6d41bc 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -120,8 +120,8 @@
+ - **写在哪里：** 本机空文件（例如 `~/llm-lab/attn.py`），不要写进 `projects/` 六个旧目录
+ - **输入：** 单头为 Q/K/V，形状 `[B, T, D]`；多头再按 H 拆成 `[B, H, T, Dh]`，`Dh = D / H`；位置 t 只能看 0…t
+ - **输出：** 与 Q 同形状的上下文向量 `[B, T, D]`
+-- **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头 → 自检 → 读 7.14 扩多头 → 再自检。7.12 / 7.13 只在写完后对照，不要先抄完整实现
+-- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定小张量分别核对单头和多头数值（与手算或可信参考按容差比较）。本站不运行 Python，不提供核心算法答案。
++- **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头 → 自检 → 读 7.14 扩多头 → 再自检。7.12 是无掩码手算理解材料；7.13 只在写完后对照，不要先抄完整实现
++- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定输入分别核对单头和多头数值。对照须同掩码、缩放、dtype；多头还要同拆头顺序与输出投影。用 atol 看接近 0 的差、rtol 看相对误差。不要把 7.12 的三位小数无掩码表当成因果数值标准。本站不运行 Python，不提供核心算法答案。
+ - **教材链接：** 必须指向第 7、11 章中实际存在的小节标题（由计划 JSON 的 `section` 字段与 Markdown `##` 对齐）
+ - 补基础：class / reshape / broadcasting 链到第 11 章对应小节
+ - SpongebobLite 仅作对照入口，标「对照用，不是本周作业仓库」
+@@ -133,7 +133,7 @@
+ | `rewrite` | `attention` | 空文件中重写核心计算（先单头后多头） |
+ | `shapes` | `tensor-shape` | 能讲清每一步 shape |
+ | `causal` | `causal-mask` | 未来不影响过去 |
+-| `numeric` | `attention` | 关闭 dropout；固定小张量；单头和多头分别与手算或可信参考按容差比较 |
++| `numeric` | `attention` | 关闭 dropout；固定输入；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影；atol/rtol；7.12 不是因果数值标准 |
+ 
+ 这四条是 `lab.attention.causal-mha` 的验收，不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
+ 
+@@ -187,7 +187,7 @@
+ 打开站点主入口必须同时满足：
+ 
+ 1. 能看到当前任务属于 **小模型学习实验室—Attention**。页面用自然中文列出当前目标、必要教材、实现步骤（含写在哪里、输入输出、先单头后多头）、验收条件和相关概念。教材链接指向实际存在的小节。首页不显示 taskId、criterionId、知识点英文 id，也不写工程阶段口号，不暗示本页会按验收自动切换练习。
+-2. 验收含形状、因果性，以及数值正确性（固定小张量、关闭 dropout、单头和多头分别与手算或可信参考按容差比较）。不代写核心算法，不在网站运行 Python。
++2. 验收含形状、因果性，以及数值正确性（固定输入、关闭 dropout；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影约定；用 atol/rtol 判断，不把 7.12 三位小数无掩码手算当作因果数值标准）。不代写核心算法，不在网站运行 Python。
+ 3. 六个旧项目不出现在主导航、主线任务列表和项目完成进度里。`#/projects` 改为说明页，旧书签不产生死链。
+ 4. 目录与搜索仍可打开原理论章节；不物理删除 `projects/`。`learning-plan.json` 加载失败时，首页给出可理解错误和重试，目录、章节路由和搜索仍初始化。
+ 5. 已有「已读」记录仍在；界面不把它们显示成已掌握。
+diff --git a/js/app.js b/js/app.js
+index 605e818..cc8fe0b 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -192,7 +192,7 @@
+     pages = CoursePages({ chapters: chapters, tracks: tracks, plan: plan, planError: error,
+       references: references, progress: progress, escapeHtml: escape });
+     startRoutingAndSearch();
+-    route();
++    if (currentPath === "home") route();
+   }
+   function loadLearningPlan() {
+     return fetchJson("content/learning-plan.json").then(function (plan) {
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 867aba7..b60b4d7 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -183,8 +183,22 @@ test('learning plan current task is executable Attention and points at real head
+   assert.match(numeric.text, /dropout/i);
+   assert.match(numeric.text, /单头/);
+   assert.match(numeric.text, /多头/);
+-  assert.match(numeric.text, /容差|1e-5/);
++  assert.match(numeric.text, /atol/);
++  assert.match(numeric.text, /rtol/);
++  assert.match(numeric.text, /dtype/);
++  assert.match(numeric.text, /拆头/);
++  assert.match(numeric.text, /无因果掩码|无掩码/);
+   assert.doesNotMatch(numeric.text, /softmax\(|QK/);
++  assert.doesNotMatch(numeric.text, /7\.12[\s\S]{0,40}1e-5|1e-5[\s\S]{0,40}7\.12/);
++  const handcalc = task.materials.find(item => item.section && item.section.startsWith('7.12'));
++  assert.ok(handcalc);
++  assert.match(handcalc.label, /无掩码/);
++  assert.doesNotMatch(handcalc.label, /1e-5/);
++  const checkStep = task.steps.find(item => item.title.includes('检查单头'));
++  assert.match(checkStep.body, /atol/);
++  assert.match(checkStep.body, /不是因果|不能当/);
++  const multiStep = task.steps.find(item => item.title.includes('多头'));
++  assert.match(multiStep.body, /拆头顺序|输出投影/);
+   task.criteria.forEach(item => {
+     assert.ok(item.id && item.text && item.label);
+     if (item.conceptId) assert.ok(plan.concepts.some(concept => concept.id === item.conceptId), item.conceptId);
+@@ -240,7 +254,11 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.match(home, /必要教材/);
+   assert.match(home, /验收条件/);
+   assert.match(home, /数值正确性/);
++  assert.match(home, /atol/);
++  assert.match(home, /rtol/);
++  assert.match(home, /无掩码/);
+   assert.match(home, /#\/transformer\?section=/);
++  assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
+   assert.doesNotMatch(home, /自动测试通过/);
+   assert.doesNotMatch(home, /project-start/);
+   assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
+@@ -253,14 +271,6 @@ test('primary entry shows the Attention lab and retires homework projects from m
+ });
+ 
+ test('catalog search and chapters boot even if learning-plan.json fails', () => {
+-  const app = fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8');
+-  const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
+-  const coreAll = app.match(/Promise\.all\(\[fetchJson\("content\/manifest\.json"\), fetchJson\("content\/tracks\.json"\), fetchJson\("content\/references\.json"\)\]\)/);
+-  assert.ok(coreAll, '教材目录三件套应单独 Promise.all，不能和 learning-plan 绑死');
+-  assert.match(app, /function loadLearningPlan/);
+-  assert.match(app, /startRoutingAndSearch/);
+-  assert.match(app, /byId\("retryPlan"\)/);
+-  assert.match(pagesSource, /id="retryPlan"/);
+   const pages = loadPages(null, { message: '无法加载 content/learning-plan.json' });
+   const home = pages.home(null);
+   assert.match(home, /没有加载到学习计划/);
+@@ -272,3 +282,61 @@ test('catalog search and chapters boot even if learning-plan.json fails', () =>
+   assert.match(catalog, /全部章节/);
+   assert.ok(catalog.includes('Transformer') || catalog.includes('课程'));
+ });
++
++const harness = require('./test-app-harness');
++
++test('plan request can fail then retry while catalog routing and search stay up', async () => {
++  const app = harness.bootApp({
++    fetch: harness.createFetch({ planFailUntil: 1 }),
++    hash: '#/'
++  });
++  await harness.waitFor(() => /没有加载到学习计划|重新加载当前练习/.test(app.text()));
++  assert.match(app.html(), /id="retryPlan"/);
++  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
++
++  app.go('#/catalog');
++  await harness.settle();
++  assert.match(app.text(), /全部章节/);
++  assert.match(app.text(), /Transformer/);
++
++  const input = app.byId('searchInput');
++  input.value = 'GRPO-TOKEN';
++  input.dispatchEvent({ type: 'input', preventDefault() {} });
++  await harness.waitFor(() => /找到 \d+ 条/.test(app.byId('searchSummary').textContent || ''));
++  assert.equal(app.byId('searchResults').hidden, false);
++  assert.ok(app.byId('searchList').querySelector('.search-hit'));
++
++  app.go('#/');
++  await harness.waitFor(() => app.byId('retryPlan'));
++  app.byId('retryPlan').click();
++  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
++  assert.match(app.text(), /数值正确性/);
++  assert.match(app.text(), /atol/);
++});
++
++test('late plan success or failure does not rerender an open chapter', async () => {
++  async function openChapterDuringPlan(planError) {
++    let release;
++    const planGate = new Promise(resolve => { release = resolve; });
++    const app = harness.bootApp({
++      fetch: harness.createFetch({ planGate, planError }),
++      hash: '#/'
++    });
++    await harness.waitFor(() => /正在载入当前练习/.test(app.text()));
++    app.go('#/transformer');
++    await harness.waitFor(() => /id="markRead"/.test(app.html()));
++    const html = app.html();
++    const writes = app.writes();
++    release();
++    await harness.settle(12);
++    assert.equal(app.writes(), writes, planError ? 'plan failure rerendered the chapter' : 'plan success rerendered the chapter');
++    assert.equal(app.html(), html);
++    assert.match(app.html(), /id="markRead"/);
++    app.go('#/');
++    await harness.settle(8);
++    if (planError) assert.match(app.text(), /没有加载到学习计划|重新加载当前练习/);
++    else assert.match(app.text(), /小模型学习实验室—Attention/);
++  }
++  await openChapterDuringPlan(false);
++  await openChapterDuringPlan(true);
++});
+diff --git a/tools/test-app-harness.js b/tools/test-app-harness.js
+new file mode 100644
+index 0000000..13d73fb
+--- /dev/null
++++ b/tools/test-app-harness.js
+@@ -0,0 +1,524 @@
++"use strict";
++
++const fs = require("node:fs");
++const path = require("node:path");
++const vm = require("node:vm");
++const marked = require("../vendor/marked.min.js");
++const katex = require("../vendor/katex/katex.js");
++const { chapters } = require("../content/manifest.json");
++const { tracks } = require("../content/tracks.json");
++const { references } = require("../content/references.json");
++const plan = require("../content/learning-plan.json");
++
++const ROOT = path.resolve(__dirname, "..");
++const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
++
++function decode(text) {
++  return String(text)
++    .replace(/&amp;/g, "&")
++    .replace(/&lt;/g, "<")
++    .replace(/&gt;/g, ">")
++    .replace(/&quot;/g, '"')
++    .replace(/&#39;/g, "'");
++}
++
++function makeClassList(node) {
++  function tokens() {
++    return new Set(String(node.className || "").split(/\s+/).filter(Boolean));
++  }
++  function write(set) {
++    node.className = Array.from(set).join(" ");
++  }
++  return {
++    add: function (name) { const set = tokens(); set.add(name); write(set); },
++    remove: function (name) { const set = tokens(); set.delete(name); write(set); },
++    toggle: function (name, force) {
++      const set = tokens();
++      const on = force === undefined ? !set.has(name) : !!force;
++      if (on) set.add(name); else set.delete(name);
++      write(set);
++      return on;
++    },
++    contains: function (name) { return tokens().has(name); }
++  };
++}
++
++function applyAttrs(node, raw) {
++  const re = /([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
++  let match;
++  while ((match = re.exec(raw || ""))) {
++    const value = match[2] != null ? match[2] : match[3] != null ? match[3] : match[4] != null ? match[4] : "";
++    node.setAttribute(match[1], value);
++  }
++}
++
++function simpleMatch(node, selector) {
++  if (!node || !node.tagName) return false;
++  if (selector === "*") return true;
++  const tokens = selector.match(/(\[[^\]]+\]|[.#]?[A-Za-z_][\w-]*)/g) || [];
++  return tokens.every(function (token) {
++    if (token[0] === ".") return node.classList.contains(token.slice(1));
++    if (token[0] === "#") return node.id === token.slice(1);
++    if (token[0] === "[") {
++      const body = token.slice(1, -1);
++      const eq = body.indexOf("=");
++      if (eq === -1) return node.getAttribute(body) != null;
++      const key = body.slice(0, eq);
++      const value = body.slice(eq + 1).replace(/^["']|["']$/g, "");
++      return node.getAttribute(key) === value;
++    }
++    return node.tagName === token.toUpperCase();
++  });
++}
++
++function walk(node, out) {
++  (node.childNodes || []).forEach(function (child) {
++    if (child.tagName) {
++      out.push(child);
++      walk(child, out);
++    }
++  });
++  return out;
++}
++
++function queryAll(root, selector) {
++  const results = [];
++  String(selector).split(",").forEach(function (group) {
++    const parts = group.trim().split(/\s+/).filter(Boolean);
++    if (!parts.length) return;
++    let pool = walk(root, []);
++    parts.forEach(function (part, index) {
++      if (index === 0) {
++        pool = pool.filter(function (node) { return simpleMatch(node, part); });
++        return;
++      }
++      const next = [];
++      pool.forEach(function (node) {
++        walk(node, []).forEach(function (child) {
++          if (simpleMatch(child, part)) next.push(child);
++        });
++      });
++      pool = next;
++    });
++    pool.forEach(function (node) {
++      if (results.indexOf(node) === -1) results.push(node);
++    });
++  });
++  return results;
++}
++
++function createElementFactory(byId) {
++  function unregister(node) {
++    if (node.id && byId[node.id] === node) delete byId[node.id];
++    (node.childNodes || []).forEach(unregister);
++  }
++
++  function parseInto(parent, html) {
++    parent.childNodes.forEach(unregister);
++    parent.childNodes = [];
++    const stack = [parent];
++    const re = /<!--[\s\S]*?-->|<\/([a-zA-Z0-9]+)>|<([a-zA-Z0-9]+)([^>]*)\/?>|([^<]+)/g;
++    let match;
++    while ((match = re.exec(html))) {
++      if (match[0].slice(0, 4) === "<!--") continue;
++      if (match[1]) {
++        if (stack.length > 1) stack.pop();
++        continue;
++      }
++      if (match[2]) {
++        const node = createElement(match[2]);
++        applyAttrs(node, match[3] || "");
++        const current = stack[stack.length - 1];
++        node.parentNode = current;
++        current.childNodes.push(node);
++        const voidLike = VOID.has(match[2].toLowerCase()) || /\/$/.test((match[3] || "").trim()) || /\/$/.test(match[0].trim());
++        if (!voidLike) stack.push(node);
++        continue;
++      }
++      if (match[4]) {
++        const current = stack[stack.length - 1];
++        current.childNodes.push({
++          tagName: null,
++          textContent: decode(match[4]),
++          childNodes: [],
++          parentNode: current
++        });
++      }
++    }
++  }
++
++  function createElement(tag) {
++    const node = {
++      tagName: String(tag).toUpperCase(),
++      childNodes: [],
++      parentNode: null,
++      style: {},
++      hidden: false,
++      disabled: false,
++      value: "",
++      href: "",
++      className: "",
++      id: "",
++      _html: "",
++      _writes: 0,
++      _listeners: {},
++      attributes: Object.create(null),
++      ownerDocument: null,
++      get classList() { return makeClassList(node); },
++      get parentElement() {
++        return node.parentNode && node.parentNode.tagName ? node.parentNode : null;
++      },
++      get children() {
++        return node.childNodes.filter(function (child) { return child.tagName; });
++      },
++      get textContent() {
++        if (!node.childNodes.length && node._text != null) return node._text;
++        return node.childNodes.map(function (child) {
++          return child.textContent || "";
++        }).join("");
++      },
++      set textContent(value) {
++        node.childNodes.forEach(unregister);
++        node.childNodes = [];
++        node._text = String(value);
++        node._html = "";
++      },
++      get innerHTML() { return node._html; },
++      set innerHTML(value) {
++        node._writes += 1;
++        node._html = String(value == null ? "" : value);
++        node._text = null;
++        parseInto(node, node._html);
++      },
++      setAttribute: function (name, value) {
++        const key = String(name).toLowerCase();
++        const next = value == null ? "" : String(value);
++        node.attributes[key] = next;
++        if (key === "id") {
++          if (node.id && byId[node.id] === node) delete byId[node.id];
++          node.id = next;
++          if (next) byId[next] = node;
++        } else if (key === "href") node.href = next;
++        else if (key === "class") node.className = next;
++        else if (key === "hidden") node.hidden = next === "" || next === "true" || next === "hidden";
++      },
++      getAttribute: function (name) {
++        const key = String(name).toLowerCase();
++        if (key === "id") return node.id || null;
++        if (key === "href") return node.href || null;
++        if (key === "class") return node.className || null;
++        return Object.prototype.hasOwnProperty.call(node.attributes, key) ? node.attributes[key] : null;
++      },
++      removeAttribute: function (name) {
++        const key = String(name).toLowerCase();
++        delete node.attributes[key];
++        if (key === "aria-current") return;
++        if (key === "hidden") node.hidden = false;
++      },
++      addEventListener: function (type, fn) {
++        (node._listeners[type] || (node._listeners[type] = [])).push(fn);
++      },
++      removeEventListener: function (type, fn) {
++        node._listeners[type] = (node._listeners[type] || []).filter(function (item) { return item !== fn; });
++      },
++      dispatchEvent: function (event) {
++        event.target = event.target || node;
++        event.currentTarget = node;
++        (node._listeners[event.type] || []).forEach(function (fn) { fn(event); });
++        return !event.defaultPrevented;
++      },
++      click: function () {
++        node.dispatchEvent({ type: "click", button: 0, preventDefault: function () { this.defaultPrevented = true; } });
++      },
++      focus: function () {},
++      blur: function () {},
++      contains: function (other) {
++        let current = other;
++        while (current) {
++          if (current === node) return true;
++          current = current.parentNode;
++        }
++        return false;
++      },
++      closest: function (selector) {
++        let current = node;
++        while (current && current.tagName) {
++          if (simpleMatch(current, selector)) return current;
++          current = current.parentNode;
++        }
++        return null;
++      },
++      querySelector: function (selector) {
++        return queryAll(node, selector)[0] || null;
++      },
++      querySelectorAll: function (selector) {
++        return queryAll(node, selector);
++      },
++      appendChild: function (child) {
++        child.parentNode = node;
++        node.childNodes.push(child);
++        return child;
++      },
++      getBoundingClientRect: function () {
++        return { top: 80, left: 0, width: 100, height: 24, bottom: 104, right: 100 };
++      },
++      scrollIntoView: function () {}
++    };
++    return node;
++  }
++
++  return createElement;
++}
++
++function createEmitter() {
++  const map = Object.create(null);
++  return {
++    addEventListener: function (type, fn) {
++      (map[type] || (map[type] = [])).push(fn);
++    },
++    removeEventListener: function (type, fn) {
++      map[type] = (map[type] || []).filter(function (item) { return item !== fn; });
++    },
++    dispatchEvent: function (event) {
++      (map[event.type] || []).forEach(function (fn) { fn(event); });
++    }
++  };
++}
++
++function jsonResponse(data) {
++  return {
++    ok: true,
++    json: async function () { return JSON.parse(JSON.stringify(data)); },
++    text: async function () { return JSON.stringify(data); }
++  };
++}
++
++function textResponse(text) {
++  return {
++    ok: true,
++    json: async function () { throw new Error("not json"); },
++    text: async function () { return text; }
++  };
++}
++
++function failResponse() {
++  return { ok: false, status: 404, json: async function () { throw new Error("missing"); }, text: async function () { return ""; } };
++}
++
++function chapterMarkdown(chapter) {
++  return [
++    "# " + chapter.title,
++    "",
++    "## 7.4 Self-Attention 是什么 ★",
++    "",
++    "GRPO-TOKEN " + chapter.id + " 用于搜索与章节渲染。",
++    ""
++  ].join("\n");
++}
++
++function createFetch(options) {
++  options = options || {};
++  let planAttempts = 0;
++  return async function fetch(url) {
++    const target = String(url);
++    if (target === "content/manifest.json") return jsonResponse({ chapters: chapters });
++    if (target === "content/tracks.json") return jsonResponse({ tracks: tracks });
++    if (target === "content/references.json") return jsonResponse({ references: references });
++    if (target === "content/learning-plan.json") {
++      planAttempts += 1;
++      if (options.planGate) await options.planGate;
++      if (typeof options.planFailUntil === "number" && planAttempts <= options.planFailUntil) return failResponse();
++      if (options.planError) return failResponse();
++      return jsonResponse(options.plan || plan);
++    }
++    if (/\.md$/.test(target)) {
++      const file = target.replace(/^content\//, "");
++      const chapter = chapters.find(function (item) { return item.file === file; });
++      if (chapter) return textResponse(chapterMarkdown(chapter));
++      return textResponse("# 参考\n\nGRPO-TOKEN 参考手册\n");
++    }
++    throw new Error("unexpected fetch " + target);
++  };
++}
++
++function mountShell(createElement, body) {
++  function add(tag, attrs) {
++    const node = createElement(tag);
++    Object.keys(attrs || {}).forEach(function (key) { node.setAttribute(key, attrs[key]); });
++    body.appendChild(node);
++    return node;
++  }
++  const skip = add("a", { "class": "skip-link", href: "#content" });
++  skip.textContent = "跳到正文";
++  const siteNav = add("nav", { "class": "site-nav" });
++  ["#/", "#/catalog"].forEach(function (href, index) {
++    const link = createElement("a");
++    link.setAttribute("href", href);
++    link.textContent = index === 0 ? "我的学习" : "全部章节";
++    siteNav.appendChild(link);
++  });
++  [
++    ["button", { id: "menuToggle" }],
++    ["aside", { id: "sidebar" }],
++    ["div", { id: "overlay" }],
++    ["nav", { id: "chapterNav" }],
++    ["aside", { id: "tocPanel" }],
++    ["nav", { id: "tocNav" }],
++    ["span", { id: "progressText" }],
++    ["div", { id: "progressFill" }],
++    ["p", { id: "storageNotice" }],
++    ["input", { id: "searchInput" }],
++    ["div", { id: "searchResults" }],
++    ["div", { id: "searchList" }],
++    ["span", { id: "searchSummary" }],
++    ["button", { id: "closeSearch" }],
++    ["button", { id: "themeToggle" }],
++    ["button", { id: "resetProgress" }],
++    ["button", { id: "backTop" }],
++    ["main", { id: "content" }]
++  ].forEach(function (item) { add(item[0], item[1]); });
++}
++
++function bootApp(options) {
++  options = options || {};
++  const byId = Object.create(null);
++  const createElement = createElementFactory(byId);
++  const html = createElement("html");
++  const body = createElement("body");
++  html.appendChild(body);
++  mountShell(createElement, body);
++  Object.keys(byId).forEach(function (id) { byId[id].ownerDocument = null; });
++
++  const location = { hash: options.hash || "#/" };
++  const storage = Object.create(null);
++  const localStorage = {
++    getItem: function (key) { return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null; },
++    setItem: function (key, value) { storage[key] = String(value); },
++    removeItem: function (key) { delete storage[key]; }
++  };
++  const windowEvents = createEmitter();
++  const documentEvents = createEmitter();
++  const document = {
++    body: body,
++    documentElement: html,
++    title: "",
++    getElementById: function (id) { return byId[id] || null; },
++    querySelector: function (selector) { return queryAll(html, selector)[0] || null; },
++    querySelectorAll: function (selector) { return queryAll(html, selector); },
++    addEventListener: documentEvents.addEventListener,
++    removeEventListener: documentEvents.removeEventListener,
++    dispatchEvent: documentEvents.dispatchEvent,
++    createElement: createElement
++  };
++  body.ownerDocument = document;
++  html.ownerDocument = document;
++  Object.keys(byId).forEach(function (id) { byId[id].ownerDocument = document; });
++
++  const ctx = {
++    window: null,
++    document: document,
++    location: location,
++    localStorage: localStorage,
++    fetch: options.fetch || createFetch(options),
++    console: console,
++    setTimeout: setTimeout,
++    clearTimeout: clearTimeout,
++    setInterval: setInterval,
++    clearInterval: clearInterval,
++    queueMicrotask: queueMicrotask,
++    Promise: Promise,
++    Object: Object,
++    Array: Array,
++    String: String,
++    Number: Number,
++    Boolean: Boolean,
++    Map: Map,
++    Set: Set,
++    JSON: JSON,
++    Error: Error,
++    TypeError: TypeError,
++    Math: Math,
++    Date: Date,
++    RegExp: RegExp,
++    URLSearchParams: URLSearchParams,
++    encodeURIComponent: encodeURIComponent,
++    decodeURIComponent: decodeURIComponent,
++    parseInt: parseInt,
++    parseFloat: parseFloat,
++    isNaN: isNaN,
++    Infinity: Infinity,
++    NaN: NaN,
++    marked: marked,
++    katex: katex,
++    matchMedia: function () {
++      return { matches: false, addListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} };
++    },
++    confirm: function () { return false; },
++    IntersectionObserver: function () {
++      this.observe = function () {};
++      this.disconnect = function () {};
++    },
++    scrollY: 0,
++    scrollTo: function () { ctx.scrollY = 0; },
++    addEventListener: windowEvents.addEventListener,
++    removeEventListener: windowEvents.removeEventListener,
++    dispatchEvent: windowEvents.dispatchEvent
++  };
++  ctx.window = ctx;
++  ctx.globalThis = ctx;
++  ctx.self = ctx;
++  ctx.Node = function () {};
++
++  [
++    "js/renderer.js",
++    "js/course.js",
++    "js/pages.js",
++    "js/progress.js",
++    "js/reader-ui.js",
++    "js/search.js",
++    "js/app.js"
++  ].forEach(function (file) {
++    vm.runInNewContext(fs.readFileSync(path.join(ROOT, file), "utf8"), ctx, { filename: file });
++  });
++
++  return {
++    document: document,
++    window: ctx,
++    location: location,
++    localStorage: localStorage,
++    content: byId.content,
++    byId: function (id) { return byId[id] || null; },
++    go: function (hash) {
++      location.hash = hash;
++      ctx.dispatchEvent({ type: "hashchange" });
++    },
++    text: function () { return (byId.content && byId.content.textContent) || ""; },
++    html: function () { return (byId.content && byId.content.innerHTML) || ""; },
++    writes: function () { return byId.content ? byId.content._writes : 0; }
++  };
++}
++
++async function settle(times) {
++  const count = times || 8;
++  for (let index = 0; index < count; index += 1) {
++    await new Promise(function (resolve) { setTimeout(resolve, 0); });
++  }
++}
++
++async function waitFor(fn, timeout) {
++  const limit = Date.now() + (timeout || 1500);
++  while (Date.now() < limit) {
++    if (fn()) return;
++    await new Promise(function (resolve) { setTimeout(resolve, 15); });
++  }
++  throw new Error("timed out waiting: " + fn.toString());
++}
++
++module.exports = {
++  bootApp,
++  createFetch,
++  settle,
++  waitFor,
++  plan,
++  chapters
++};

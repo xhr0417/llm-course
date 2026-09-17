@@ -183,8 +183,22 @@ test('learning plan current task is executable Attention and points at real head
   assert.match(numeric.text, /dropout/i);
   assert.match(numeric.text, /单头/);
   assert.match(numeric.text, /多头/);
-  assert.match(numeric.text, /容差|1e-5/);
+  assert.match(numeric.text, /atol/);
+  assert.match(numeric.text, /rtol/);
+  assert.match(numeric.text, /dtype/);
+  assert.match(numeric.text, /拆头/);
+  assert.match(numeric.text, /无因果掩码|无掩码/);
   assert.doesNotMatch(numeric.text, /softmax\(|QK/);
+  assert.doesNotMatch(numeric.text, /7\.12[\s\S]{0,40}1e-5|1e-5[\s\S]{0,40}7\.12/);
+  const handcalc = task.materials.find(item => item.section && item.section.startsWith('7.12'));
+  assert.ok(handcalc);
+  assert.match(handcalc.label, /无掩码/);
+  assert.doesNotMatch(handcalc.label, /1e-5/);
+  const checkStep = task.steps.find(item => item.title.includes('检查单头'));
+  assert.match(checkStep.body, /atol/);
+  assert.match(checkStep.body, /不是因果|不能当/);
+  const multiStep = task.steps.find(item => item.title.includes('多头'));
+  assert.match(multiStep.body, /拆头顺序|输出投影/);
   task.criteria.forEach(item => {
     assert.ok(item.id && item.text && item.label);
     if (item.conceptId) assert.ok(plan.concepts.some(concept => concept.id === item.conceptId), item.conceptId);
@@ -240,7 +254,11 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.match(home, /必要教材/);
   assert.match(home, /验收条件/);
   assert.match(home, /数值正确性/);
+  assert.match(home, /atol/);
+  assert.match(home, /rtol/);
+  assert.match(home, /无掩码/);
   assert.match(home, /#\/transformer\?section=/);
+  assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
   assert.doesNotMatch(home, /自动测试通过/);
   assert.doesNotMatch(home, /project-start/);
   assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
@@ -253,14 +271,6 @@ test('primary entry shows the Attention lab and retires homework projects from m
 });
 
 test('catalog search and chapters boot even if learning-plan.json fails', () => {
-  const app = fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8');
-  const pagesSource = fs.readFileSync(path.resolve(__dirname, '..', 'js/pages.js'), 'utf8');
-  const coreAll = app.match(/Promise\.all\(\[fetchJson\("content\/manifest\.json"\), fetchJson\("content\/tracks\.json"\), fetchJson\("content\/references\.json"\)\]\)/);
-  assert.ok(coreAll, '教材目录三件套应单独 Promise.all，不能和 learning-plan 绑死');
-  assert.match(app, /function loadLearningPlan/);
-  assert.match(app, /startRoutingAndSearch/);
-  assert.match(app, /byId\("retryPlan"\)/);
-  assert.match(pagesSource, /id="retryPlan"/);
   const pages = loadPages(null, { message: '无法加载 content/learning-plan.json' });
   const home = pages.home(null);
   assert.match(home, /没有加载到学习计划/);
@@ -271,4 +281,62 @@ test('catalog search and chapters boot even if learning-plan.json fails', () => 
   const catalog = pages.catalog();
   assert.match(catalog, /全部章节/);
   assert.ok(catalog.includes('Transformer') || catalog.includes('课程'));
+});
+
+const harness = require('./test-app-harness');
+
+test('plan request can fail then retry while catalog routing and search stay up', async () => {
+  const app = harness.bootApp({
+    fetch: harness.createFetch({ planFailUntil: 1 }),
+    hash: '#/'
+  });
+  await harness.waitFor(() => /没有加载到学习计划|重新加载当前练习/.test(app.text()));
+  assert.match(app.html(), /id="retryPlan"/);
+  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
+
+  app.go('#/catalog');
+  await harness.settle();
+  assert.match(app.text(), /全部章节/);
+  assert.match(app.text(), /Transformer/);
+
+  const input = app.byId('searchInput');
+  input.value = 'GRPO-TOKEN';
+  input.dispatchEvent({ type: 'input', preventDefault() {} });
+  await harness.waitFor(() => /找到 \d+ 条/.test(app.byId('searchSummary').textContent || ''));
+  assert.equal(app.byId('searchResults').hidden, false);
+  assert.ok(app.byId('searchList').querySelector('.search-hit'));
+
+  app.go('#/');
+  await harness.waitFor(() => app.byId('retryPlan'));
+  app.byId('retryPlan').click();
+  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
+  assert.match(app.text(), /数值正确性/);
+  assert.match(app.text(), /atol/);
+});
+
+test('late plan success or failure does not rerender an open chapter', async () => {
+  async function openChapterDuringPlan(planError) {
+    let release;
+    const planGate = new Promise(resolve => { release = resolve; });
+    const app = harness.bootApp({
+      fetch: harness.createFetch({ planGate, planError }),
+      hash: '#/'
+    });
+    await harness.waitFor(() => /正在载入当前练习/.test(app.text()));
+    app.go('#/transformer');
+    await harness.waitFor(() => /id="markRead"/.test(app.html()));
+    const html = app.html();
+    const writes = app.writes();
+    release();
+    await harness.settle(12);
+    assert.equal(app.writes(), writes, planError ? 'plan failure rerendered the chapter' : 'plan success rerendered the chapter');
+    assert.equal(app.html(), html);
+    assert.match(app.html(), /id="markRead"/);
+    app.go('#/');
+    await harness.settle(8);
+    if (planError) assert.match(app.text(), /没有加载到学习计划|重新加载当前练习/);
+    else assert.match(app.text(), /小模型学习实验室—Attention/);
+  }
+  await openChapterDuringPlan(false);
+  await openChapterDuringPlan(true);
 });
