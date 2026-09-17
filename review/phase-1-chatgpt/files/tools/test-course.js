@@ -105,6 +105,58 @@ test('progress preserves legacy completion data and keeps storage failures non-f
   assert.doesNotThrow(() => failing.toggleRead('basics'));
 });
 
+test('default create uses global localStorage without an injected storage option', () => {
+  const memory = {
+    'llm-course-progress': JSON.stringify({
+      transformer: { read: true },
+      pytorch: { read: true }
+    })
+  };
+  const globalStorage = {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null;
+    },
+    setItem(key, value) {
+      memory[key] = String(value);
+    },
+    removeItem(key) {
+      delete memory[key];
+    }
+  };
+  const previous = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage')
+    ? globalThis.localStorage
+    : undefined;
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: globalStorage
+  });
+  try {
+    const first = progressModule.create();
+    first.load();
+    assert.equal(first.storageStatus().persistent, true);
+    assert.equal(first.isRead('transformer'), true);
+    assert.equal(first.isRead('pytorch'), true);
+    first.toggleRead('rl-grpo');
+    assert.equal(first.isRead('rl-grpo'), true);
+    assert.equal(first.isRead('transformer'), true);
+    const saved = JSON.parse(memory['llm-course-progress']);
+    assert.equal(saved.transformer.read, true);
+    assert.equal(saved.pytorch.read, true);
+    assert.equal(saved['rl-grpo'].read, true);
+
+    const second = progressModule.create();
+    second.load();
+    assert.equal(second.isRead('transformer'), true);
+    assert.equal(second.isRead('pytorch'), true);
+    assert.equal(second.isRead('rl-grpo'), true);
+  } finally {
+    if (previous === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previous;
+  }
+});
+
 test('route content and reference pages have one data source', () => {
   interactiveRenderer.setCatalog({ chapters, tracks });
   const routeHtml = interactiveRenderer.renderMarkdown(':::routes compact\n:::', 'map');
@@ -183,11 +235,11 @@ test('learning plan current task is executable Attention and points at real head
   assert.match(numeric.text, /dropout/i);
   assert.match(numeric.text, /单头/);
   assert.match(numeric.text, /多头/);
-  assert.match(numeric.text, /atol/);
-  assert.match(numeric.text, /rtol/);
+  assert.match(numeric.text, /atol \+ rtol \* abs/);
   assert.match(numeric.text, /dtype/);
   assert.match(numeric.text, /拆头/);
   assert.match(numeric.text, /无因果掩码|无掩码/);
+  assert.doesNotMatch(numeric.text, /两道门/);
   assert.doesNotMatch(numeric.text, /softmax\(|QK/);
   assert.doesNotMatch(numeric.text, /7\.12[\s\S]{0,40}1e-5|1e-5[\s\S]{0,40}7\.12/);
   const handcalc = task.materials.find(item => item.section && item.section.startsWith('7.12'));
@@ -195,7 +247,8 @@ test('learning plan current task is executable Attention and points at real head
   assert.match(handcalc.label, /无掩码/);
   assert.doesNotMatch(handcalc.label, /1e-5/);
   const checkStep = task.steps.find(item => item.title.includes('检查单头'));
-  assert.match(checkStep.body, /atol/);
+  assert.match(checkStep.body, /atol \+ rtol \* abs/);
+  assert.doesNotMatch(checkStep.body, /两道门/);
   assert.match(checkStep.body, /不是因果|不能当/);
   const multiStep = task.steps.find(item => item.title.includes('多头'));
   assert.match(multiStep.body, /拆头顺序|输出投影/);
@@ -254,8 +307,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.match(home, /必要教材/);
   assert.match(home, /验收条件/);
   assert.match(home, /数值正确性/);
-  assert.match(home, /atol/);
-  assert.match(home, /rtol/);
+  assert.match(home, /atol \+ rtol \* abs/);
+  assert.doesNotMatch(home, /两道门/);
   assert.match(home, /无掩码/);
   assert.match(home, /#\/transformer\?section=/);
   assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);

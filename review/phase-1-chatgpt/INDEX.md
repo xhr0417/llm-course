@@ -15,39 +15,44 @@
 ## 怎么看
 
 1. 先读本文件「本轮改了什么」，再读 `files/docs/PERSONAL_LEARNING_OS.md`。
-2. 功能改动看 `files/js/app.js`、`files/js/pages.js`、`files/content/learning-plan.json`、`files/tools/test-course.js`、`files/tools/test-app-harness.js`。
+2. 本轮代码：`files/js/progress.js`、`files/content/learning-plan.json`、`files/tools/test-course.js`。
 3. 第一功能阶段相对改造前：`tracked-edits.diff`。
-4. 上一轮小修（计划失败可重试、中文验收、数值 1e-5 误用 7.12 的那一版）：`small-fixes.diff`。
-5. **本轮**相对上一提交的行级差异：`round-3.diff`。
-6. GitHub 上同一文件：`https://github.com/xhr0417/llm-course/blob/main/<path>`
+4. 计划失败可重试 / 中文验收：`small-fixes.diff`。
+5. 7.12 与 applyPlan：`round-3.diff`。
+6. **本轮**相对上一提交：`round-4.diff`。
+7. GitHub 上同一文件：`https://github.com/xhr0417/llm-course/blob/main/<path>`
 
 ---
 
-## 本轮改了什么（阶段 1 最后一轮修正）
+## 本轮改了什么（阶段 1 结束前的审核修复）
 
-不进入阶段 2，不扩功能。只修正数值验收表述、计划返回时的路由，以及行为测试。
+不进入阶段 2，不扩功能。
 
-### 1. 数值验收不再把 7.12 当因果 1e-5 标准
+### 1. 默认 create() 现在能用全局 localStorage
 
-7.12 是**无因果掩码**的手算，结果只保留三位小数，不能直接当因果注意力的 1e-5 对照。
+**原因是代码，不能只归因于内置浏览器。**
 
-- 教材链接改成「无掩码理解材料，不是因果数值标准」。
-- 因果数值验收：固定输入、关闭 dropout；对照必须与实现使用同一套掩码、缩放、dtype；多头还要统一拆头顺序和输出投影约定。
-- 写明 atol 看接近 0 的差、rtol 看相对误差，两道门都过才算数值一致。
-- 仍不提供核心算法答案，站点仍不运行 Python。
+`js/progress.js` 的 factory 是传给外层 IIFE 的**参数**，并不在 `root` 的词法作用域里。默认 `create()` 读 `root.localStorage` 会在严格模式下抛 `ReferenceError`，被 `catch` 吞掉后 `storage = null`。于是：
 
-### 2. applyPlan 只在首页刷新
+- 页面提示「当前浏览器无法保存进度」；
+- `llm-course-progress` 写不进去；
+- `app.js` 的 `remember()` 直接用全局 `localStorage`，所以 `llm-course-last` 仍能保存。
 
-计划数据到达或失败后，**仅当当前页是首页**才调用 `route()`。用户已在章节、参考手册或目录时，不重绘、不重置滚动和交互。之后回到首页会显示最新计划。
+上一轮审核包把刷新丢已读写成「内置浏览器限制」，**不准确**。同一套内置浏览器在修好作用域之后，标记已读再刷新仍然保留。
 
-### 3. 行为测试不再只靠源码正则
+修复：UMD 改为 `factory(root)`，默认仍 `try` 取 `root.localStorage`；取不到或读写失败时降级为内存会话，**不写空对象、不清空已有键**。
 
-`tools/test-app-harness.js` 真正启动 `js/app.js`，用可控的 `fetch`：
+回归测试：不传 `options.storage`，把可用的全局 `localStorage` 挂上，验证默认 `create()` 能读旧记录、保存已读，再 `create()` 一个新实例后恢复。已有显式注入 `storage` 的测试不能替代这条。
 
-- 计划第一次失败，目录可进，搜索「GRPO-TOKEN」有结果，点重试后首页出现 Attention。
-- 计划延迟返回期间进入章节；成功或失败都不增加章节 `innerHTML` 写入次数。回到首页才看到最新计划或错误。
+### 2. 组合容差，不是「两道门」
 
-`node --test tools/test-course.js`：16 通过。
+有限数值逐元素：
+
+`abs(实际值 - 参考值) <= atol + rtol * abs(参考值)`
+
+这是一条组合容差。计划 JSON、首页和 OS 文档已改掉「atol/rtol 两道门都通过」。不改 Attention 核心算法，不提供答案。
+
+`node --test tools/test-course.js`：17 通过。
 
 ### 本轮未做
 
@@ -59,18 +64,17 @@
 
 ### 浏览器里实际看到的
 
-本地 `http://localhost:8766/?v=phase1round3`（Cursor 内置浏览器）：
+本地 `http://localhost:8766/?v=progressfix`（同一 Cursor 内置浏览器、同一 origin）：
 
-- 首页标题仍是「小模型学习实验室—Attention」；验收含 atol/rtol、无掩码说明；没有把 7.12 和 1e-5 写在一起。
-- **375px 首页**：`scrollWidth == clientWidth`，无横向撑开；H1 完整；主按钮可点。
-- **375px 第 7 章**：仍有约 20px 横向溢出（顶栏与教材表格），不是本轮改 CSS 引入的。
-- 同会话标记已读会变成「已读完 · 点击取消」、进度 1/32。
+- 存储失败提示**不再出现**。
+- 第 7 章点「标记已读」后，`localStorage.llm-course-progress` 为 `{"transformer":{"read":true}}`，进度 1/32。
+- `location.reload()` 后按钮仍是「已读完 · 点击取消」，进度仍 1/32，侧栏 Transformer 仍为已读。文案仍写已读不是已掌握。
+- 首页数值条文含 `abs(实际值 - 参考值) <= atol + rtol * abs(参考值)`，无「两道门」；7.12 仍标无掩码理解材料。
 
-**不能声称通过：**
+**仍须分开写的：**
 
-- **刷新后仍保留已读。** 同一 origin 下点「标记已读」再 `location.reload()`，按钮回到「标记已读」，进度回到 0/32。`llm-course-last` 能写入；`llm-course-progress` 在此内置浏览器里写不进去。页面一直提示「当前浏览器无法保存进度」。未在系统 Chrome 复测。
-- 未在真机 Safari / 系统 Chrome 做计划 JSON 失败的 Network 拦截。失败与延迟不打断章节由 Node 行为测试覆盖。
-- 未声称顶栏汉堡按钮达到 44px（测得约 36px，原有尺寸）。
+- 第 7 章 375px 顶栏/表格约 20px 横向溢出，不是本轮改动。
+- 未在系统 Chrome 再测一遍；本次内置浏览器已能保存，说明前次失败有代码原因。
 
 ---
 
@@ -79,34 +83,33 @@
 | 路径 | 状态 | 作用 |
 | --- | --- | --- |
 | `AGENTS.md` | 新建 | Agent 约定 |
-| `DESIGN.md` | 修改 | 本轮：计划稍后返回时不得重绘已打开的章节/目录 |
+| `DESIGN.md` | 修改 | 计划稍后返回时不得重绘已打开的章节/目录 |
 | `README.md` | 修改 | 从 Attention 开始 |
-| `content/learning-plan.json` | 新建 | 本轮：7.12 降为无掩码理解材料；数值验收改 atol/rtol |
+| `content/learning-plan.json` | 新建 | 本轮：组合容差公式 |
 | `css/course.css` | 修改 | 当前任务面板 |
 | `index.html` | 修改 | 主导航「我的学习 / 全部章节」 |
-| `js/app.js` | 修改 | 本轮：`applyPlan` 仅首页 `route()` |
+| `js/app.js` | 修改 | 计划与目录分开加载；`applyPlan` 仅首页刷新 |
+| `js/progress.js` | 修改 | **本轮：factory 接收 root，默认 create 能持久化** |
 | `js/course.js` | 修改 | 教材小节 query |
 | `js/pages.js` | 修改 | 中文首页、失败/加载中状态 |
 | `tools/build-static.js` | 修改 | 静态目录文案 |
-| `tools/test-course.js` | 修改 | 本轮：数值条文 + 真实 fetch 行为测试 |
-| `tools/test-app-harness.js` | 新建 | 本轮：启动 app.js 的测试壳 |
-| `docs/PERSONAL_LEARNING_OS.md` | 新建 | 本轮更新第 4 / 8 节数值验收 |
-| `docs/IMPLEMENTATION_PLAN.md` | 新建 | 本轮补充计划延迟返回的验证 |
+| `tools/test-course.js` | 修改 | 本轮：默认 localStorage 回归 + 组合容差 |
+| `tools/test-app-harness.js` | 新建 | 启动 app.js 的测试壳 |
+| `docs/PERSONAL_LEARNING_OS.md` | 新建 | 本轮更新数值验收公式 |
+| `docs/IMPLEMENTATION_PLAN.md` | 新建 | 分阶段工程 |
 | `docs/LEARNING_PLAN.md` | 新建 | 一年计划归档 |
 | `docs/research/PROJECT_RESEARCH.md` | 新建 | 92 项调研 |
 
 ## 请 ChatGPT 重点核对
 
-1. 7.12 是否仍被当成因果注意力的 1e-5 数值标准（不应）。是否标明无掩码、三位小数、只作理解材料。
-2. 数值验收是否要求固定输入、关 dropout、对照与掩码/缩放/dtype 一致；多头是否要求拆头顺序和输出投影约定；atol/rtol 是否只说明用途、没有核心算法答案。
-3. 计划 JSON 在章节页返回时，是否会 `route()` 重绘章节（不应）。回首页是否能看到最新计划。
-4. 行为测试是否真的 mock fetch、点重试、检查搜索结果和章节 `innerHTML` 写入次数；是否仍只用 `js/app.js` 源码正则冒充验证（不应）。
-5. 首页是否还露出内部 id 或工程阶段口号。
-6. 是否误删 `projects/` 或开始做阶段 2。
-7. 文档是否把 GitHub Pages 自动部署和未运行 `tools/publish.sh` 混成「没有发布」。
+1. 默认 `CourseProgress.create()`（不传 `storage`）是否还能读到未定义的 `root`。应能通过 `factory(root)` 拿到全局 `localStorage`。
+2. 存储失败时是否仍降级、是否清空 `llm-course-progress` 旧数据（不应清空）。
+3. 是否有「不传 options.storage、用全局 localStorage、新实例能恢复」的回归测试；显式注入 storage 的旧测试不能顶替。
+4. 数值验收是否写成组合容差 `abs(actual - expected) <= atol + rtol * abs(expected)`，是否还留「两道门都通过」。
+5. 是否代写 Attention 核心算法，或开始做阶段 2、删除 `projects/`。
 
 ## 本包未收录（有意）
 
 - `chapters/*.html`、`sitemap.xml`、`robots.txt`、`llms.txt`：构建产物。
 - `projects/`：六个旧目录未改、未删。
-- 教材 Markdown 正文未改，只改了计划 JSON 对 7.12 的用法说明。
+- 教材 Markdown 正文未改。

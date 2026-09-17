@@ -1,0 +1,175 @@
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index 128640b..1f6942d 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -154,7 +154,7 @@
+         },
+         {
+           "title": "检查单头结果",
+-          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较：atol 看接近 0 的差，rtol 看相对误差，两道门都过才算数值一致。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
++          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较。对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
+         },
+         {
+           "title": "再读多头并扩展",
+@@ -188,7 +188,7 @@
+           "id": "numeric",
+           "label": "数值正确性",
+           "conceptId": "attention",
+-          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。比较时用 atol 看接近 0 的差，用 rtol 看相对误差；两道门都通过才算数值一致。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
++          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
+         }
+       ]
+     }
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index e6d41bc..d79932e 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -121,7 +121,7 @@
+ - **输入：** 单头为 Q/K/V，形状 `[B, T, D]`；多头再按 H 拆成 `[B, H, T, Dh]`，`Dh = D / H`；位置 t 只能看 0…t
+ - **输出：** 与 Q 同形状的上下文向量 `[B, T, D]`
+ - **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头 → 自检 → 读 7.14 扩多头 → 再自检。7.12 是无掩码手算理解材料；7.13 只在写完后对照，不要先抄完整实现
+-- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定输入分别核对单头和多头数值。对照须同掩码、缩放、dtype；多头还要同拆头顺序与输出投影。用 atol 看接近 0 的差、rtol 看相对误差。不要把 7.12 的三位小数无掩码表当成因果数值标准。本站不运行 Python，不提供核心算法答案。
++- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定输入分别核对单头和多头数值。对照须同掩码、缩放、dtype；多头还要同拆头顺序与输出投影。对有限数值逐元素满足 `abs(actual - expected) <= atol + rtol * abs(expected)`。不要把 7.12 的三位小数无掩码表当成因果数值标准。本站不运行 Python，不提供核心算法答案。
+ - **教材链接：** 必须指向第 7、11 章中实际存在的小节标题（由计划 JSON 的 `section` 字段与 Markdown `##` 对齐）
+ - 补基础：class / reshape / broadcasting 链到第 11 章对应小节
+ - SpongebobLite 仅作对照入口，标「对照用，不是本周作业仓库」
+@@ -133,7 +133,7 @@
+ | `rewrite` | `attention` | 空文件中重写核心计算（先单头后多头） |
+ | `shapes` | `tensor-shape` | 能讲清每一步 shape |
+ | `causal` | `causal-mask` | 未来不影响过去 |
+-| `numeric` | `attention` | 关闭 dropout；固定输入；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影；atol/rtol；7.12 不是因果数值标准 |
++| `numeric` | `attention` | 关闭 dropout；固定输入；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影；组合容差 `abs(actual - expected) <= atol + rtol * abs(expected)`；7.12 不是因果数值标准 |
+ 
+ 这四条是 `lab.attention.causal-mha` 的验收，不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
+ 
+@@ -187,7 +187,7 @@
+ 打开站点主入口必须同时满足：
+ 
+ 1. 能看到当前任务属于 **小模型学习实验室—Attention**。页面用自然中文列出当前目标、必要教材、实现步骤（含写在哪里、输入输出、先单头后多头）、验收条件和相关概念。教材链接指向实际存在的小节。首页不显示 taskId、criterionId、知识点英文 id，也不写工程阶段口号，不暗示本页会按验收自动切换练习。
+-2. 验收含形状、因果性，以及数值正确性（固定输入、关闭 dropout；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影约定；用 atol/rtol 判断，不把 7.12 三位小数无掩码手算当作因果数值标准）。不代写核心算法，不在网站运行 Python。
++2. 验收含形状、因果性，以及数值正确性（固定输入、关闭 dropout；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影约定；有限数值逐元素满足 abs(actual - expected) <= atol + rtol * abs(expected)，不把 7.12 三位小数无掩码手算当作因果数值标准）。不代写核心算法，不在网站运行 Python。
+ 3. 六个旧项目不出现在主导航、主线任务列表和项目完成进度里。`#/projects` 改为说明页，旧书签不产生死链。
+ 4. 目录与搜索仍可打开原理论章节；不物理删除 `projects/`。`learning-plan.json` 加载失败时，首页给出可理解错误和重试，目录、章节路由和搜索仍初始化。
+ 5. 已有「已读」记录仍在；界面不把它们显示成已掌握。
+diff --git a/js/progress.js b/js/progress.js
+index dea472c..161842e 100644
+--- a/js/progress.js
++++ b/js/progress.js
+@@ -1,7 +1,7 @@
+ (function (root, factory) {
+-  if (typeof module === "object" && module.exports) module.exports = factory();
+-  else root.CourseProgress = factory();
+-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
++  if (typeof module === "object" && module.exports) module.exports = factory(root);
++  else root.CourseProgress = factory(root);
++})(typeof globalThis !== "undefined" ? globalThis : this, function (root) {
+   "use strict";
+ 
+   var PROGRESS_KEYS = ["read", "lab", "project"];
+@@ -11,7 +11,7 @@
+     options = options || {};
+     var storage = options.storage;
+     if (storage === undefined) {
+-      try { storage = root.localStorage; } catch (error) { storage = null; }
++      try { storage = root && root.localStorage; } catch (error) { storage = null; }
+     }
+     var state = {};
+     var persistent = !!storage;
+diff --git a/tools/test-course.js b/tools/test-course.js
+index b60b4d7..dee778e 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -105,6 +105,58 @@ test('progress preserves legacy completion data and keeps storage failures non-f
+   assert.doesNotThrow(() => failing.toggleRead('basics'));
+ });
+ 
++test('default create uses global localStorage without an injected storage option', () => {
++  const memory = {
++    'llm-course-progress': JSON.stringify({
++      transformer: { read: true },
++      pytorch: { read: true }
++    })
++  };
++  const globalStorage = {
++    getItem(key) {
++      return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null;
++    },
++    setItem(key, value) {
++      memory[key] = String(value);
++    },
++    removeItem(key) {
++      delete memory[key];
++    }
++  };
++  const previous = Object.prototype.hasOwnProperty.call(globalThis, 'localStorage')
++    ? globalThis.localStorage
++    : undefined;
++  Object.defineProperty(globalThis, 'localStorage', {
++    configurable: true,
++    enumerable: true,
++    writable: true,
++    value: globalStorage
++  });
++  try {
++    const first = progressModule.create();
++    first.load();
++    assert.equal(first.storageStatus().persistent, true);
++    assert.equal(first.isRead('transformer'), true);
++    assert.equal(first.isRead('pytorch'), true);
++    first.toggleRead('rl-grpo');
++    assert.equal(first.isRead('rl-grpo'), true);
++    assert.equal(first.isRead('transformer'), true);
++    const saved = JSON.parse(memory['llm-course-progress']);
++    assert.equal(saved.transformer.read, true);
++    assert.equal(saved.pytorch.read, true);
++    assert.equal(saved['rl-grpo'].read, true);
++
++    const second = progressModule.create();
++    second.load();
++    assert.equal(second.isRead('transformer'), true);
++    assert.equal(second.isRead('pytorch'), true);
++    assert.equal(second.isRead('rl-grpo'), true);
++  } finally {
++    if (previous === undefined) delete globalThis.localStorage;
++    else globalThis.localStorage = previous;
++  }
++});
++
+ test('route content and reference pages have one data source', () => {
+   interactiveRenderer.setCatalog({ chapters, tracks });
+   const routeHtml = interactiveRenderer.renderMarkdown(':::routes compact\n:::', 'map');
+@@ -183,11 +235,11 @@ test('learning plan current task is executable Attention and points at real head
+   assert.match(numeric.text, /dropout/i);
+   assert.match(numeric.text, /单头/);
+   assert.match(numeric.text, /多头/);
+-  assert.match(numeric.text, /atol/);
+-  assert.match(numeric.text, /rtol/);
++  assert.match(numeric.text, /atol \+ rtol \* abs/);
+   assert.match(numeric.text, /dtype/);
+   assert.match(numeric.text, /拆头/);
+   assert.match(numeric.text, /无因果掩码|无掩码/);
++  assert.doesNotMatch(numeric.text, /两道门/);
+   assert.doesNotMatch(numeric.text, /softmax\(|QK/);
+   assert.doesNotMatch(numeric.text, /7\.12[\s\S]{0,40}1e-5|1e-5[\s\S]{0,40}7\.12/);
+   const handcalc = task.materials.find(item => item.section && item.section.startsWith('7.12'));
+@@ -195,7 +247,8 @@ test('learning plan current task is executable Attention and points at real head
+   assert.match(handcalc.label, /无掩码/);
+   assert.doesNotMatch(handcalc.label, /1e-5/);
+   const checkStep = task.steps.find(item => item.title.includes('检查单头'));
+-  assert.match(checkStep.body, /atol/);
++  assert.match(checkStep.body, /atol \+ rtol \* abs/);
++  assert.doesNotMatch(checkStep.body, /两道门/);
+   assert.match(checkStep.body, /不是因果|不能当/);
+   const multiStep = task.steps.find(item => item.title.includes('多头'));
+   assert.match(multiStep.body, /拆头顺序|输出投影/);
+@@ -254,8 +307,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.match(home, /必要教材/);
+   assert.match(home, /验收条件/);
+   assert.match(home, /数值正确性/);
+-  assert.match(home, /atol/);
+-  assert.match(home, /rtol/);
++  assert.match(home, /atol \+ rtol \* abs/);
++  assert.doesNotMatch(home, /两道门/);
+   assert.match(home, /无掩码/);
+   assert.match(home, /#\/transformer\?section=/);
+   assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
