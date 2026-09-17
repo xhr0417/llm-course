@@ -117,6 +117,9 @@ jobs:
       - run: node tools/build-static.js
       - run: node tools/build-dist.js
       - uses: actions/configure-pages@v5
+        with:
+          # 仓库的 Pages 尚未配置成 Actions 源时自行启用，避免依赖手工设置。
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
