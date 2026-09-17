@@ -8,6 +8,7 @@
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/map.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="../css/course.css">
 <style>
   .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
   .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -67,31 +68,9 @@ Engineering（25 Python 工程）→ Framework（26 HuggingFace）
 
 六个真实项目在 projects/ 目录：
 log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-benchmark</code></pre>
-<p>三条岗位路线（完整版见第 24 章）：</p>
-<table>
-<thead>
-<tr>
-<th>Track</th>
-<th>面向岗位</th>
-<th>主线</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Track A · AI 应用</td>
-<td>大模型应用开发 / 评测 / AI 平台</td>
-<td>Python → PyTorch → HF → Evaluation → Eval Harness → RAG → RAG Service</td>
-</tr>
-<tr>
-<td>Track B · 大模型算法</td>
-<td>大模型算法 / 机器学习算法 / 后训练</td>
-<td>Transformer → Small LLM → Data → SFT/LoRA → Evaluation → Capstone 3</td>
-</tr>
-<tr>
-<td>Track C · AI Infra</td>
-<td>AI Infra / ML Systems / 推理框架</td>
-<td>GPU → FlashAttention → Distributed → Inference → Profiling Lab</td>
-</tr>
-</tbody></table>
+<p>三条岗位路线不在本章重复维护。下面的路线卡片和第 24 章使用同一份 <code>content/tracks.json</code>；路线页与章节翻页也沿用相同顺序。</p>
+<p>路线标识：<strong>Track A · AI 应用</strong>、<strong>Track B · 模型训练与算法</strong>、<strong>Track C · AI Infra</strong>。</p>
+<section class="course-routes compact"><div class="course-routes-head"><span class="page-label">路线配置 · content/tracks.json</span><p>路线顺序由同一份配置生成；进入路线页后，下一课也沿用这份顺序。</p></div><article class="course-route"><header><span class="course-route-number">01</span><div><h3>AI 应用开发</h3><p>从 Python 工程开始，学会调用、评测模型，再搭建 RAG 服务。</p><p class="course-route-roles">岗位：大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台</p></div></header><p class="course-route-outcome"><strong>产出：</strong>做出可运行的评测工具与 RAG 服务</p><ol><li><a href="python-engineering.html"><span>01</span>Python 工程实作</a></li><li><a href="pytorch.html"><span>02</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>03</span>Transformer</a></li><li><a href="huggingface.html"><span>04</span>HuggingFace 实作</a></li><li><a href="llm-eval.html"><span>05</span>大模型评测</a></li><li><a href="capstone-eval.html"><span>06</span>模型评测工具实作</a></li><li><a href="rag-engineering.html"><span>07</span>RAG 检索基础</a></li><li><a href="capstone-rag.html"><span>08</span>RAG 服务实作</a></li></ol></article><article class="course-route"><header><span class="course-route-number">02</span><div><h3>模型训练与算法</h3><p>理解 Transformer，训练一个小模型，再完成数据、微调与评测实验。</p><p class="course-route-roles">岗位：大模型算法 / 机器学习算法 / 模型训练与后训练</p></div></header><p class="course-route-outcome"><strong>产出：</strong>训练小模型，完成一份微调实验报告</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="transformer.html"><span>02</span>Transformer</a></li><li><a href="build-llm-1.html"><span>03</span>从零构建 LLM · 组件</a></li><li><a href="build-llm-2.html"><span>04</span>从零构建 LLM · 训练</a></li><li><a href="data-pipeline.html"><span>05</span>预训练数据工程</a></li><li><a href="pretrain-sft.html"><span>06</span>预训练与 SFT</a></li><li><a href="huggingface.html"><span>07</span>HuggingFace 实作</a></li><li><a href="efficient.html"><span>08</span>显存、混合精度与 LoRA</a></li><li><a href="capstone-sft.html"><span>09</span>SFT / LoRA 实验</a></li><li><a href="rl-grpo.html"><span>10</span>PPO 与 GRPO</a></li><li><a href="llm-eval.html"><span>11</span>大模型评测</a></li></ol></article><article class="course-route"><header><span class="course-route-number">03</span><div><h3>AI Infra 与推理系统</h3><p>从 GPU 和算子理解性能，逐步掌握分布式训练、推理服务与性能分析。</p><p class="course-route-roles">岗位：AI Infra / ML Systems / 推理框架 / 性能工程</p></div></header><p class="course-route-outcome"><strong>产出：</strong>定位性能瓶颈，完成推理基准测试</p><ol><li><a href="pytorch.html"><span>01</span>PyTorch 工具箱</a></li><li><a href="gpu.html"><span>02</span>GPU 基础</a></li><li><a href="flash-attention.html"><span>03</span>FlashAttention 与 Triton</a></li><li><a href="distributed.html"><span>04</span>分布式训练</a></li><li><a href="inference.html"><span>05</span>推理系统</a></li><li><a href="capstone-infra.html"><span>06</span>推理性能分析</a></li></ol></article></section>
 <h2>0.2 课程分层：哪些必须先学，哪些可以边学边补</h2>
 <div class="box box-warning"><div class="box-title">⚠️ 重要：不要把 CS336 全部内容当成「前置」</div><div class="box-body"><p>本课程按三层组织。<strong>只有 Core Prerequisite 是真正的「开始前必备」</strong>；其余可以在学习/使用过程中逐步补齐。</p>
 </div></div>

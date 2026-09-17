@@ -21,82 +21,15 @@ Job-Ready Track 不新增理论主题（不写 MoE 大章、不写 Agent 大章�
 
 ## 24.1 目标岗位与三条路线
 
-不同岗位要的能力不同、优先级不同。先选路线，再补能力，不要平均用力。
+不同岗位要的能力不同、优先级不同。先选路线，再补能力，不要平均用力。路线顺序、章节标题和岗位描述统一来自 `content/tracks.json`，本章不再复制一份容易过期的箭头链。
 
-:::unfold Track A · AI 应用 / 大模型应用开发（实习岗最多）
-**目标岗位**：大模型应用开发实习生、AI 应用研发实习生、LLM Engineer Intern、AI 平台研发、大模型评测实习生。
+本章的三条路线是 **Track A · AI 应用**、**Track B · 模型训练与算法**、**Track C · AI Infra**。
 
-```
-Python Engineering（第 25 章）
-   ↓
-PyTorch（第 11 章）
-   ↓
-HuggingFace（第 26 章）
-   ↓
-Transformer（第 7 章）
-   ↓
-LLM Evaluation（第 23 章）
-   ↓
-Retrieval / RAG（第 28 章 ✅）
-   ↓
-SFT / LoRA（第 17 + 26 章）
-   ↓
-FastAPI / Docker（第 29 章 ✅）
-   ↓
-Capstone 1：Eval Harness ← 第 27 章 ✅
-   ↓
-Capstone 2：RAG Service  ← 第 29 章 ✅
-   ↓
-开始投递
-```
+:::routes full
 :::
 
-:::unfold Track B · 大模型算法实习
-**目标岗位**：大模型算法实习生、机器学习算法实习生、模型训练 / 后训练实习。
-
-```
-Transformer（第 7 章）
-   ↓
-Build Small LLM（第 12-13 章）
-   ↓
-Data Pipeline（第 18 章）
-   ↓
-Pretraining（第 21 章）
-   ↓
-HuggingFace（第 26 章）
-   ↓
-SFT / LoRA（第 30 章 ✅）
-   ↓
-DPO / GRPO（第 22 章）
-   ↓
-Evaluation（第 23 章 + Capstone 1）
-   ↓
-Experiment Design（Capstone 3 报告）
-```
-:::
-
-:::unfold Track C · AI Infra / ML Systems
-**目标岗位**：AI Infra 实习生、ML Systems 实习生、大模型推理框架实习生、性能工程。
-
-```
-PyTorch（第 11 章）
-   ↓
-GPU Fundamentals（第 15 章）
-   ↓
-Profiling（第 31 章 ✅）
-   ↓
-FlashAttention / Triton（第 19 章）
-   ↓
-Distributed Training（第 16 章）
-   ↓
-Inference Systems（第 20 章）
-   ↓
-vLLM / SGLang Benchmark（第 31 章，需 CUDA）
-   ↓
-C++ / CUDA（后续专题）
-```
-
-⚠️ Infra Lab（profiler、benchmark）需要 CUDA 环境。**没有 GPU 时如实写 `NOT EXECUTED ON CUDA`**——招聘方见过太多造假，如实标注反而是加分项。
+:::note 路线阅读规则
+路线卡片展示的是推荐顺序，不是强制先修关系。点击某条路线后，页面底部的「下一课」会继续沿当前路线前进；从「全部章节」进入时，才按教材顺序翻页。
 :::
 
 ## 24.2 岗位能力矩阵
@@ -122,30 +55,7 @@ C++ / CUDA（后续专题）
 
 面对 30+ 章节不知道从哪开始？如果你还没有实习经历，按这条线走：
 
-```
-Python Engineering（25）
-  Learn → Guided Lab（log-analyzer starter · 10 步）→ Checkpoint A
-   ↓
-PyTorch（11）· Transformer（07）
-   ↓
-HuggingFace（26）
-  Learn → Guided Lab（hf-mini-lab starter · 13 步）→ Checkpoint B
-   ↓
-LLM Evaluation（23）
-   ↓
-Eval Harness（27）
-  Guided Capstone（llm-eval starter · 15 步）→ Checkpoint C
-   ↓
-Retrieval / RAG（28）+ FastAPI / Docker（29）
-  Guided Capstone（starter 迁移中：先做现有 Lab + 参考实现）→ Checkpoint D
-   ↓
-开始投递
-```
-
-之后再按方向分叉：
-
-- **算法方向**：SFT / LoRA（30）→ Data Pipeline（18）→ 后训练 DPO/GRPO（22）→ 实验设计；
-- **Infra 方向**：GPU（15）→ FlashAttention（19）→ Distributed（16）→ Inference（20）→ Profiling（31）。
+第一步只需要进入上面的 **Track A · AI 应用开发**，然后沿路线页的「下一课」前进。算法与 Infra 分叉也从同一份路线配置进入，不再在正文另写一条可能过期的顺序。
 
 :::note 为什么是这个顺序
 Python 工程与 HuggingFace 是所有岗位的**公共分母**：不会其中之一，后面的 RAG / SFT / 评测项目都做不出来。而 RAG 与 FastAPI 是应用类岗位面试中出现频率最高、又最容易在两周内做出作品的方向。
@@ -174,7 +84,7 @@ Ran on CUDA  ❌ （无 GPU 环境 → NOT EXECUTED ON CUDA）
 Explained    ✅ （能在白板上推导 online softmax 修正因子）
 ```
 
-网站侧边栏的进度已升级为 **阅读 / Lab / 项目** 三个独立状态——「读完 Markdown」只点亮第一个。不要因为看完了就以为自己掌握了。
+网站默认只显示「阅读进度」和「继续上次位置」。进入 Guided Build 后，页面主进度显示「项目步骤 · 已完成 / 总步骤」；Learned / Ran / Explained 等最终验收项收在折叠的自检清单里，避免把学习者的注意力分散到多个按钮。
 
 **Guided Build 章节（25 / 26 / 27）的四级标准怎么记录**：
 
@@ -182,8 +92,8 @@ Explained    ✅ （能在白板上推导 online softmax 修正因子）
 | --- | --- | --- |
 | **Learned** | 读完章节正文 | 点亮「已读完」 |
 | **Implemented** | starter 的测试全部从红变绿 | Guided Build 进度面板自动计算（0 步 / 部分 / 全部） |
-| **Ran** | 在本地真实运行过（CLI / 实验） | 手动 self-check 按钮（网站无法验证你的本地环境） |
-| **Explained** | 不看资料回答每步复盘问题 | 手动 self-check 按钮 |
+| **Ran** | 在本地真实运行过（CLI / 实验） | 展开最终验收自检后手动确认 |
+| **Explained** | 不看资料回答每步复盘问题 | 展开最终验收自检后手动确认 |
 
 进度保存在你自己浏览器的 localStorage 里，不上传。**打开 Solution 不会自动算完成**——只有你真的在本地跑通，才有资格点「我已在本地通过」。
 
@@ -272,7 +182,7 @@ D. 等我有 GPU 再说，现在不写进简历
 | --- | --- |
 | 定位 | Knowledge Track 让你「懂」，Job-Ready Track 让你「能做」 |
 | 路线 | A 应用 / B 算法 / C Infra——先选路线，再补能力 |
-| 顺序 | 无实习经历：Python → PyTorch → Transformer → HF → 评测 → RAG → 上线 |
+| 顺序 | 无实习经历：进入 Track A，按路线页的下一课逐步前进 |
 | 标准 | Learned / Implemented / Ran / Explained，缺哪级标哪级 |
 | 纪律 | 不伪造实验数据；没跑过就写 NOT EXECUTED |
 :::

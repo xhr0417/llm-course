@@ -6,12 +6,7 @@
  * 用法（在项目根目录）：
  *   node tools/build-static.js
  *
- * 产物：
- *   chapters/<id>.html   每章一个静态页（含全部正文、KaTeX 公式、折叠答案、静态版测验）
- *   sitemap.xml          站点地图
- *   robots.txt           允许抓取 + 指向 sitemap
- *   llms.txt             面向 AI 工具的索引（标题 + 摘要 + 原始 markdown 链接）
- *   index.html           注入静态版章节目录（位于 <!-- STATIC-INDEX-START/END --> 之间）
+ * Markdown 渲染统一由 js/renderer.js 提供；本脚本只负责静态模式、页面模板和发布产物。
  */
 "use strict";
 
@@ -21,391 +16,26 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const marked = require(path.join(ROOT, "vendor", "marked.min.js"));
 const katex = require(path.join(ROOT, "vendor", "katex", "katex.js"));
-
+const rendererModule = require(path.join(ROOT, "js", "renderer.js"));
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "content", "manifest.json"), "utf8"));
+const tracksConfig = JSON.parse(fs.readFileSync(path.join(ROOT, "content", "tracks.json"), "utf8"));
+const renderer = rendererModule.create({
+  marked: marked,
+  katex: katex,
+  mode: "static",
+  catalog: { chapters: manifest.chapters, tracks: tracksConfig.tracks }
+});
+const referencesConfig = JSON.parse(fs.readFileSync(path.join(ROOT, "content", "references.json"), "utf8"));
 const SITE_NAME = manifest.title || "大模型知识体系";
 const SITE_URL = "https://llm.xhr0417.cn";
 
-/* ================= 工具 ================= */
-function escapeHtml(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
+const escapeHtml = renderer.escapeHtml;
 
-/* ================= 渲染管线（与 js/app.js 保持一致，含嵌套容器修复） ================= */
-function renderMarkdown(md, chapterId) {
-  const ctx = { containers: [], protected: [], chapterId: chapterId || null, labCounter: 0 };
-  let prepared = extractContainers(md, ctx);
-  prepared = extractProtected(prepared, ctx);
-  let html = marked.parse(prepared);
-  html = restoreProtected(html, ctx);
-  html = restoreContainers(html, ctx);
-  return html;
-}
-
-const CT_RE = /^:::([a-zA-Z-]+)(?:\s+(.*))?$/;
-function extractContainers(md, ctx) {
-  const lines = String(md).split("\n");
-  const stack = [];
-  const out = [];
-  function pushLine(line) {
-    if (stack.length) stack[stack.length - 1].lines.push(line);
-    else out.push(line);
-  }
-  function closeTop() {
-    const node = stack.pop();
-    const content = node.lines.join("\n");
-    const idx = ctx.containers.length;
-    ctx.containers.push({ kind: node.kind, title: node.title, content: content });
-    pushLine("@@CT" + idx + "@@");
-  }
-  lines.forEach(function (line) {
-    const m = CT_RE.exec(line.trim());
-    if (m) { stack.push({ kind: m[1].toLowerCase(), title: (m[2] || "").trim(), lines: [] }); return; }
-    if (line.trim() === ":::") { if (stack.length) closeTop(); else out.push(line); return; }
-    pushLine(line);
-  });
-  while (stack.length) closeTop();
-  return out.join("\n");
-}
-
-function stash(ctx, type, content) {
-  ctx.protected.push({ type: type, content: content });
-  return "@@PH" + (ctx.protected.length - 1) + "@@";
-}
-function extractProtected(md, ctx) {
-  md = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, function (m, lang, code) {
-    return stash(ctx, "CODE", '<pre><code class="lang-' + escapeHtml(lang) + '">' + escapeHtml(code.replace(/\n$/, "")) + "</code></pre>");
-  });
-  md = md.replace(/\$\$([\s\S]+?)\$\$/g, function (m, tex) { return stash(ctx, "DM", tex.trim()); });
-  md = md.replace(/\$([^$\n]+?)\$/g, function (m, tex) { return stash(ctx, "IM", tex.trim()); });
-  return md;
-}
-function renderInline(tex) {
-  try {
-    return '<span class="math-inline">' + katex.renderToString(tex, { displayMode: false, throwOnError: false }) + "</span>";
-  } catch (e) { return "<code>" + escapeHtml(tex) + "</code>"; }
-}
-function renderDisplay(tex) {
-  try {
-    return '<div class="math-display">' + katex.renderToString(tex, { displayMode: true, throwOnError: false }) + "</div>";
-  } catch (e) { return "<pre>" + escapeHtml(tex) + "</pre>"; }
-}
-function getStash(ctx, idx) {
-  const entry = ctx.protected[idx];
-  if (!entry) return "";
-  if (entry.type === "CODE") return entry.content;
-  if (entry.type === "DM") return renderDisplay(entry.content);
-  return renderInline(entry.content);
-}
-const PH_PATTERN = "@@PH(\\d+)@@";
-function restoreProtected(html, ctx) {
-  html = html.replace(new RegExp("<p>\\s*" + PH_PATTERN + "\\s*</p>", "g"), function (m, i) {
-    return getStash(ctx, parseInt(i, 10));
-  });
-  html = html.replace(new RegExp(PH_PATTERN, "g"), function (m, i) {
-    return getStash(ctx, parseInt(i, 10));
-  });
-  return html;
-}
-
-const BOX_META = {
-  intuition: { icon: "💡", title: "一句话直觉", cls: "box-intuition" },
-  math: { icon: "🧮", title: "数学", cls: "box-math" },
-  engineering: { icon: "🔧", title: "工程实践", cls: "box-engineering" },
-  warning: { icon: "⚠️", title: "容易混淆", cls: "box-warning" },
-  interview: { icon: "🎯", title: "面试常问", cls: "box-interview" },
-  example: { icon: "📌", title: "具体例子", cls: "box-example" },
-  note: { icon: "📘", title: "提示", cls: "box-note" },
-  key: { icon: "🔑", title: "本节必须记住", cls: "box-key" },
-  /* Guided Build 专用（G0） */
-  goal: { icon: "🎯", title: "本步目标", cls: "box-goal" },
-  why: { icon: "❓", title: "为什么需要它", cls: "box-why" },
-  files: { icon: "📁", title: "当前已有文件", cls: "box-files" },
-  predict: { icon: "🔮", title: "先预测，再运行", cls: "box-predict" },
-  write: { icon: "✍️", title: "现在你来做", cls: "box-write" },
-  run: { icon: "▶️", title: "运行", cls: "box-run" },
-  where: { icon: "📍", title: "执行环境与目录（先看这里）", cls: "box-where" },
-  expect: { icon: "👀", title: "预期结果", cls: "box-expect" },
-  fail: { icon: "🚨", title: "如果失败，观察这些", cls: "box-fail" },
-  inspect: { icon: "🔍", title: "定位与修复", cls: "box-fail" },
-  bug: { icon: "🐛", title: "Bug 记录", cls: "box-bug" },
-  checkpoint: { icon: "✅", title: "本步验收（self-check）", cls: "box-checkpoint" },
-  explain: { icon: "🗣️", title: "你应该能解释什么", cls: "box-explain" }
-};
-
-/* 知识关联标签 -> 静态页链接 */
-const TOPIC_LINKS = {
-  "Self-Attention": "transformer", "Q/K/V": "transformer", "Multi-Head Attention": "transformer",
-  "Causal Mask": "transformer", "LayerNorm": "transformer", "位置编码": "transformer", "FFN": "transformer",
-  "Cross-Attention": "transformer", "Teacher Forcing": "transformer",
-  "梯度下降": "basics", "反向传播": "basics", "Softmax": "basics", "交叉熵": "basics",
-  "MLP": "basics", "激活函数": "basics", "MSE": "basics", "线性回归": "basics",
-  "SGD": "optimizers", "Momentum": "optimizers", "Adam": "optimizers", "AdamW": "optimizers",
-  "混淆矩阵": "evaluation", "Precision": "evaluation", "Recall": "evaluation", "F1": "evaluation",
-  "Dropout": "evaluation", "L2 正则": "evaluation", "过拟合": "evaluation",
-  "梯度消失": "stability", "梯度爆炸": "stability", "BatchNorm": "stability", "Residual": "stability",
-  "权重初始化": "stability", "残差连接": "stability",
-  "RNN": "rnn", "LSTM": "rnn", "GRU": "rnn", "Cell State": "rnn", "门控机制": "rnn", "BPTT": "rnn",
-  "Tokenizer": "nlp", "BPE": "nlp", "BBPE": "nlp", "Embedding": "nlp", "Word2Vec": "nlp",
-  "CBOW": "nlp", "Skip-Gram": "nlp", "子词切分": "nlp",
-  "BERT": "bert", "MLM": "bert", "NSP": "bert", "[CLS]": "bert",
-  "GPT": "gpt", "自回归生成": "gpt", "Next Token Prediction": "gpt", "Temperature": "gpt",
-  "Top-K": "gpt", "Top-P": "gpt", "采样策略": "gpt",
-  "KV Cache": "modern-llm", "GQA": "modern-llm", "MQA": "modern-llm", "RoPE": "modern-llm",
-  "RMSNorm": "modern-llm", "Pre-Norm": "modern-llm", "Post-Norm": "modern-llm", "SwiGLU": "modern-llm",
-  "SiLU": "modern-llm",
-  "Pretrain": "pretrain-sft", "SFT": "pretrain-sft", "Loss Mask": "pretrain-sft",
-  "Chat Template": "pretrain-sft", "Perplexity": "pretrain-sft", "MinHash": "pretrain-sft",
-  "合成数据": "pretrain-sft", "数据配比": "pretrain-sft",
-  "PPO": "rl-grpo", "GRPO": "rl-grpo", "KL 散度": "rl-grpo", "Reward Model": "rl-grpo",
-  "Policy Ratio": "rl-grpo", "Clip": "rl-grpo", "On-policy": "rl-grpo",
-  "LoRA": "efficient", "混合精度": "efficient", "FP16": "efficient", "BF16": "efficient",
-  "量化": "efficient", "显存估算": "efficient",
-  "pytest": "python-engineering", "argparse": "python-engineering", "dataclass": "python-engineering",
-  "asyncio": "python-engineering", "logging": "python-engineering", "JSONL": "python-engineering",
-  "pathlib": "python-engineering", "CLI": "python-engineering", "类型注解": "python-engineering",
-  "AutoTokenizer": "huggingface", "HuggingFace": "huggingface", "PEFT": "huggingface",
-  "generate()": "huggingface", "left padding": "huggingface", "Chat Template 实战": "huggingface",
-  "Checkpoint": "job-ready", "实习路线": "job-ready", "能力矩阵": "job-ready",
-  "Eval Harness": "capstone-eval", "评测工程": "capstone-eval", "bad case": "capstone-eval",
-  "ModelAdapter": "capstone-eval", "并发评测": "capstone-eval",
-  "RAG": "rag-engineering", "BM25": "rag-engineering", "Chunking": "rag-engineering",
-  "Reranker": "rag-engineering", "Recall@k": "rag-engineering", "MRR": "rag-engineering",
-  "nDCG": "rag-engineering", "Hybrid Retrieval": "rag-engineering",
-  "FastAPI": "capstone-rag", "SSE": "capstone-rag", "Docker": "capstone-rag", "RAG Service": "capstone-rag",
-  "SFT 实验": "capstone-sft", "best checkpoint": "capstone-sft", "实验报告": "capstone-sft",
-  "profiler": "capstone-infra", "torch.profiler": "capstone-infra", "vLLM": "capstone-infra",
-  "torch.compile": "capstone-infra", "TTFT 压测": "capstone-infra", "serving benchmark": "capstone-infra"
-};
-
-function renderContent(content, ctx, chapterId) {
-  if (content.indexOf("@@CT") === -1) return renderMarkdown(content);
-  const parts = content.split(/(@@CT\d+@@)/);
-  let html = "";
-  parts.forEach(function (part) {
-    const m = /^@@CT(\d+)@@$/.exec(part);
-    if (m) {
-      const child = ctx.containers[parseInt(m[1], 10)];
-      if (child) html += renderContainer(child, ctx, chapterId);
-    } else if (part.trim()) {
-      html += renderMarkdown(part);
-    }
-  });
-  return html;
-}
-
-function renderLabStatic(node, ctx, chapterId) {
-  const lines = String(node.content).split("\n");
-  const meta = {};
-  const rest = [];
-  lines.forEach(function (line) {
-    const m = /^(goal|project|solution|effort|prereq|deliverable|checkpoint)\s*[:：]\s*(.+)$/.exec(line.trim());
-    if (m) meta[m[1].toLowerCase()] = m[2].trim();
-    else rest.push(line);
-  });
-  ctx.labCounter = (ctx.labCounter || 0) + 1;
-  const rows = [
-    ["目标", meta.goal], ["Starter", meta.project], ["预计", meta.effort],
-    ["前置", meta.prereq], ["交付", meta.deliverable], ["参考", meta.solution]
-  ].filter(function (r) { return r[1]; }).map(function (r) {
-    return '<div class="gl-meta-row"><span class="gl-meta-k">' + r[0] + "</span>" +
-      '<span class="gl-meta-v">' + escapeHtml(r[1]) + "</span></div>";
-  }).join("");
-  return '<section class="guided-lab" data-lab-id="lab' + ctx.labCounter + '">' +
-    '<div class="gl-head">' +
-      '<div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div>' +
-      '<div class="gl-title">' + escapeHtml(node.title || "Guided Build") + "</div>" +
-      (rows ? '<div class="gl-meta">' + rows + "</div>" : "") +
-    "</div>" +
-    '<div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在' +
-    ' <a href="../index.html#/' + escapeHtml(chapterId) + '">交互版</a> 中记录（保存在你自己的浏览器里）。' +
-    "静态阅读版只展示完整的构建路线。</div></div>" +
-    '<div class="gl-body">' + renderContent(rest.join("\n"), ctx, chapterId) + "</div>" +
-    "</section>";
-}
-
-function renderStepStatic(node, ctx, chapterId) {
-  const m = /^(\d+)[.、]?\s*(.*)$/.exec(node.title || "");
-  const num = m ? m[1] : "";
-  const title = m ? m[2] : (node.title || "Step");
-  ctx.stepCounter = (ctx.stepCounter || 0) + 1;
-  const stepId = "s" + (num || String(ctx.stepCounter));
-  return '<section class="guided-step" data-step-id="' + escapeHtml(stepId) + '" data-state="todo">' +
-    '<div class="gs-head">' +
-      '<span class="gs-num">' + escapeHtml(num || "•") + "</span>" +
-      '<h3 class="gs-title">' + escapeHtml(title) + "</h3>" +
-      '<span class="gs-chip">步骤 ' + escapeHtml(num || "") + "</span>" +
-    "</div>" +
-    '<div class="gs-body">' + renderContent(node.content, ctx, chapterId) + "</div>" +
-    "</section>";
-}
-
-function renderWhereStatic(content) {
-  const rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); }).map(function (line) {
-    const m = /^([^:：]{1,16})[:：]\s*(.+)$/.exec(line.trim());
-    const inline = function (text) {
-      return renderMarkdown(text).replace(/^<p>\s*/, "").replace(/<\/p>\s*$/, "");
-    };
-    if (!m) return '<div class="where-row"><span class="where-v where-full">' + inline(line.trim()) + "</span></div>";
-    return '<div class="where-row"><span class="where-k">' + escapeHtml(m[1].trim()) + "</span>" +
-      '<span class="where-v">' + inline(m[2].trim()) + "</span></div>";
-  }).join("");
-  return '<div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div>' +
-    '<div class="box-body"><div class="where-rows">' + rows + "</div></div></div>";
-}
-
-function renderContainer(node, ctx, chapterId) {
-  if (!node) return "";
-  const kind = node.kind, title = node.title, content = node.content;
-
-  if (kind === "lab") return renderLabStatic(node, ctx, chapterId);
-  if (kind === "step") return renderStepStatic(node, ctx, chapterId);
-  if (kind === "where") return renderWhereStatic(content);
-  if (kind === "hint") {
-    return '<details class="hint"><summary>' + escapeHtml(title || "Hint") + "</summary>" +
-      '<div class="fold-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
-  }
-  if (kind === "solution") {
-    return '<details class="solution"><summary>' + escapeHtml(title || "查看参考实现（先自己做，再对照）") + "</summary>" +
-      '<div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p>' +
-      renderContent(content, ctx, chapterId) + "</div></details>";
-  }
-
-  if (kind === "demo") {
-    const parts = title.split(/\s+/);
-    const demoName = parts[0] || "";
-    const demoTitle = parts.slice(1).join(" ") || demoName;
-    const caption = content.trim() ? renderContent(content, ctx, chapterId) : "";
-    return '<div class="demo-block">' +
-      '<div class="demo-head">🎮 ' + escapeHtml(demoTitle) + '<span class="demo-tag">交互演示 · 静态阅读版</span></div>' +
-      (caption ? '<div class="demo-caption">' + caption +
-        '<p><a class="static-link" href="../index.html#/' + escapeHtml(chapterId) + '">在交互版中打开这个演示 →</a></p>' +
-        "</div>" : '<div class="demo-caption"><p><a class="static-link" href="../index.html#/' + escapeHtml(chapterId) + '">在交互版中打开这个演示 →</a></p></div>') +
-      "</div>";
-  }
-
-  if (kind === "quiz") return renderQuizStatic(content);
-
-  if (kind === "shapeflow") return renderShapeFlowStatic(content);
-
-  if (kind === "related") return renderRelatedStatic(content);
-
-  if (kind === "fold" || kind === "unfold") {
-    const open = kind === "unfold" ? " open" : "";
-    return '<details class="fold"' + open + "><summary>" + escapeHtml(title || "展开") + "</summary>" +
-      '<div class="fold-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
-  }
-  if (kind === "answer") {
-    return '<details class="answer"><summary>' + escapeHtml(title || "查看答案") + "</summary>" +
-      '<div class="answer-body">' + renderContent(content, ctx, chapterId) + "</div></details>";
-  }
-  const meta = BOX_META[kind] || { icon: "📄", title: "说明", cls: "box-note" };
-  // run 盒子的标题用作「执行位置」标签（如：🖥 Mac / ☁ Server），保留「运行」前缀
-  const displayTitle = (kind === "run" && title) ? meta.title + " · " + title : (title || meta.title);
-  return '<div class="box ' + meta.cls + '">' +
-    '<div class="box-title">' + meta.icon + " " + escapeHtml(displayTitle) + "</div>" +
-    '<div class="box-body">' + renderContent(content, ctx, chapterId) + "</div></div>";
-}
-
-function renderQuizStatic(content) {
-  const lines = String(content).split("\n");
-  const question = [], options = [];
-  let answer = null, explain = [];
-  let mode = "q";
-  lines.forEach(function (line) {
-    const t = line.trim();
-    const opt = /^([A-H])[.、)]\s*(.+)$/.exec(t);
-    if (opt && mode !== "e") { mode = "o"; options.push({ key: opt[1], text: opt[2] }); return; }
-    const ans = /^答案[:：]\s*([A-H])/.exec(t);
-    if (ans) { answer = ans[1]; mode = "a"; return; }
-    const exp = /^解析[:：]\s*(.*)$/.exec(t);
-    if (exp) { mode = "e"; if (exp[1]) explain.push(exp[1]); return; }
-    if (mode === "q") question.push(line);
-    else if (mode === "e") explain.push(line);
-  });
-  if (!options.length || !answer) return "<div class=\"box box-warning\"><div class=\"box-body\">" + escapeHtml(content) + "</div></div>";
-  const qHtml = renderMarkdown(question.join("\n")).replace(/^<p>|<\/p>\s*$/g, "");
-  const eHtml = renderMarkdown(explain.join("\n")).replace(/^<p>|<\/p>\s*$/g, "");
-  return '<div class="quiz">' +
-    '<div class="quiz-head"><span>📝 小测验</span></div>' +
-    '<div class="quiz-question">' + qHtml + "</div>" +
-    '<div class="quiz-options">' +
-    options.map(function (o) {
-      return '<div class="quiz-option"><span class="quiz-key">' + o.key + "</span><span>" + escapeHtml(o.text) + "</span></div>";
-    }).join("") +
-    "</div>" +
-    '<details class="fold"><summary>显示答案与解析</summary><div class="fold-body">' +
-    "<p><strong>正确答案：" + escapeHtml(answer) + "</strong></p>" + eHtml +
-    "</div></details>" +
-    "</div>";
-}
-
-function renderShapeFlowStatic(content) {
-  const rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); });
-  let html = '<div class="shapeflow">';
-  rows.forEach(function (line) {
-    const segs = line.split("→");
-    html += '<div class="shape-row">';
-    segs.forEach(function (seg, si) {
-      if (si > 0) html += '<span class="shape-arrow">→</span>';
-      const parts = seg.split("×");
-      parts.forEach(function (part, pi) {
-        if (pi > 0) html += '<span class="shape-op">×</span>';
-        const m = /^\s*(.+?)\s*\[(.+?)\]\s*(.*)$/.exec(part);
-        if (m) {
-          html += '<span class="shape-part' + (si === segs.length - 1 ? " result" : "") + '">' +
-            '<span class="shape-name">' + escapeHtml(m[1]) + "</span>" +
-            '<span class="shape-dims">[' + escapeHtml(m[2]) + "]</span>" +
-            (m[3] ? '<span class="shape-note">' + escapeHtml(m[3]) + "</span>" : "") +
-            "</span>";
-        } else if (part.trim()) {
-          html += '<span class="shape-op">' + escapeHtml(part.trim()) + "</span>";
-        }
-      });
-    });
-    html += "</div>";
-  });
-  html += "</div>";
-  return html;
-}
-
-function renderRelatedStatic(content) {
-  const rows = String(content).trim().split("\n").filter(function (l) { return l.trim(); });
-  let html = '<div class="related"><div class="related-title">🔗 知识关联</div>';
-  rows.forEach(function (line) {
-    const m = /^(.+?)\s*[|｜]\s*(.+)$/.exec(line);
-    if (!m) return;
-    html += '<div class="related-row"><span class="related-label">' + escapeHtml(m[1].trim()) + "</span>";
-    m[2].split(/[,，、]/).forEach(function (tag) {
-      tag = tag.trim();
-      if (!tag) return;
-      const ch = TOPIC_LINKS[tag];
-      if (ch) html += '<a class="tag" href="' + ch + '.html">' + escapeHtml(tag) + "</a>";
-      else html += '<span class="tag">' + escapeHtml(tag) + "</span>";
-    });
-    html += "</div>";
-  });
-  html += "</div>";
-  return html;
-}
-
-function restoreContainers(html, ctx) {
-  html = html.replace(new RegExp("<p>\\s*@@CT(\\d+)@@\\s*</p>", "g"), function (m, i) {
-    return renderContainer(ctx.containers[parseInt(i, 10)], ctx, ctx.chapterId);
-  });
-  html = html.replace(/@@CT(\d+)@@/g, function (m, i) {
-    return renderContainer(ctx.containers[parseInt(i, 10)], ctx, ctx.chapterId);
-  });
-  return html;
-}
-
-/* ================= 静态页模板 ================= */
-function pageTemplate(chapter, idx, bodyHtml, toc) {
-  const prev = manifest.chapters[idx - 1];
-  const next = manifest.chapters[idx + 1];
+function pageTemplate(chapter, index, bodyHtml) {
+  const previous = manifest.chapters[index - 1];
+  const next = manifest.chapters[index + 1];
   const navTop = '<div class="static-nav">' +
-    (prev ? '<a href="' + prev.id + '.html">← ' + escapeHtml(prev.title) + "</a>" : "<span></span>") +
+    (previous ? '<a href="' + previous.id + '.html">← ' + escapeHtml(previous.title) + "</a>" : "<span></span>") +
     '<a href="../index.html" class="static-home">🏠 回到交互版首页</a>' +
     (next ? '<a href="' + next.id + '.html">' + escapeHtml(next.title) + " →</a>" : "<span></span>") +
     "</div>";
@@ -418,6 +48,7 @@ function pageTemplate(chapter, idx, bodyHtml, toc) {
     '<link rel="canonical" href="' + SITE_URL + "/chapters/" + chapter.id + '.html">\n' +
     '<link rel="stylesheet" href="../vendor/katex/katex.min.css">\n' +
     '<link rel="stylesheet" href="../css/style.css">\n' +
+    '<link rel="stylesheet" href="../css/course.css">\n' +
     "<style>\n" +
     "  .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }\n" +
     "  .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }\n" +
@@ -435,7 +66,7 @@ function pageTemplate(chapter, idx, bodyHtml, toc) {
     "</head>\n<body>\n" +
     '<header class="static-top">\n' +
     '  <span class="crumb">' + escapeHtml(SITE_NAME) + "</span>\n" +
-    '  <span style="color:var(--text-faint);font-size:13px">第 ' + escapeHtml(chapter.num || (idx + 1)) + " 章</span>\n" +
+    '  <span style="color:var(--text-faint);font-size:13px">第 ' + escapeHtml(chapter.num || (index + 1)) + " 章</span>\n" +
     '  <span class="spacer"></span>\n' +
     '  <a href="../index.html#/' + chapter.id + '">🎮 交互版（含动画演示与测验）</a>\n' +
     "</header>\n" +
@@ -444,7 +75,7 @@ function pageTemplate(chapter, idx, bodyHtml, toc) {
     '<div class="static-banner">你正在浏览<strong>静态阅读版</strong>（无 JavaScript 也可阅读，便于搜索与 AI 抓取）。' +
     '交互演示与答题功能请前往 <a href="../index.html#/' + chapter.id + '">交互版</a>。</div>\n' +
     '<div class="chapter-head">' +
-    '<div class="chapter-eyebrow">第 ' + escapeHtml(chapter.num || (idx + 1)) + " 章 · " + escapeHtml(chapter.group || "") + "</div>" +
+    '<div class="chapter-eyebrow">第 ' + escapeHtml(chapter.num || (index + 1)) + " 章 · " + escapeHtml(chapter.group || "") + "</div>" +
     '<h1 class="chapter-title">' + escapeHtml(chapter.title) + "</h1>" +
     (chapter.desc ? '<p class="chapter-desc">' + escapeHtml(chapter.desc) + "</p>" : "") +
     (chapter.source ? '<p class="chapter-source">对应课件：' + escapeHtml(chapter.source) + "</p>" : "") +
@@ -452,121 +83,141 @@ function pageTemplate(chapter, idx, bodyHtml, toc) {
     '<div class="md">\n' + bodyHtml + "</div>\n" +
     navTop +
     '<div class="static-banner">本章完。原始 Markdown：<a href="../content/' + chapter.file + '">content/' + chapter.file + "</a></div>\n" +
-    "</main>\n" +
-    "</body>\n</html>\n";
+    "</main>\n</body>\n</html>\n";
 }
 
-/* ================= 构建主流程 ================= */
+function referenceTemplate(reference, chapter, bodyHtml) {
+  return "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n" +
+    '<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+    "<title>" + escapeHtml(reference.title) + " · " + escapeHtml(SITE_NAME) + "</title>\n" +
+    '<meta name="description" content="' + escapeHtml(reference.desc) + '">\n' +
+    '<link rel="canonical" href="' + SITE_URL + "/chapters/reference-" + reference.id + '.html">\n' +
+    '<link rel="stylesheet" href="../vendor/katex/katex.min.css">\n<link rel="stylesheet" href="../css/style.css">\n' +
+    '<link rel="stylesheet" href="../css/course.css">\n' +
+    "<style>" +
+    "  .static-wrap{max-width:880px;margin:0 auto;padding:20px 20px 90px;}" +
+    "  .static-top{position:sticky;top:0;z-index:10;background:var(--bg-panel);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}" +
+    "  .static-top a{color:var(--text-soft);text-decoration:none;font-size:13.5px;}" +
+    "  .static-top a:hover{color:var(--accent-text);}" +
+    "  .static-top .spacer{margin-left:auto;}" +
+    "  .static-nav{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:26px 0;padding-top:18px;border-top:1px solid var(--border);}" +
+    "  .static-nav a{color:var(--accent-text);text-decoration:none;font-size:13.5px;}" +
+    "  .static-banner{margin:18px 0 8px;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent-text);font-size:13px;}" +
+    "</style>\n</head>\n<body>\n" +
+    '<header class="static-top"><strong>' + escapeHtml(SITE_NAME) + '</strong><span class="spacer"></span>' +
+    '<a href="' + chapter.id + '.html">← 返回第 ' + escapeHtml(chapter.num) + ' 章</a><a href="../index.html">回到交互版首页</a></header>\n' +
+    '<main class="static-wrap"><div class="static-nav"><a href="' + chapter.id + '.html">← 返回主线</a><a href="../index.html">回到交互版首页</a></div>' +
+    '<div class="static-banner">这是按需查阅的参考手册，不是主线必读内容。</div>' +
+    '<div class="chapter-head"><div class="chapter-eyebrow">参考手册 · 第 ' + escapeHtml(chapter.num) + ' 章</div>' +
+    '<h1 class="chapter-title">' + escapeHtml(reference.title) + '</h1><p class="chapter-desc">' + escapeHtml(reference.desc) +
+    '</p></div><div class="md">' + bodyHtml + '</div><div class="static-nav"><a href="' + chapter.id + '.html">← 返回主线</a><a href="../index.html">回到交互版首页</a></div></main>\n</body>\n</html>\n';
+}
+
 function main() {
-const outDir = path.join(ROOT, "chapters");
-if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  const outDir = path.join(ROOT, "chapters");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
-let built = 0, totalMath = 0;
-manifest.chapters.forEach(function (ch, idx) {
-  const md = fs.readFileSync(path.join(ROOT, "content", ch.file), "utf8");
-  const ctx = { containers: [], protected: [], chapterId: ch.id };
-  let prepared = extractContainers(md, ctx);
-  prepared = extractProtected(prepared, ctx);
-  let html = marked.parse(prepared);
-  html = restoreProtected(html, ctx);
-  html = restoreContainers(html, ctx);
-  totalMath += (html.match(/katex/g) || []).length;
-  const page = pageTemplate(ch, idx, html);
-  fs.writeFileSync(path.join(outDir, ch.id + ".html"), page);
-  built++;
-});
-
-/* index.html 注入静态目录（不含 JS 也能看到并点进各章） */
-const indexPath = path.join(ROOT, "index.html");
-let indexHtml = fs.readFileSync(indexPath, "utf8");
-const START = "<!-- STATIC-INDEX-START -->";
-const END = "<!-- STATIC-INDEX-END -->";
-const tocHtml = START + "\n" +
-  '      <div class="chapter-head">\n' +
-  '        <h1 class="chapter-title">' + escapeHtml(SITE_NAME) + " · 静态目录</h1>\n" +
-  '        <p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目完成第一段 AI 实习的作品集（projects/ 目录）。共 ' + manifest.chapters.length + ' 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
-  "      </div>\n" +
-  '      <div class="md">\n' +
-  "        <h2>章节目录</h2>\n        <ol>\n" +
-  manifest.chapters.map(function (ch) {
-    return '          <li><a href="chapters/' + ch.id + '.html">' + escapeHtml(ch.title) + "</a>" +
-      (ch.desc ? " — " + escapeHtml(ch.desc) : "") + "</li>";
-  }).join("\n") +
-  "\n        </ol>\n" +
-  "      </div>\n" +
-  "      " + END;
-if (indexHtml.indexOf(START) !== -1 && indexHtml.indexOf(END) !== -1) {
-  indexHtml = indexHtml.replace(new RegExp(START + "[\\s\\S]*?" + END), tocHtml);
-} else {
-  indexHtml = indexHtml.replace(
-    '<div class="loading">正在加载…</div>',
-    tocHtml + '\n      <div class="loading">正在加载交互版…</div>'
-  );
-}
-fs.writeFileSync(indexPath, indexHtml);
-
-/* content/projects.json —— 项目清单（首页/校验器共用，避免硬编码过期） */
-const projectsDir = path.join(ROOT, "projects");
-const projectEntries = [];
-if (fs.existsSync(projectsDir)) {
-  fs.readdirSync(projectsDir).filter(function (name) {
-    const full = path.join(projectsDir, name);
-    return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, "README.md"));
-  }).forEach(function (name) {
-    const testsDir = path.join(projectsDir, name, "tests");
-    let testFunctions = 0;
-    if (fs.existsSync(testsDir)) {
-      fs.readdirSync(testsDir).filter(function (f) { return f.endsWith(".py"); }).forEach(function (f) {
-        const src = fs.readFileSync(path.join(testsDir, f), "utf8");
-        testFunctions += (src.match(/def test_/g) || []).length;
-      });
-    }
-    projectEntries.push({ name: name, testFunctions: testFunctions });
+  let built = 0;
+  let totalMath = 0;
+  manifest.chapters.forEach(function (chapter, index) {
+    const markdown = fs.readFileSync(path.join(ROOT, "content", chapter.file), "utf8");
+    const html = renderer.renderMarkdown(markdown, chapter.id);
+    totalMath += (html.match(/katex/g) || []).length;
+    fs.writeFileSync(path.join(outDir, chapter.id + ".html"), pageTemplate(chapter, index, html));
+    built++;
   });
+  referencesConfig.references.forEach(function (reference) {
+    const chapter = manifest.chapters.find(function (item) { return item.id === reference.chapter; });
+    if (!chapter) throw new Error("参考手册未找到所属章节：" + reference.chapter);
+    const markdown = fs.readFileSync(path.join(ROOT, "content", reference.file), "utf8");
+    const html = renderer.renderMarkdown(markdown, "reference/" + reference.id);
+    fs.writeFileSync(path.join(outDir, "reference-" + reference.id + ".html"), referenceTemplate(reference, chapter, html));
+  });
+
+  /* index.html 注入静态目录（不含 JS 也能看到并点进各章） */
+  const indexPath = path.join(ROOT, "index.html");
+  let indexHtml = fs.readFileSync(indexPath, "utf8");
+  const start = "<!-- STATIC-INDEX-START -->";
+  const end = "<!-- STATIC-INDEX-END -->";
+  const tocHtml = start + "\n" +
+    '      <div class="chapter-head">\n' +
+    '        <h1 class="chapter-title">' + escapeHtml(SITE_NAME) + " · 静态目录</h1>\n" +
+    '        <p class="chapter-desc">Knowledge Track（懂）+ Job-Ready Track（能做）：从 深度学习基础 走到 GRPO / LoRA / 混合精度，再用真实项目完成第一段 AI 实习的作品集（projects/ 目录）。共 ' + manifest.chapters.length + ' 章。下方链接为静态阅读版（无需 JavaScript）；完整交互体验请直接浏览本页。</p>\n' +
+    "      </div>\n" +
+    '      <div class="md">\n' +
+    "        <h2>章节目录</h2>\n        <ol>\n" +
+    manifest.chapters.map(function (chapter) {
+      return '          <li><a href="chapters/' + chapter.id + '.html">' + escapeHtml(chapter.title) + "</a>" +
+        (chapter.desc ? " — " + escapeHtml(chapter.desc) : "") + "</li>";
+    }).join("\n") +
+    "\n        </ol>\n" +
+    "      </div>\n      " + end;
+  if (indexHtml.indexOf(start) !== -1 && indexHtml.indexOf(end) !== -1) {
+    indexHtml = indexHtml.replace(new RegExp(start + "[\\s\\S]*?" + end), tocHtml);
+  }
+  fs.writeFileSync(indexPath, indexHtml);
+
+  /* content/projects.json —— 项目清单（首页/校验器共用，避免硬编码过期） */
+  const projectsDir = path.join(ROOT, "projects");
+  const projectEntries = [];
+  if (fs.existsSync(projectsDir)) {
+    fs.readdirSync(projectsDir).filter(function (name) {
+      const full = path.join(projectsDir, name);
+      return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, "README.md"));
+    }).forEach(function (name) {
+      const testsDir = path.join(projectsDir, name, "tests");
+      let testFunctions = 0;
+      if (fs.existsSync(testsDir)) {
+        fs.readdirSync(testsDir).filter(function (file) { return file.endsWith(".py"); }).forEach(function (file) {
+          const source = fs.readFileSync(path.join(testsDir, file), "utf8");
+          testFunctions += (source.match(/def test_/g) || []).length;
+        });
+      }
+      projectEntries.push({ name: name, testFunctions: testFunctions });
+    });
+  }
+  fs.writeFileSync(path.join(ROOT, "content", "projects.json"),
+    JSON.stringify({ count: projectEntries.length, projects: projectEntries }, null, 2) + "\n");
+
+  /* sitemap.xml */
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = ['  <url><loc>' + SITE_URL + '/</loc><lastmod>' + today + "</lastmod><priority>1.0</priority></url>"]
+    .concat(manifest.chapters.map(function (chapter) {
+      return "  <url><loc>" + SITE_URL + "/chapters/" + chapter.id + ".html</loc><lastmod>" + today + "</lastmod><priority>0.8</priority></url>";
+    })).concat(referencesConfig.references.map(function (reference) {
+      return "  <url><loc>" + SITE_URL + "/chapters/reference-" + reference.id + ".html</loc><lastmod>" + today + "</lastmod><priority>0.5</priority></url>";
+    }));
+  fs.writeFileSync(path.join(ROOT, "sitemap.xml"),
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.join("\n") + "\n</urlset>\n");
+
+  fs.writeFileSync(path.join(ROOT, "robots.txt"),
+    "User-agent: *\nAllow: /\n\nSitemap: " + SITE_URL + "/sitemap.xml\n");
+
+  const llms = [SITE_NAME, "", "> " + (manifest.chapters[0].desc || "大模型知识体系交互式教程"), "",
+    "静态阅读页（HTML，可直接抓取）："].join("\n") + "\n" +
+    manifest.chapters.map(function (chapter) {
+      return "- [" + chapter.title + "](" + SITE_URL + "/chapters/" + chapter.id + ".html): " + (chapter.desc || "");
+    }).join("\n") + "\n\n参考手册：\n" + referencesConfig.references.map(function (reference) {
+      return "- [" + reference.title + "](" + SITE_URL + "/chapters/reference-" + reference.id + ".html): " + reference.desc;
+    }).join("\n") + "\n\n原始 Markdown：\n" +
+    manifest.chapters.map(function (chapter) {
+      return "- [" + chapter.file + "](" + SITE_URL + "/content/" + chapter.file + ")";
+    }).join("\n") + "\n";
+  fs.writeFileSync(path.join(ROOT, "llms.txt"), llms);
+
+  console.log("✅ 静态化完成");
+  console.log("   章节页：" + built + " 个 → chapters/*.html");
+  console.log("   KaTeX 渲染：" + totalMath + " 处");
+  console.log("   额外产物：sitemap.xml / robots.txt / llms.txt / index.html 静态目录");
 }
-fs.writeFileSync(path.join(ROOT, "content", "projects.json"),
-  JSON.stringify({ count: projectEntries.length, projects: projectEntries }, null, 2) + "\n");
-console.log("   项目清单：" + projectEntries.length + " 个 → content/projects.json");
 
-/* sitemap.xml */
-const today = new Date().toISOString().slice(0, 10);
-const urls = ['  <url><loc>' + SITE_URL + '/</loc><lastmod>' + today + "</lastmod><priority>1.0</priority></url>"]
-  .concat(manifest.chapters.map(function (ch) {
-    return "  <url><loc>" + SITE_URL + "/chapters/" + ch.id + ".html</loc><lastmod>" + today + "</lastmod><priority>0.8</priority></url>";
-  }));
-fs.writeFileSync(path.join(ROOT, "sitemap.xml"),
-  '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  urls.join("\n") + "\n</urlset>\n");
-
-/* robots.txt */
-fs.writeFileSync(path.join(ROOT, "robots.txt"),
-  "User-agent: *\nAllow: /\n\nSitemap: " + SITE_URL + "/sitemap.xml\n");
-
-/* llms.txt（面向 AI 工具的索引） */
-const llms = [SITE_NAME, "", "> " + (manifest.chapters[0].desc || "大模型知识体系交互式教程"), "",
-  "静态阅读页（HTML，可直接抓取）："].join("\n") + "\n" +
-  manifest.chapters.map(function (ch) {
-    return "- [" + ch.title + "](" + SITE_URL + "/chapters/" + ch.id + ".html): " + (ch.desc || "");
-  }).join("\n") + "\n\n原始 Markdown：\n" +
-  manifest.chapters.map(function (ch) {
-    return "- [" + ch.file + "](" + SITE_URL + "/content/" + ch.file + ")";
-  }).join("\n") + "\n";
-fs.writeFileSync(path.join(ROOT, "llms.txt"), llms);
-
-console.log("✅ 静态化完成");
-console.log("   章节页：" + built + " 个 → chapters/*.html");
-console.log("   KaTeX 渲染：" + totalMath + " 处");
-console.log("   额外产物：sitemap.xml / robots.txt / llms.txt / index.html 静态目录");
-}
-
-if (require.main === module) {
-  main();
-}
+if (require.main === module) main();
 
 module.exports = {
-  renderMarkdown: renderMarkdown,
-  renderContainer: renderContainer,
-  renderContent: renderContent,
-  extractContainers: extractContainers,
-  BOX_META: BOX_META
+  renderMarkdown: renderer.renderMarkdown,
+  renderContainer: renderer.renderContainer,
+  renderContent: renderer.renderContent,
+  extractContainers: renderer.extractContainers,
+  BOX_META: renderer.BOX_META
 };

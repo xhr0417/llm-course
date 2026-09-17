@@ -19,6 +19,7 @@ checkpoints/
 datasets/
 wandb/
 .cache/
+/dist/
 
 # ---------- 模型权重文件（repo 只放代码；
 #            确需提交小型 LoRA adapter 时用 git add -f 单独豁免） ----------

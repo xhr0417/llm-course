@@ -10,7 +10,7 @@
  *   4. demo 挂载：名字已注册（js/demos-*.js）、无重复注册、无空名字
  *   5. 章节标题编号与 manifest 的 num 一致（## 11.1 应属于第 11 章）
  *   6. related 块格式（`标签 | a, b, c`）
- *   7. build-static.js 中 TOPIC_LINKS 的链接目标必须是合法章节 id
+ *   7. 共享 renderer.js 中 TOPIC_LINKS 的链接目标必须是合法章节 id
  *
  * 用法：node tools/validate-content.js
  * 退出码：0 = 通过；1 = 有问题
@@ -27,6 +27,8 @@ function fail(msg) { console.log("❌ " + msg); errors++; }
 
 /* ---------- 读取 manifest ---------- */
 const manifest = JSON.parse(fs.readFileSync(path.join(CONTENT, "manifest.json"), "utf8"));
+const tracks = JSON.parse(fs.readFileSync(path.join(CONTENT, "tracks.json"), "utf8"));
+const references = JSON.parse(fs.readFileSync(path.join(CONTENT, "references.json"), "utf8"));
 const ids = new Set();
 const nums = new Map();
 manifest.chapters.forEach(ch => {
@@ -35,6 +37,21 @@ manifest.chapters.forEach(ch => {
   if (nums.has(ch.num)) fail(`manifest: 重复 num "${ch.num}"（${ch.title} 与 ${nums.get(ch.num)}）`);
   nums.set(ch.num, ch.title);
   if (!fs.existsSync(path.join(CONTENT, ch.file))) fail(`manifest: 缺少文件 ${ch.file}`);
+});
+
+/* ---------- manifest sidecars ---------- */
+const chapterIds = new Set(manifest.chapters.map(ch => ch.id));
+const referenceIds = new Set();
+references.references.forEach(reference => {
+  if (referenceIds.has(reference.id)) fail(`references: 重复 id "${reference.id}"`);
+  referenceIds.add(reference.id);
+  if (!chapterIds.has(reference.chapter)) fail(`references: ${reference.id} 指向不存在章节 "${reference.chapter}"`);
+  if (!fs.existsSync(path.join(CONTENT, reference.file))) fail(`references: 缺少文件 ${reference.file}`);
+});
+tracks.tracks.forEach(track => {
+  track.chapters.forEach(id => {
+    if (!chapterIds.has(id)) fail(`tracks: ${track.id} 指向不存在章节 "${id}"`);
+  });
 });
 
 /* ---------- 收集已注册 demo ---------- */
@@ -127,24 +144,42 @@ mdFiles.forEach(f => {
   }
 });
 
+/* ---------- 8b. 参考手册里的 demo 与容器同样必须合法 ---------- */
+const referenceFiles = fs.readdirSync(path.join(CONTENT, "references")).filter(f => f.endsWith(".md"));
+referenceFiles.forEach(f => {
+  const md = fs.readFileSync(path.join(CONTENT, "references", f), "utf8");
+  const opens = (md.match(/^:::[a-zA-Z-]+/gm) || []).length;
+  const closes = (md.match(/^:::\s*$/gm) || []).length;
+  if (opens !== closes) fail(`references/${f}: 容器不配平（opens=${opens} closes=${closes}）`);
+  const fences = (md.match(/^\s*```/gm) || []).length;
+  if (fences % 2 !== 0) fail(`references/${f}: 代码围栏数量为奇数（${fences}）`);
+  const demoRe = /^:::demo\s*([^\s]*)\s*(.*)$/gm;
+  let dm;
+  while ((dm = demoRe.exec(md))) {
+    const name = dm[1];
+    if (!name) fail(`references/${f}: :::demo 缺少名字`);
+    else if (!registered.has(name)) fail(`references/${f}: demo "${name}" 未在 js/demos-*.js 中注册`);
+  }
+});
+
 /* ---------- 9. index.html 必须加载全部 demos-*.js ---------- */
 const indexHtml = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 fs.readdirSync(path.join(ROOT, "js")).filter(f => /^demos-.*\.js$/.test(f)).forEach(f => {
   if (!indexHtml.includes("js/" + f)) fail(`index.html: 未加载 js/${f}（文件存在但浏览器不会执行）`);
 });
 
-/* ---------- 10. TOPIC_LINKS 目标合法性（build-static.js） ---------- */
-const bs = fs.readFileSync(path.join(ROOT, "tools", "build-static.js"), "utf8");
-const topicBlock = /const TOPIC_LINKS = \{([\s\S]*?)\};/.exec(bs);
+/* ---------- 10. TOPIC_LINKS 目标合法性（共享 renderer.js） ---------- */
+const rendererSource = fs.readFileSync(path.join(ROOT, "js", "renderer.js"), "utf8");
+const topicBlock = /(?:var|const) TOPIC_LINKS = \{([\s\S]*?)\};/.exec(rendererSource);
 if (topicBlock) {
   const linkRe = /"([^"]+)":\s*"([^"]+)"/g;
   let lm;
   while ((lm = linkRe.exec(topicBlock[1]))) {
     const target = lm[2];
-    if (!ids.has(target)) fail(`build-static.js: TOPIC_LINKS["${lm[1]}"] 指向不存在的章节 id "${target}"`);
+    if (!ids.has(target)) fail(`js/renderer.js: TOPIC_LINKS["${lm[1]}"] 指向不存在的章节 id "${target}"`);
   }
 } else {
-  fail("build-static.js: 未找到 TOPIC_LINKS");
+  fail("js/renderer.js: 未找到 TOPIC_LINKS");
 }
 
 /* ---------- 汇总 ---------- */

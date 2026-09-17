@@ -47,13 +47,12 @@ Engineering（25 Python 工程）→ Framework（26 HuggingFace）
 log-analyzer · hf-mini-lab · llm-eval · rag-service · sft-lora · inference-benchmark
 ```
 
-三条岗位路线（完整版见第 24 章）：
+三条岗位路线不在本章重复维护。下面的路线卡片和第 24 章使用同一份 `content/tracks.json`；路线页与章节翻页也沿用相同顺序。
 
-| Track | 面向岗位 | 主线 |
-| --- | --- | --- |
-| Track A · AI 应用 | 大模型应用开发 / 评测 / AI 平台 | Python → PyTorch → HF → Evaluation → Eval Harness → RAG → RAG Service |
-| Track B · 大模型算法 | 大模型算法 / 机器学习算法 / 后训练 | Transformer → Small LLM → Data → SFT/LoRA → Evaluation → Capstone 3 |
-| Track C · AI Infra | AI Infra / ML Systems / 推理框架 | GPU → FlashAttention → Distributed → Inference → Profiling Lab |
+路线标识：**Track A · AI 应用**、**Track B · 模型训练与算法**、**Track C · AI Infra**。
+
+:::routes compact
+:::
 
 ## 0.2 课程分层：哪些必须先学，哪些可以边学边补
 

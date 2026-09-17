@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>大模型知识体系 · 本地课程</title>
+  <title>开始学习 · LLM Course</title>
+  <meta name="description" content="中文交互式大模型课程。从模型原理到评测、微调和推理系统，沿学习路线完成可运行的项目。">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/course.css">
 </head>
 <body>
+  <a class="skip-link" href="#content">跳到正文</a>
   <header class="topbar">
-    <button class="icon-btn" id="menuToggle" title="目录" aria-label="目录">
+    <button class="icon-btn" id="menuToggle" aria-controls="sidebar" aria-expanded="false" title="目录" aria-label="目录">
       <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
     </button>
     <a class="brand" href="#/">
@@ -18,7 +21,7 @@
     </a>
     <div class="topbar-search">
       <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input id="searchInput" type="text" placeholder="搜索知识点…（如 GRPO、RoPE、交叉熵）" autocomplete="off">
+      <input id="searchInput" aria-label="搜索课程知识点" type="text" placeholder="搜索知识点…（如 GRPO、RoPE、交叉熵）" autocomplete="off">
       <kbd>/</kbd>
     </div>
     <button class="icon-btn" id="themeToggle" title="切换深浅色" aria-label="切换深浅色">
@@ -29,20 +32,22 @@
 
   <div class="layout">
     <aside class="sidebar" id="sidebar">
+      <nav class="site-nav" aria-label="主导航"><a href="#/">开始学习</a><a href="#/catalog">全部章节</a><a href="#/projects">实战项目</a></nav>
       <div class="progress-card">
         <div class="progress-head">
-          <span>学习进度</span>
+          <span>阅读进度</span>
           <span id="progressText">0 / 0</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       </div>
-      <nav class="chapter-nav" id="chapterNav"></nav>
+      <p id="storageNotice" class="page-note" role="status" hidden></p>
+      <nav class="chapter-nav" id="chapterNav" aria-label="章节导航"></nav>
       <div class="sidebar-foot">
         <button id="resetProgress" class="link-btn">重置学习进度</button>
       </div>
     </aside>
 
-    <main class="content" id="content">
+    <main class="content" id="content" tabindex="-1">
       <!-- STATIC-INDEX-START -->
       <div class="chapter-head">
         <h1 class="chapter-title">大模型知识体系 · 静态目录</h1>
@@ -126,6 +131,12 @@
   <script src="js/demos-inference.js"></script>
   <script src="js/demos-evaluation.js"></script>
   <script src="js/demos-jobs.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/course.js"></script>
+  <script src="js/pages.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/reader-ui.js"></script>
+  <script src="js/search.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@
 <link rel="canonical" href="https://llm.xhr0417.cn/chapters/capstone-eval.html">
 <link rel="stylesheet" href="../vendor/katex/katex.min.css">
 <link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="../css/course.css">
 <style>
   .static-wrap { max-width: 880px; margin: 0 auto; padding: 20px 20px 90px; }
   .static-top { position: sticky; top: 0; z-index: 10; background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -138,7 +139,7 @@ c3:   accuracy 55.0%（随机 25%）| parse_failure 0 | api_error 0 | 19.2s
 xcopa: accuracy 55.0%（随机 50%）| parse_failure 0 | api_error 0 | 8.2s
 qa:   EM 0% / F1 21.9%          | parse_failure 0 | api_error 0 | 4.9s
 缓存复跑：同一评测第二遍，评测阶段 32.3s → 0.0s（128 条全部命中）</code></pre>
-<section class="guided-lab" data-lab-id="lab1"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">llm-eval · Guided Build（Capstone 1）</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零构建评测 harness：parser × metrics × task × adapter × runner（缓存/并发/重试）× bad case × reports</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/llm-eval/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">4–8 小时（15 步；Step 10-11 需要理解 asyncio）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">第 23 章评测概念 + 第 25 章工程（asyncio/重试/退出码）+ 第 26 章 HF（Step 7 用）</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">79 测试全绿 + results.json/summary.md/badcases.jsonl + 一份你自己的 bad case 分析</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/capstone-eval">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div><div class="box-body"><div class="where-rows"><div class="where-row"><span class="where-k">机器</span><span class="where-v"><code>pytest</code>（15 步）与 mock CLI 🖥 Mac / ☁ Server 都可以；真实 HF 评测 ☁ Server 优先；API 评测需联网环境</span></div><div class="where-row"><span class="where-k">执行纪律</span><span class="where-v"><code>pip install</code> 和 <code>pytest</code> 必须在同一台机器上执行；Step 7 额外装 transformers/torch</span></div><div class="where-row"><span class="where-k">Repo Root</span><span class="where-v">你 clone 的 llm-course 目录（<code>pwd</code> 确认）</span></div><div class="where-row"><span class="where-k">Starter</span><span class="where-v">projects/llm-eval/starter（你写代码的地方）</span></div><div class="where-row"><span class="where-k">Reference</span><span class="where-v">projects/llm-eval（完整实现 + 真实评测记录，做完再对照）</span></div><div class="where-row"><span class="where-k">模型缓存</span><span class="where-v"><strong>不在 repo</strong>——HuggingFace 缓存（<code>echo $HF_HOME</code>）</span></div><div class="where-row"><span class="where-k">大文件</span><span class="where-v">无大文件进 repo；评测产出在 <code>outputs/run_*/</code>（已 gitignore，小型 summary 可拷进你自己的仓库）</span></div><div class="where-row"><span class="where-k">密钥</span><span class="where-v">API key 只放环境变量（<code>export OPENAI_API_KEY=...</code>），<strong>绝不提交</strong>；示例里不出现真实 key</span></div><div class="where-row"><span class="where-k">GitHub</span><span class="where-v">先 <code>git status</code>；只提交 src/ tests/ run_eval.py README 等小文件</span></div></div></div></div><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">Starter：先让 77 个测试红给你看</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>在一台明确的机器上跑通 starter（并确认当前目录正确），接受「77 failed, 2 passed」这个起点，
+<section class="guided-lab" data-lab-id="lab1" data-chapter="capstone-eval"><div class="gl-head"><div class="gl-eyebrow">GUIDED BUILD · 一步一步亲手构建</div><div class="gl-title">llm-eval · Guided Build（Capstone 1）</div><div class="gl-meta"><div class="gl-meta-row"><span class="gl-meta-k">目标</span><span class="gl-meta-v">从零构建评测 harness：parser × metrics × task × adapter × runner（缓存/并发/重试）× bad case × reports</span></div><div class="gl-meta-row"><span class="gl-meta-k">Starter</span><span class="gl-meta-v">projects/llm-eval/starter</span></div><div class="gl-meta-row"><span class="gl-meta-k">预计</span><span class="gl-meta-v">4–8 小时（15 步；Step 10-11 需要理解 asyncio）</span></div><div class="gl-meta-row"><span class="gl-meta-k">前置</span><span class="gl-meta-v">第 23 章评测概念 + 第 25 章工程（asyncio/重试/退出码）+ 第 26 章 HF（Step 7 用）</span></div><div class="gl-meta-row"><span class="gl-meta-k">交付</span><span class="gl-meta-v">79 测试全绿 + results.json/summary.md/badcases.jsonl + 一份你自己的 bad case 分析</span></div></div></div><div class="gl-progress"><div class="gl-note">Guided Build 的 step 进度与本步 self-check 在 <a href="../index.html#/capstone-eval">交互版</a> 中记录（保存在你自己的浏览器里）。静态阅读版只展示完整的构建路线。</div></div><div class="gl-body"><div class="box box-where"><div class="box-title">📍 执行环境与目录（先看这里）</div><div class="box-body"><div class="where-rows"><div class="where-row"><span class="where-k">机器</span><span class="where-v"><code>pytest</code>（15 步）与 mock CLI 🖥 Mac / ☁ Server 都可以；真实 HF 评测 ☁ Server 优先；API 评测需联网环境</span></div><div class="where-row"><span class="where-k">执行纪律</span><span class="where-v"><code>pip install</code> 和 <code>pytest</code> 必须在同一台机器上执行；Step 7 额外装 transformers/torch</span></div><div class="where-row"><span class="where-k">Repo Root</span><span class="where-v">你 clone 的 llm-course 目录（<code>pwd</code> 确认）</span></div><div class="where-row"><span class="where-k">Starter</span><span class="where-v">projects/llm-eval/starter（你写代码的地方）</span></div><div class="where-row"><span class="where-k">Reference</span><span class="where-v">projects/llm-eval（完整实现 + 真实评测记录，做完再对照）</span></div><div class="where-row"><span class="where-k">模型缓存</span><span class="where-v"><strong>不在 repo</strong>——HuggingFace 缓存（<code>echo $HF_HOME</code>）</span></div><div class="where-row"><span class="where-k">大文件</span><span class="where-v">无大文件进 repo；评测产出在 <code>outputs/run_*/</code>（已 gitignore，小型 summary 可拷进你自己的仓库）</span></div><div class="where-row"><span class="where-k">密钥</span><span class="where-v">API key 只放环境变量（<code>export OPENAI_API_KEY=...</code>），<strong>绝不提交</strong>；示例里不出现真实 key</span></div><div class="where-row"><span class="where-k">GitHub</span><span class="where-v">先 <code>git status</code>；只提交 src/ tests/ run_eval.py README 等小文件</span></div></div></div></div><section class="guided-step" data-step-id="s0" data-state="todo"><div class="gs-head"><span class="gs-num">0</span><h3 class="gs-title">Starter：先让 77 个测试红给你看</h3><span class="gs-chip">步骤 0</span></div><div class="gs-body"><div class="box box-goal"><div class="box-title">🎯 本步目标</div><div class="box-body"><p>在一台明确的机器上跑通 starter（并确认当前目录正确），接受「77 failed, 2 passed」这个起点，
 并理解为什么这个数字是设计好的。</p>
 </div></div><div class="box box-why"><div class="box-title">❓ 为什么需要它</div><div class="box-body"><p>这是整个 Track 最大的项目。一上来就 77 个红色很容易让人想放弃——
 所以先做一个心理建设：<strong>它们不是错误，是任务清单</strong>。你会按 Step 一组一组把它们变绿。</p>
@@ -214,7 +215,7 @@ pytest -q tests/test_step1b_parser_robust.py   # 鲁棒版：15 passed</code></p
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>多级模式从严格到宽松逐个尝试（先试「答案：X」，再试「X)」，最后试「单独的字母」）；
 任何一个命中就返回；全部失败返回 None。<strong>不要</strong>用「找到第一个 A-H 字母」这种贪心策略——
 它会把「As we know…」解析成 A。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">_PATTERNS = [
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">_PATTERNS = [
     r&quot;(?:正确答案|答案|正确选项|应选|选择|选)\s*(?:是|为|:|：)?\s*[（(\[]?\s*([A-H])\s*[)）\]]?&quot;,
     r&quot;(?:correct\s+answer|answer)\s*(?:is|:)?\s*[（(\[]?\s*([A-H])\b&quot;,
     r&quot;\b([A-H])\s*[)）.、]\s*&quot;,
@@ -267,7 +268,7 @@ def parse_choice(text: str, valid: str = &quot;ABCDEFGH&quot;) -&gt; str | None:
 </ul>
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>nan</code> 的写法：<code>float(&quot;nan&quot;)</code>；判断用 <code>v != v</code>（NaN 不等于自身）。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>F1 用词频匹配：先数 gold 的 token 计数，遍历 pred 时命中就减一，最后 <code>common</code> 是匹配数。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def accuracy(n_correct: int, n_total: int) -&gt; float:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">def accuracy(n_correct: int, n_total: int) -&gt; float:
     return (n_correct / n_total) if n_total else float(&quot;nan&quot;)
 
 def exact_match(prediction, golds) -&gt; float:
@@ -332,7 +333,7 @@ pytest -q tests/test_step3b_xcopa_task.py   # 4 passed</code></pre>
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>_to_items</code> 就是把每行 dict 变成 <code>EvalItem(id=str(row[&quot;id&quot;]), prompt=self.build_prompt(row), gold=..., meta={...})</code>。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>XCOPA 的 <code>question</code> 字段是 <code>cause</code> / <code>effect</code> 两个英文值，prompt 里要转成中文提问——
 映射表 <code>QUESTION_ZH</code> 已在模板代码里给出。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">class C3Task(EvalTask):
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">class C3Task(EvalTask):
     name = &quot;c3&quot;
     primary_metric = &quot;accuracy&quot;
 
@@ -385,7 +386,7 @@ Mock 让「Runner 的逻辑」独立于「模型的推理」被测试——这�
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p>MockAdapter 总共不到 5 行代码——它的价值不在实现，而在它支撑的所有测试。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>policy</code> 让每个测试定制模型行为：返回 &quot;A&quot;（全对）/ 返回乱文本（parse_failure）/
 按题号返回不同答案（部分正确）——后面 Step 6 会用到。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def generate(self, prompts: list[str]) -&gt; list[str]:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">def generate(self, prompts: list[str]) -&gt; list[str]:
     self.calls += len(prompts)
     return [self.policy(p) for p in prompts]</code></pre>
 </div></details><div class="box box-checkpoint"><div class="box-title">✅ 本步验收（self-check）</div><div class="box-body"><p>4 passed；你能解释「测试系统为什么不每次加载真实模型」。</p>
@@ -424,7 +425,7 @@ for item, raw in zip(items, raw_outputs):
     ...</code></pre></p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>为什么函数是 <code>async</code> 的？这一版是串行的——但接口先定成异步，
 Step 10 加并发时<strong>调用方一行都不用改</strong>。这就是接口设计的价值。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">async def evaluate_tasks(adapter, tasks, cfg) -&gt; RunReport:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">async def evaluate_tasks(adapter, tasks, cfg) -&gt; RunReport:
     run = RunReport(adapter=adapter.name, model=cfg.model, config=cfg.__dict__.copy())
     run.started_at = datetime.now().isoformat(timespec=&quot;seconds&quot;)
     t0 = time.time()
@@ -502,7 +503,7 @@ bad case 分类把「失败」变成「可行动项」。</p>
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>task.error_type(raw, prediction, item)</code> 的默认实现已给出：
 空输出 → empty_output；预测 None → parse_failure；否则 wrong_answer。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>badcase 的 <code>raw_output</code> 字段写原始返回（可以很长）——它就是你事后 debug parser 的证据。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">full_credit = all(v &gt;= (1.0 - 1e-12) for v in scores.values())
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">full_credit = all(v &gt;= (1.0 - 1e-12) for v in scores.values())
 if not full_credit:
     badcase = {
         &quot;task&quot;: task.name,
@@ -551,7 +552,7 @@ pytest -q tests/test_step7_hf_adapter.py</code></pre>
 </ul>
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>self.name = f&quot;hf:{model_name}&quot;</code>（有 peft 时追加后缀）——这个名字会进缓存 key 与报告。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>CPU 上 batch_size=4 比 1 快很多；但别设太大，内存吃紧。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def _generate_batch(self, prompts: list[str]) -&gt; list[str]:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">def _generate_batch(self, prompts: list[str]) -&gt; list[str]:
     chats = [
         self.tokenizer.apply_chat_template([{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: p}],
                                            tokenize=False, add_generation_prompt=True)
@@ -611,7 +612,7 @@ def make_key(model, prompt, params):
 </ul>
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>params = {&quot;max_new_tokens&quot;: cfg.max_new_tokens, &quot;temperature&quot;: cfg.temperature}</code> —— 凡会影响输出的参数都要进 key。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>命中缓存的样本不需要进 <code>missing_prompts</code>；miss 的样本才生成，生成完后按原顺序回填结果数组。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">@staticmethod
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">@staticmethod
 def make_key(model: str, prompt: str, params: dict) -&gt; str:
     payload = json.dumps({&quot;model&quot;: model, &quot;prompt&quot;: prompt, &quot;params&quot;: params},
                          ensure_ascii=False, sort_keys=True)
@@ -670,7 +671,7 @@ def get(self, key: str) -&gt; str | None:
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>resp.status_code in (429, 500, 502, 503, 504)</code> → 抛 <code>AdapterError</code>（可重试）；
 <code>400 &lt;= status &lt; 500</code> 的其他码 → 抛 <code>FatalAdapterError</code>（立即失败）。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>超时用 <code>httpx.TimeoutException</code> 捕获——它在客户端超时和连接失败时都会抛。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">async def _one(self, client, prompt: str) -&gt; str:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">async def _one(self, client, prompt: str) -&gt; str:
     try:
         resp = await client.post(self.base_url + &quot;/v1/chat/completions&quot;,
                                  json=self._payload(prompt), headers=self._headers())
@@ -724,7 +725,7 @@ async def one(prompt):
         ...
 results = await asyncio.gather(*(one(p) for p in prompts))</code></pre></p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p><code>supports_concurrency</code> 是适配器类属性：Mock/OpenAI 为 True，HF 保持 False（它有自己的 batch 逻辑）。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">async def _generate_missing(adapter, prompts, cfg):
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">async def _generate_missing(adapter, prompts, cfg):
     if not prompts:
         return []
     if getattr(adapter, &quot;supports_concurrency&quot;, False):
@@ -786,7 +787,7 @@ for attempt in range(cfg.retries + 1):
 raise last</code></pre></p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>退避用 <code>2 ** attempt</code>：1.5s → 3s → 6s。为什么是「翻倍」而不是「固定 1s」？
 （提示：重试风暴 = 所有客户端同时对服务端施加相同压力）</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">async def _async_with_retry(fn, cfg):
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">async def _async_with_retry(fn, cfg):
     last = None
     for attempt in range(cfg.retries + 1):
         try:
@@ -828,7 +829,7 @@ raise last</code></pre></p>
 汇总表一行一个任务。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>复现命令就写你实际跑的那条，例如：
 <code>python run_eval.py --adapter mock --model mock --tasks c3 --limit 12 --output outputs/run</code>。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def write_reports(run, cfg, out_dir: Path) -&gt; dict[str, Path]:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">def write_reports(run, cfg, out_dir: Path) -&gt; dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     results_path = out_dir / &quot;results.json&quot;
     results_path.write_text(json.dumps(run.to_dict(), ensure_ascii=False, indent=2), encoding=&quot;utf-8&quot;)
@@ -888,7 +889,7 @@ qa    n=8  EM 0% / F1 21.9% | 4.9s
 </div></div><details class="hint"><summary>Hint 1</summary><div class="fold-body"><p><code>build_adapter</code> 里注意把 CLI 参数（concurrency/max_new_tokens/temperature/base_url/api_key）透传给适配器构造函数。</p>
 </div></details><details class="hint"><summary>Hint 2</summary><div class="fold-body"><p>真实数据切片的分数字段：C3 的行格式 <code>{&quot;id&quot;,&quot;context&quot;,&quot;question&quot;,&quot;options&quot;,&quot;answer&quot;}</code>，
 XCOPA <code>{&quot;id&quot;,&quot;premise&quot;,&quot;question&quot;,&quot;choice1&quot;,&quot;choice2&quot;,&quot;answer&quot;}</code>——与你的 <code>_to_items</code> 对齐检查一遍。</p>
-</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><pre><code class="lang-python">def build_adapter(cfg: EvalConfig) -&gt; ModelAdapter:
+</div></details><details class="solution"><summary>查看参考实现（先自己做，再对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><pre><code class="lang-python">def build_adapter(cfg: EvalConfig) -&gt; ModelAdapter:
     if cfg.adapter == &quot;mock&quot;:
         return MockAdapter()
     if cfg.adapter == &quot;hf&quot;:
@@ -951,7 +952,7 @@ parser 为什么影响 accuracy（B）、cache key 的设计（C）、
 <li>第二次运行为什么会快？缓存命中链路上发生了什么？</li>
 </ol>
 </div></div><div class="box box-explain"><div class="box-title">🗣️ 你应该能解释什么</div><div class="box-body"><p>这 8 题就是 Checkpoint C 的口试清单。全部答上 = 你完成了一个可以写进简历的评测项目。</p>
-</div></div><details class="solution"><summary>查看参考实现（完成后对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；在交互版中打开也不会自动标记本步完成。</p><p>完整实现：<code>projects/llm-eval/</code>（21 个测试函数 / 32 个用例 + 真实 C3/XCOPA 运行记录）。
+</div></div><details class="solution"><summary>查看参考实现（完成后对照）</summary><div class="fold-body"><p class="solution-note">参考实现用于对照，不是抄写目标；打开不会自动标记本步完成。</p><p>完整实现：<code>projects/llm-eval/</code>（21 个测试函数 / 32 个用例 + 真实 C3/XCOPA 运行记录）。
 对照重点：</p>
 <ol>
 <li><code>runner.py</code> 的「查缓存 → 生成缺失 → 回填 → 判分」主循环；</li>

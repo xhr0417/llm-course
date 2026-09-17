@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Guided Build Track 门禁（G0/G1/G2/G3）：
- *   A. 渲染器一致性：app.js 与 build-static.js 都注册了全部 Guided 容器
+ *   A. 渲染器一致性：浏览器与静态构建共同使用 js/renderer.js
  *   B. 真实渲染冒烟：lab/step/hint/solution 渲染正确、无占位符残留
  *   C. 三个 Guided 章节：lab 存在、step 数量符合设计、每步有目标/你来做/运行/验收/解释
  *   D. Starter 结构：可安装 / 有 pytest.ini / 有分步测试 / README 声明初始红灯
@@ -35,7 +35,7 @@ const GUIDED_KINDS = ["lab", "step", "goal", "why", "files", "predict", "write",
   "expect", "fail", "inspect", "bug", "hint", "solution", "checkpoint", "explain"];
 
 /* ---------- A. 渲染器一致性 ---------- */
-const appSrc = read("js/app.js");
+const rendererSrc = read("js/renderer.js");
 const buildSrc = read("tools/build-static.js");
 const PARITY_MARKERS = [
   '"lab"', '"step"', '"hint"', '"solution"', '"where"',
@@ -43,9 +43,9 @@ const PARITY_MARKERS = [
   "guided-lab", "guided-step", "gl-progress", "data-lab-id", "data-step-id",
 ];
 PARITY_MARKERS.forEach((marker) => {
-  mustHave(`js/app.js 渲染器缺少 "${marker}"（与 build-static.js 不一致）`, appSrc.includes(marker));
-  mustHave(`tools/build-static.js 渲染器缺少 "${marker}"（与 app.js 不一致）`, buildSrc.includes(marker));
+  mustHave(`js/renderer.js 渲染器缺少 "${marker}"`, rendererSrc.includes(marker));
 });
+mustHave("build-static.js 未复用 js/renderer.js", buildSrc.includes('path.join(ROOT, "js", "renderer.js")'));
 
 /* ---------- B. 真实渲染冒烟 ---------- */
 const SMOKE = [

@@ -1,0 +1,31 @@
+# LLM Course design contract
+
+## 1. Identity
+Preserve the existing Chinese textbook appearance, light/dark themes and interactive demonstrations. The primary reader wants one clear next lesson; returning readers need to resume; experienced readers need a searchable reference. Reduce repeated navigation and administrative learning terminology. This is an extraction of the current system, not a visual rebrand.
+
+## 2. Color
+Use the existing paired light/dark variables in `css/style.css`: `--bg`, `--bg-panel`, `--bg-soft`, `--text`, `--text-soft`, `--text-faint`, `--border`, `--accent`, `--accent-soft`, `--accent-text`, `--green`, `--green-soft`, `--amber`, `--amber-soft`, `--red`, `--red-soft`, `--purple`, `--purple-soft`, `--code-bg`, `--shadow`. New navigation uses the accent only for links, current state and the primary action. Text conveying information uses `--text` or `--text-soft`, not the faint decorative color. Preserve semantic colors in existing teaching diagrams.
+
+## 3. Typography
+Keep the system CJK stack and monospace code stack. New UI tokens: `--text-xs:12px`, `--text-sm:14px`, `--text-base:16px`, `--text-lg:20px`, `--text-title:32px`. Body line height 1.75; titles 1.35. Use one H1 per page. Sidebar uses concise chapter labels; full descriptive titles belong to lesson headers. No new web fonts.
+
+## 4. Spacing and layout
+New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space-4:16px`, `--space-6:24px`, `--space-8:32px`, `--space-12:48px`. Keep `--radius:12px`, `--sidebar-w:288px`, `--toc-w:232px`, `--topbar-h:58px`. Document scroll owns the main reading surface; sidebar and TOC own independent scroll. Entry pages omit the empty right TOC column. Route rows stack naturally and wrap long Chinese titles. Mobile at 375px uses the existing drawer and a single column; tablet 768px and desktop 1280px must remain readable without page-level horizontal overflow.
+
+## 5. Shared components
+- Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state.
+- Route list: semantic list of three direction links, each with title, short outcome, chapter count and arrow. Shared rows on home and route detail; no duplicated long chains.
+- Lesson list: ordered steps from `content/tracks.json`; current lesson and read status are text as well as color. Footer navigation retains route context. Catalog navigation explicitly follows the full book.
+- Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+- Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+- Secondary navigation: Start / Chapters / Projects, current page marked with `aria-current`. No empty home TOC.
+
+## 6. Interaction
+Keep existing purposeful interactions and diagrams. New transitions only change opacity/transform over 150ms; no entrance animation, no decorative motion. All new controls have visible `:focus-visible`, hover and active states. Respect `prefers-reduced-motion`. Search opens collapsed references when navigating to their heading. Storage failure leaves a usable session and an honest persistence notice.
+
+## 7. Surface
+Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+
+## 8. Accessibility and verification
+Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify homepage, three routes, catalog, projects and all chapter pages at 375/768/1280, plus route-aware next/previous, reload/resume, search, progress, disclosure and theme states. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.

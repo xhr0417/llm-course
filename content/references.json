@@ -1,0 +1,18 @@
+{
+  "references": [
+    {
+      "id": "python-engineering",
+      "chapter": "python-engineering",
+      "file": "references/25-python-engineering.md",
+      "title": "Python Engineering 参考手册与复盘",
+      "desc": "项目进行时按需查阅工程结构、argparse、dataclass、I/O、logging、HTTP、asyncio 和 pytest。"
+    },
+    {
+      "id": "huggingface",
+      "chapter": "huggingface",
+      "file": "references/26-huggingface.md",
+      "title": "HuggingFace 工程参考手册与复盘",
+      "desc": "按需查阅 Tokenizer、Chat Template、logits、批量推理、数据 collator、PEFT 和实验评测。"
+    }
+  ]
+}

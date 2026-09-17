@@ -1,0 +1,36 @@
+{
+  "tracks": [
+    {
+      "id": "application",
+      "title": "AI 应用开发",
+      "description": "从 Python 工程开始，学会调用、评测模型，再搭建 RAG 服务。",
+      "outcome": "做出可运行的评测工具与 RAG 服务",
+      "roles": "大模型应用开发 / AI 应用研发 / 大模型评测 / AI 平台",
+      "chapters": ["python-engineering", "pytorch", "transformer", "huggingface", "llm-eval", "capstone-eval", "rag-engineering", "capstone-rag"]
+    },
+    {
+      "id": "algorithm",
+      "title": "模型训练与算法",
+      "description": "理解 Transformer，训练一个小模型，再完成数据、微调与评测实验。",
+      "outcome": "训练小模型，完成一份微调实验报告",
+      "roles": "大模型算法 / 机器学习算法 / 模型训练与后训练",
+      "chapters": ["pytorch", "transformer", "build-llm-1", "build-llm-2", "data-pipeline", "pretrain-sft", "huggingface", "efficient", "capstone-sft", "rl-grpo", "llm-eval"]
+    },
+    {
+      "id": "infra",
+      "title": "AI Infra 与推理系统",
+      "description": "从 GPU 和算子理解性能，逐步掌握分布式训练、推理服务与性能分析。",
+      "outcome": "定位性能瓶颈，完成推理基准测试",
+      "roles": "AI Infra / ML Systems / 推理框架 / 性能工程",
+      "chapters": ["pytorch", "gpu", "flash-attention", "distributed", "inference", "capstone-infra"]
+    }
+  ],
+  "projects": [
+    {"id":"log-analyzer", "title":"训练日志分析器", "description":"解析日志、统计指标，交付一个带测试的命令行工具。", "chapter":"python-engineering", "starter":true},
+    {"id":"hf-mini-lab", "title":"HuggingFace 模型实验", "description":"加载模型、批量生成，并完成 LoRA 实验。", "chapter":"huggingface", "starter":true},
+    {"id":"llm-eval", "title":"模型评测工具", "description":"组织任务、运行评测、分析失败案例并生成报告。", "chapter":"capstone-eval", "starter":true},
+    {"id":"rag-service", "title":"RAG 问答服务", "description":"从检索和精排到流式接口，搭建完整问答服务。", "chapter":"rag-engineering", "starter":false},
+    {"id":"sft-lora", "title":"SFT / LoRA 微调", "description":"完成数据准备、训练、保存与效果对比。", "chapter":"capstone-sft", "starter":false},
+    {"id":"inference-benchmark", "title":"推理性能分析", "description":"测量延迟与吞吐，分析算子和服务瓶颈；CUDA 实验需 GPU。", "chapter":"capstone-infra", "starter":false}
+  ]
+}

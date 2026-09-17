@@ -36,6 +36,10 @@
 - [Capstone 3 · Real SFT / LoRA Experiment](https://llm.xhr0417.cn/chapters/capstone-sft.html): 真实实验闭环：48+12 指令数据 → response-only loss → LoRA → best/final checkpoint 对比 → 同套 harness 评测 → bad case → experiment.md 自动报告。
 - [Capstone 4 · GPU / Inference Profiling Lab（AI Infra Track）](https://llm.xhr0417.cn/chapters/capstone-infra.html): profiler 算子表、CUDA Event 计时、naive vs SDPA 实测、torch.compile 反例、serving TTFT/TPOT 压测客户端 + vLLM runbook（NOT EXECUTED ON CUDA）。
 
+参考手册：
+- [Python Engineering 参考手册与复盘](https://llm.xhr0417.cn/chapters/reference-python-engineering.html): 项目进行时按需查阅工程结构、argparse、dataclass、I/O、logging、HTTP、asyncio 和 pytest。
+- [HuggingFace 工程参考手册与复盘](https://llm.xhr0417.cn/chapters/reference-huggingface.html): 按需查阅 Tokenizer、Chat Template、logits、批量推理、数据 collator、PEFT 和实验评测。
+
 原始 Markdown：
 - [00-map.md](https://llm.xhr0417.cn/content/00-map.md)
 - [01-basics.md](https://llm.xhr0417.cn/content/01-basics.md)

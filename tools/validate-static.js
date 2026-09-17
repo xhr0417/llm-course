@@ -14,6 +14,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const CHAPTERS = path.join(ROOT, "chapters");
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "content", "manifest.json"), "utf8"));
+const references = JSON.parse(fs.readFileSync(path.join(ROOT, "content", "references.json"), "utf8"));
 
 let errors = 0;
 let warnings = 0;
@@ -30,6 +31,11 @@ console.log(`检查 ${files.length} 个静态页（manifest 共 ${manifest.chapt
 // 0. 每个 manifest 章节都应有对应文件
 manifest.chapters.forEach(ch => {
   if (!fs.existsSync(path.join(CHAPTERS, ch.id + ".html"))) fail(ch.id, "缺少静态页文件");
+});
+references.references.forEach(reference => {
+  if (!fs.existsSync(path.join(CHAPTERS, "reference-" + reference.id + ".html"))) {
+    fail(reference.id, "缺少参考手册静态页文件");
+  }
 });
 
 files.forEach(f => {
@@ -70,9 +76,22 @@ files.forEach(f => {
   // 7. 结构完整性
   if (!html.includes('class="chapter-title"')) fail(f, "缺少章节标题结构");
   if (!html.includes('class="static-nav"')) warn(f, "缺少章节间导航");
+
+  // 8. 站内相对链接必须真实存在（参考手册死链在上一轮真实发生过）
+  [...html.matchAll(/href="([^"]+)"/g)].forEach(([, href]) => {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(href)) return;
+    const target = href.split("#")[0].split("?")[0];
+    if (!target) return;
+    if (!fs.existsSync(path.resolve(CHAPTERS, target))) fail(f, `站内链接指向不存在的文件：${href}`);
+  });
+
+  // 9. 样式表：路线卡片、参考手册入口等新组件的样式在 course.css
+  ["../css/style.css", "../css/course.css"].forEach(sheet => {
+    if (!html.includes(`href="${sheet}"`)) fail(f, `缺少样式表引用 ${sheet}`);
+  });
 });
 
-// 8. index.html 的静态目录
+// 10. index.html 的静态目录
 const indexHtml = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const tocLinks = (indexHtml.match(/chapters\/[a-z0-9-]+\.html/g) || []).length;
 if (tocLinks < manifest.chapters.length) fail("index.html", `静态目录链接不足（${tocLinks}/${manifest.chapters.length}）`);
