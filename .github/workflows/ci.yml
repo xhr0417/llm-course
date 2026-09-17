@@ -116,10 +116,8 @@ jobs:
           node-version: 20
       - run: node tools/build-static.js
       - run: node tools/build-dist.js
+      # Pages 必须先由 tools/deploy-github.sh 启用成 Actions 源：GITHUB_TOKEN 无权创建站点。
       - uses: actions/configure-pages@v5
-        with:
-          # 仓库的 Pages 尚未配置成 Actions 源时自行启用，避免依赖手工设置。
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
