@@ -1,0 +1,366 @@
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index 4deb843..db93d46 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -266,8 +266,8 @@
+       "weekBudget": 2,
+       "shortTitle": "最小语言模型",
+       "title": "拼最小 decoder，跑通 [B, T, V] 前向",
+-      "goal": "用简单固定结构写出最小 decoder-only 前向：embedding、一层残差块、FFN、输出头。输入 token 得到 logits [B, T, V]。本周不把 RMSNorm / RoPE 当硬门槛。",
+-      "conceptIds": ["lm-forward", "residual-ffn", "tensor-shape", "attention"],
++      "goal": "用简单固定结构写出最小 decoder-only 前向：embedding、一层残差块、FFN、输出头。输入 token 得到 logits [B, T, V]。接线完成后检查整模型因果性。本周不把 RMSNorm / RoPE 当硬门槛，也不必重写上周已通过的 Attention。",
++      "conceptIds": ["lm-forward", "residual-ffn", "tensor-shape", "attention", "causal-mask"],
+       "workspace": {
+         "where": "在本机新建空文件，例如 ~/llm-lab/min_lm.py。不要写进本站 projects/ 下的六个旧作业目录。可以调用上周自己写的注意力，但本周要自己接线。",
+         "inputs": "整数 token 序列，形状 [B, T]；词表大小 V；模型宽度 D。先用固定的 nn.Embedding、一层 Pre-LN 或甚至先不用 Norm 的残差块、GELU/ReLU FFN、线性输出头。位置可以用学到的 position embedding，也可以先不加。",
+@@ -355,8 +355,12 @@
+           "body": "用 nn.Embedding 和线性层得到 logits。随机初始化即可。前向传入一小批整数 token，打印每一步 shape，确认最后是 [B, T, V]。"
+         },
+         {
+-          "title": "检查结果",
+-          "body": "用固定 B=2、T=4、V 和 D 能整除的小数字跑一次。确认无 NaN/Inf；改最后一个 token 不要求本周再验因果（因果已在上周验），但残差前后 shape 必须一致。能说明残差加的是什么、输出头为什么是 V 维。本站不运行 Python。"
++          "title": "检查形状和残差",
++          "body": "用固定 B=2、T=4、V 和 D 能整除的小数字跑一次。确认无 NaN/Inf，残差前后 shape 必须一致。能说明残差加的是什么、输出头为什么是 V 维。本站不运行 Python。"
++        },
++        {
++          "title": "检查组装后的整模型因果性",
++          "body": "关闭 dropout。固定模型参数和同一前缀，只改最后一个 token。比较的是完整模型输出的 logits [B, T, V]，不是只复跑 Attention 模块。更早位置的 logits 应在你写下的组合容差内不变：abs(改前 - 改后) <= atol + rtol * abs(改前)。上周 Attention 通过不能代替这次接线检查；本周不必重写 Attention。"
+         },
+         {
+           "title": "卡住时可以分层求助",
+@@ -382,6 +386,13 @@
+           "conceptId": "residual-ffn",
+           "text": "能说明残差加的是哪一路、输出头为什么映射到词表。与一份简单参考对照过 shape，不是只抄完整现代骨架。"
+         },
++        {
++          "id": "assembled-causal",
++          "label": "组装后因果性",
++          "required": true,
++          "conceptId": "causal-mask",
++          "text": "关闭 dropout，固定参数与前缀，只改末尾 token。完整模型更早位置的 logits 在声明的组合容差 atol + rtol * abs 内不变。这是接线后的集成检查，不是把上周 Attention 单测再跑一遍，也不要求重写 Attention。"
++        },
+         {
+           "id": "norm-rope-read",
+           "label": "归一化与位置",
+@@ -397,12 +408,12 @@
+       "weekBudget": 3,
+       "shortTitle": "一次参数更新",
+       "title": "先打通 loss 和参数更新，再逐个换现代组件",
+-      "goal": "在最小模型上算出交叉熵、backward、optimizer.step，确认参数真的变了。然后再逐个替换 RMSNorm / RoPE / SwiGLU。GQA 是拓展，不挡完成。",
+-      "conceptIds": ["autograd-step", "modern-block", "gqa", "tensor-shape"],
++      "goal": "在最小模型上用正确的 next-token 对齐算出交叉熵，再 backward、optimizer.step，确认参数真的变了。不能用「参数在更新」代替目标正确。然后再逐个替换 RMSNorm / RoPE / SwiGLU。GQA 是拓展，不挡完成。",
++      "conceptIds": ["autograd-step", "label-shift", "modern-block", "gqa", "tensor-shape"],
+       "workspace": {
+         "where": "例如 ~/llm-lab/train_step.py，接上周的最小 LM。不要写进六个旧作业目录。",
+-        "inputs": "随机小 batch：input_ids [B, T]，labels 先用同一序列做 next-token（本周重点是更新是否发生，label shift 的细节放到下周写清）。学习率用很小的常数。",
+-        "outputs": "标量 loss；step 前后同一参数张量的数值有可见差异；无 NaN/Inf。"
++        "inputs": "随机小 batch，例如 token [7, 4, 9]。位置 0 的 logits 预测 4，位置 1 预测 9；不要用位置 0 去预测 7。labels 可预先错位（logits[:, :-1] 对 labels[:, 1:]），或只在 loss 里做一次等价错位。两种选一种，shift 只做一次。不要假定自写模型会像某些封装接口那样自动 shift。学习率用很小的常数。本练习不启用梯度累积。",
++        "outputs": "标量 loss（对下一 token，不是对当前 token）；step 前后同一参数张量的数值有可见差异；无 NaN/Inf；注释里留下那条短序列的对齐说明。"
+       },
+       "materials": [
+         {
+@@ -429,6 +440,12 @@
+           "section": "1.6 前向传播与反向传播 ★",
+           "label": "1.6 反向传播"
+         },
++        {
++          "role": "required",
++          "chapterId": "gpt",
++          "section": "9.2 Next Token Prediction ★",
++          "label": "9.2 Next Token Prediction（本周就要对齐，不等到完整训练循环）"
++        },
+         {
+           "role": "check-after",
+           "chapterId": "modern-llm",
+@@ -462,8 +479,12 @@
+       ],
+       "steps": [
+         {
+-          "title": "先做一次完整更新",
+-          "body": "用上周最小模型。写 loss = cross_entropy(...)，loss.backward()，optimizer.step()。打印 step 前后某一层 weight 的均值或一个元素。确认 requires_grad 的参数参与了更新。先不要改结构。"
++          "title": "先写清下一 token 怎么对齐",
++          "body": "用上面那条短序列在注释里写出：哪个位置的 logits 预测哪个 token。选定一种做法：预先错位，或只在 loss 里错位。不要写 labels = input_ids 再用当前位置预测当前 token。自写模型不会自动 shift。"
++        },
++        {
++          "title": "按一步训练做更新",
++          "body": "反复执行时固定为：zero_grad → forward → loss → backward → step。打印 step 前后某一层 weight 的均值或一个元素。确认 requires_grad 的参数参与了更新。本练习不启用梯度累积。先不要改结构。"
+         },
+         {
+           "title": "检查梯度不是摆设",
+@@ -471,11 +492,11 @@
+         },
+         {
+           "title": "再逐个替换现代组件",
+-          "body": "每次只换一件：先 RMSNorm，跑通更新；再 RoPE；再 SwiGLU。每换一次都重复「loss 下降或至少参数在动」。不要一次改完再调试。"
++          "body": "每次只换一件：先 RMSNorm，跑通更新；再 RoPE；再 SwiGLU。每换一次都重复「有限 loss、参数在动」。对齐方式不要改掉。不要一次改完再调试。"
+         },
+         {
+           "title": "卡住时可以分层求助",
+-          "body": "先留下一次 backward 尝试。优先问：哪一个张量没有 grad、loss 为什么不接计算图。仍卡住再看 11.9 骨架或 Lab 里对应模块。合上后重写 step 函数，换一组随机输入再跑。"
++          "body": "先留下一次 backward 尝试。优先问：loss 是否在预测下一 token、哪一个张量没有 grad。仍卡住再看 11.9 骨架或 9.2。合上后重写 step 函数，换一组随机输入再跑。"
+         },
+         {
+           "title": "用一个小变式检查能否迁移",
+@@ -483,19 +504,26 @@
+         }
+       ],
+       "criteria": [
++        {
++          "id": "next-token-align",
++          "label": "next-token 对齐",
++          "required": true,
++          "conceptId": "label-shift",
++          "text": "能用一个短序列说明输入、预测位置和下一 token 标签的对应关系。实现里只 shift 一次（预先错位或在 loss 中错位，选一种）。第一次更新就要这样对齐，不能先训练同位置 token 再下周纠正。"
++        },
+         {
+           "id": "loss-backward",
+           "label": "loss 与 backward",
+           "required": true,
+           "conceptId": "autograd-step",
+-          "text": "小输入上能算出有限 loss，backward 后参数有梯度。"
++          "text": "在正确对齐的小输入上能算出有限 loss，backward 后参数有梯度。"
+         },
+         {
+           "id": "params-move",
+           "label": "参数确实更新",
+           "required": true,
+           "conceptId": "autograd-step",
+-          "text": "optimizer.step 之后至少一层权重与 step 前不同。学习率为 0 时不再发生同样变化。"
++          "text": "每一步都经过 zero_grad。optimizer.step 之后至少一层权重与 step 前不同。学习率为 0 时不再发生同样变化。本练习不启用梯度累积。"
+         },
+         {
+           "id": "gqa-heads",
+@@ -512,7 +540,7 @@
+       "weekBudget": 4,
+       "shortTitle": "过拟合小样本",
+       "title": "写出训练/验证循环，过拟合很小的数据",
+-      "goal": "做出最小 next-token 训练循环：训练集 loss 能降到很小，并留一份不参与训练的验证样本。写清 label shift 只做一次。",
++      "goal": "做出最小 next-token 训练循环：训练集 loss 能降到很小，并留一份不参与训练的验证样本。第 3 周已经核对过的对齐在循环里保持只 shift 一次。",
+       "conceptIds": ["overfit-loop", "label-shift", "lm-forward"],
+       "workspace": {
+         "where": "例如 ~/llm-lab/overfit.py。数据用自己写的几条短文本或整数序列，不要依赖六个旧作业的数据目录。",
+@@ -572,7 +600,7 @@
+       "steps": [
+         {
+           "title": "先写清 label 怎么对齐",
+-          "body": "输入 x[:, :-1] 预测 y[:, 1:]，或等价地只 shift 一次。在注释里写明不要 shift 两次。用 3 个 token 的手写例子核对。"
++          "body": "沿用第 3 周已核对的对齐：输入 x[:, :-1] 预测 y[:, 1:]，或等价地只 shift 一次。在注释里写明不要 shift 两次。用 3 个 token 的手写例子核对后，再把它放进完整循环。不要把首次正确对齐推迟到本周才做。"
+         },
+         {
+           "title": "接上循环和验证样本",
+@@ -597,7 +625,7 @@
+           "label": "label shift 一次",
+           "required": true,
+           "conceptId": "label-shift",
+-          "text": "能用一个短例子说明输入与标签如何对齐，并且实现里只 shift 一次。"
++          "text": "循环里仍只 shift 一次，并能用短例子说明输入与标签如何对齐。这是把第 3 周的对齐放进完整训练/验证，不是本周才第一次对齐。"
+         },
+         {
+           "id": "overfit-small",
+@@ -803,11 +831,11 @@
+       "weekBudget": 7,
+       "shortTitle": "简化评测",
+       "title": "选一套选择题协议，手写 scorer 并分开错误与零分",
+-      "goal": "在 C3 或 XCOPA 一类协议上做简化 evaluator：用手算样例检查计分；模型异常与真实零分分开记；记下 prompt、选项计分方式和模型版本。不要去做旧 llm-eval 作业仓库。",
++      "goal": "在 C3 或 XCOPA 一类协议上做简化 evaluator：用手算样例和假输出检查计分；模型异常与真实零分分开记；记下 prompt、选项计分方式和模型版本。假输出只用于测 scorer。真实 A/B 模型预测放到第 8 周。不要去做旧 llm-eval 作业仓库。",
+       "conceptIds": ["eval-scorer"],
+       "workspace": {
+         "where": "例如 ~/llm-lab/tiny_eval.py。用几条手工样例即可，不必下载全量榜。",
+-        "inputs": "冻结的几条题目（题干、选项、标准答案）；模型输出或你写的假输出。",
++        "inputs": "冻结的几条题目（题干、选项、标准答案）。本周可用假输出或手写输出专门测 scorer；不要把假输出当成训练实验结果。",
+         "outputs": "逐样本记录：题目 id、模型输出、得分、是否异常；与手算一致的 scorer。"
+       },
+       "materials": [
+@@ -859,7 +887,7 @@
+         },
+         {
+           "title": "记下协议",
+-          "body": "记录 prompt 模板、选项如何计分、模型名称与版本。不把旧 llm-eval 项目当作本周交付物。"
++          "body": "记录 prompt 模板、选项如何计分、模型名称与版本。假输出只用于检查 scorer。不把旧 llm-eval 项目当作本周交付物。"
+         },
+         {
+           "title": "卡住时可以分层求助",
+@@ -900,12 +928,12 @@
+       "weekBudget": 8,
+       "shortTitle": "单变量实验",
+       "title": "只改一个变量，用同一套评测比较并解释局限",
+-      "goal": "在已有小模型上做一次控制变量实验：只改数据量或学习率等一个因素，用第 7 周同一套评测比较。没有提升也如实记录。缓存加速是拓展，不是硬门槛。",
++      "goal": "在已有小模型上做一次控制变量实验：只改数据量或学习率等一个因素。分别加载 A、B 两份真实权重，用同一输入和同一选项计分协议取得预测，再交给第 7 周已核对的 scorer。假输出只用于评分器测试，不得当作本周实验结果。没有提升也如实记录。缓存加速是拓展，不是硬门槛。",
+       "conceptIds": ["one-variable", "kv-cache", "eval-scorer"],
+       "workspace": {
+-        "where": "例如 ~/llm-lab/experiment.md 加两次训练命令。不要新开旧 inference-benchmark 作业。",
+-        "inputs": "基线配置 A；只改一个旋钮的配置 B；同一评测脚本与同一测试题。",
+-        "outputs": "结果表、种子、bad case、局限说明；可选：有/无 KV cache 的生成结果对照（不要求速度数字）。"
++        "where": "例如 ~/llm-lab/experiment.md 加两次训练命令和两份权重路径。不要新开旧 inference-benchmark 作业。",
++        "inputs": "基线配置 A 的真实 checkpoint；只改一个旋钮后得到的配置 B 的真实 checkpoint；同一测试题；第 7 周同一套解析与 scorer。不要用假输出填实验结果。",
++        "outputs": "A/B 的权重或 checkpoint 标识；协议说明；逐样本真实预测、解析结果与分数；结果表、种子、bad case、局限说明；可选：有/无 KV cache 的生成结果对照（不要求速度数字）。"
+       },
+       "materials": [
+         {
+@@ -951,8 +979,12 @@
+           "body": "一句话写出自变量、不变量、评测集。种子写进表。不要同时改结构、数据和学习率。"
+         },
+         {
+-          "title": "跑完两次并用同一评测",
+-          "body": "A/B 用第 7 周 scorer。没有提升也留下数字和 1–2 条 bad case。解释可能的局限（数据太小、评测太窄）。"
++          "title": "从真实权重取出预测再交给 scorer",
++          "body": "分别加载 A、B 两份真实模型权重。用同一输入、同一输出/选项计分协议得到预测（生成文本或选项分数），再交给第 7 周已经用手算和假输出核对过的 scorer。记下 checkpoint 标识。模型预测 → 解析 → 计分的数据流要写清楚。假输出不能当作本实验结果。"
++        },
++        {
++          "title": "比较并解释局限",
++          "body": "A/B 用同一套题目和同一 scorer。异常与真实零分仍分开记。没有提升也留下数字和 1–2 条 bad case。解释可能的局限（数据太小、评测太窄）。不必下载全量榜，也不要求分数提高。"
+         },
+         {
+           "title": "卡住时可以分层求助",
+@@ -971,12 +1003,19 @@
+           "conceptId": "one-variable",
+           "text": "实验记录里能看出只改了数据量或学习率等一个因素，其它保持不变。"
+         },
++        {
++          "id": "real-ab-preds",
++          "label": "真实 A/B 预测",
++          "required": true,
++          "conceptId": "eval-scorer",
++          "text": "分别加载 A、B 真实权重，用同一输入和同一协议取得预测后再交给已核对的 scorer。记下 checkpoint 标识和逐样本真实结果。假输出只用于第 7 周测 scorer，不能当作本实验结果。"
++        },
+         {
+           "id": "same-eval",
+           "label": "同一评测比较",
+           "required": true,
+           "conceptId": "eval-scorer",
+-          "text": "用同一套题目和 scorer 比较；没有提升也如实记录并解释局限。"
++          "text": "用同一套题目、同一解析和同一 scorer 比较；异常与真实零分分开；没有提升也如实记录并解释局限。"
+         },
+         {
+           "id": "cache-speed",
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 115becc..1660cd9 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -105,7 +105,7 @@
+ 
+ **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+ 
+-**本轮（阶段 3 第一步）：** 前八周任务写入 `learning-plan.json`（每条含写什么、怎么检查、必需／拓展、真实教材小节），首页可手动选择当前周。`evidenceSystemImplemented` 仍为 `false`。**不实现**记录表单、卡点存储、任务上下文导航。第 0／24 章遗留修改仍单独处理。
++**本轮（issue #4）：** 阶段 3 第一步收尾。前八周任务写入与手动选周已完成；本轮只补齐第 3 周 next-token 对齐、第 2 周组装后因果性、第 8 周真实 A/B 预测。`evidenceSystemImplemented` 仍为 `false`。**不实现**记录表单、卡点存储、任务上下文导航。第 0／24 章遗留修改仍单独处理。
+ 
+ **开工后的实现顺序（可验收小步，不扩大功能）：**
+ 
+@@ -115,7 +115,7 @@
+ 
+ 第 3.7 节求助规范、小变式、短记录说明**写入任务文案**，不另开工程阶段、不建题库或评分引擎。学习代码继续在站外空文件／学习目录中完成，网站负责说明和记录。
+ 
+-**范围：** 把 [`LEARNING_PLAN.md`](LEARNING_PLAN.md) 第 5 节八周写入计划 JSON，并标明每条验收的必需／拓展。链到现有章：第 7（Attention）、9–13（GPT / 现代架构 / PyTorch / 手写组件与训练）、21（SFT 概念）、23（评测）、必要时 26 的 API 说明作参考。Python / PyTorch 列为并行补充，不挡 Attention。第 6–7 周写入基础 SFT 与简化评测。第 13 章 RL 标选修。第 1 周只把 causal single-head → multi-head 作为硬完成标准；第 2 周核心是简单固定结构的最小 LM forward；第 3 周先打通 loss／backward／参数更新，再逐个换现代组件。**GQA 为拓展项**，未完成不阻挡核心任务。不把前八周扩到 DDP、FlashAttention 或 GRPO。
++**范围：** 把 [`LEARNING_PLAN.md`](LEARNING_PLAN.md) 第 5 节八周写入计划 JSON，并标明每条验收的必需／拓展。链到现有章：第 7（Attention）、9–13（GPT / 现代架构 / PyTorch / 手写组件与训练）、21（SFT 概念）、23（评测）、必要时 26 的 API 说明作参考。Python / PyTorch 列为并行补充，不挡 Attention。第 6–7 周写入基础 SFT 与简化评测。第 13 章 RL 标选修。第 1 周只把 causal single-head → multi-head 作为硬完成标准；第 2 周核心是简单固定结构的最小 LM forward，并检查组装后整模型因果性；第 3 周从第一次更新起使用正确 next-token 对齐，再打通 loss／backward／参数更新，然后逐个换现代组件。**GQA 为拓展项**，未完成不阻挡核心任务。第 8 周用 A/B 真实权重取得预测再交给已核对的 scorer。不把前八周扩到 DDP、FlashAttention 或 GRPO。
+ 
+ 同一知识点 id 被多周任务引用（例如 `tensor-shape` 出现在 Attention 与 decoder 任务中），**概念记录共用**，但不是第二套推进门槛。任务完成只依据该任务的**全部必需验收项**（从任务定义读取，不硬编码条数）。任务验收证据必须带 `taskId + criterionId`，可选 `conceptId`。过去的概念证据不得自动完成新任务的 criterion。
+ 
+diff --git a/docs/LEARNING_PLAN.md b/docs/LEARNING_PLAN.md
+index 6b4a679..c60f425 100644
+--- a/docs/LEARNING_PLAN.md
++++ b/docs/LEARNING_PLAN.md
+@@ -97,17 +97,17 @@ Infra 方向：将同一任务的模型服务部署起来，研究上下文长
+ | 周 | 模型/项目线 | 当周补基础 | 完成标准 |
+ |---|---|---|---|
+ | 1 | 缩放点积注意力、causal mask、多头拆分（单头 → 多头）。**不把最小 decoder block 当作本周硬门槛** | 函数、类、模块、索引、调试；张量形状 | **必需：** 在空文件重写 attention（先单头后多头）；说清每一步 shape；改变未来 token 不改变之前位置输出。独立实现指最终能脱离答案完成，学习期间允许分层求助 |
+-| 2 | 用**简单固定结构**拼最小 decoder block：embedding、残差、FFN、输出头；完成最小 LM forward，得到 `[B,T,V]`。可开始接触 RMSNorm / RoPE，**不把它们全部变成本周额外门槛** | broadcasting、reshape/transpose、nn.Module/Parameter | **必需：** 输入 token 得到 `[B,T,V]`；能说明残差和输出头在做什么；与简单参考实现对照。**拓展：** 解释归一化和位置编码 |
+-| 3 | **必需：** 先做一次 loss、backward、参数更新，确认参数参与优化；再用随机小输入查数值/梯度。然后**逐个**替换现代组件（RoPE / RMSNorm / SwiGLU），避免一次改多个模块无法定位问题。**拓展：** GQA，放在基础 attention 正确之后 | autograd、loss、optimizer；链式法则、softmax/CE | **必需：** 小输入上 loss 能 backward，参数更新可见。**拓展：** 能解释 GQA 的头数关系；延期时先理解并对照即可，**不能**用这项阻挡本周核心任务完成 |
+-| 4 | next-token prediction；最小训练与验证循环；小样本过拟合 | Dataset/DataLoader、JSONL、文件读写、异常 | **必需：** loss 下降且能过拟合很小的数据；解释 label shift 只应按实现做一次；保留独立验证样本 |
++| 2 | 用**简单固定结构**拼最小 decoder block：embedding、残差、FFN、输出头；完成最小 LM forward，得到 `[B,T,V]`。可开始接触 RMSNorm / RoPE，**不把它们全部变成本周额外门槛** | broadcasting、reshape/transpose、nn.Module/Parameter | **必需：** 输入 token 得到 `[B,T,V]`；能说明残差和输出头在做什么；与简单参考实现对照；关闭 dropout 后改末尾 token，**组装后完整模型**更早位置的 logits 在声明容差内不变（不是只复跑 Attention）。**拓展：** 解释归一化和位置编码 |
++| 3 | **必需：** 第一次参数更新就用正确的 next-token 对齐（shift 只做一次）；再做 loss、backward、参数更新，确认参数参与优化；反复一步训练时含 zero_grad，不启用梯度累积。然后**逐个**替换现代组件（RoPE / RMSNorm / SwiGLU）。**拓展：** GQA，放在基础 attention 正确之后 | autograd、loss、optimizer；链式法则、softmax/CE | **必需：** 能用短序列说明输入与下一 token 标签的对应；小输入上有限 loss 能 backward，参数更新可见。**拓展：** 能解释 GQA 的头数关系；延期时先理解并对照即可，**不能**用这项阻挡本周核心任务完成 |
++| 4 | 完整训练与验证循环；小样本过拟合。对齐沿用第 3 周已核对的 next-token shift | Dataset/DataLoader、JSONL、文件读写、异常 | **必需：** loss 下降且能过拟合很小的数据；循环里 label shift 仍只做一次；保留独立验证样本 |
+ | 5 | 小模型短程预训练；数据切分、tokenizer/BPE 原理、学习率与 checkpoint | Git、环境锁定、命令行配置、日志；训练/验证/测试区别 | **必需：** 从头运行可复现；恢复模型、optimizer、scheduler 和步数等状态；报告验证 loss |
+ | 6 | SFT template、assistant/response-only loss、padding | mask、-100、数据清洗脚本；理解 batch 差异 | **必需：** 打印一条样本逐 token 监督范围；确认 prompt/padding 不计入预期 loss；解释特殊 token |
+-| 7 | C3/XCOPA 中选一套协议做简化 evaluator；复盘 87M 项目 | NumPy/pandas、accuracy、类别分布、随机/多数类基线 | **必需：** 用手算样例检查 scorer；错误与真实零分分开；记录 prompt、选项计分和模型版本 |
+-| 8 | 一次小实验；补模块说明；尝试缓存/非缓存生成对照 | 控制变量、种子、结果表、bad case | **必需：** 只改数据量或学习率等一个变量；用相同评测比较并解释局限；没有提升也如实记录。**拓展：** 缓存对照的速度分析 |
++| 7 | C3/XCOPA 中选一套协议做简化 evaluator；用手算和假输出测 scorer | NumPy/pandas、accuracy、类别分布、随机/多数类基线 | **必需：** 用手算样例检查 scorer；错误与真实零分分开；记录 prompt、选项计分和模型版本。假输出只用于测 scorer |
++| 8 | 一次小实验；加载 A/B 真实权重取得预测再交给已核对的 scorer；尝试缓存/非缓存生成对照 | 控制变量、种子、结果表、bad case | **必需：** 只改数据量或学习率等一个变量；从真实 checkpoint 取出预测，用相同协议比较并解释局限；没有提升也如实记录。假输出不能当作实验结果。**拓展：** 缓存对照的速度分析 |
+ 
+ 第八周的 KV cache 性能不是硬门槛；先做到输出对照，速度分析留到后面。第 6–7 周基础 SFT 与简化评测保持。DDP/FlashAttention/GRPO 不塞进这八周。周数是可顺延预算。后续写入 `learning-plan.json` 时，每条验收带必需／拓展属性；任务完成只看全部必需项。
+ 
+-**第 1 周硬完成标准**只覆盖 causal single-head → multi-head attention。原来写在第 1 周的「拼最小 decoder block」移到第 2 周。第 2 周核心是简单固定结构下的最小 LM forward。第 3 周先打通一次更新，再逐个换现代组件。**GQA 是拓展项**：未完成不能阻挡第 3 周核心任务。这不是降低标准，而是保证每一周先走完一次「尝试 → 检查 → 必要时求助 → 修正 → 换输入验证」。
++**第 1 周硬完成标准**只覆盖 causal single-head → multi-head attention。原来写在第 1 周的「拼最小 decoder block」移到第 2 周。第 2 周核心是简单固定结构下的最小 LM forward，并检查**组装后整模型**的因果性。第 3 周从第一次更新起使用正确 next-token 对齐，再打通一次更新、逐个换现代组件。**GQA 是拓展项**：未完成不能阻挡第 3 周核心任务。这不是降低标准，而是保证每一周先走完一次「尝试 → 检查 → 必要时求助 → 修正 → 换输入验证」。
+ 
+ **关于“手撕”的合理标准：**能够在空文件中实现核心算法并调通，不要求背下整个项目。需要查 PyTorch API 很正常。「独立实现」是最终能脱离答案完成，不是学习期间从未接受帮助。脚手架、重复数据处理和文档可以多用 AI，但要能解释最终行为。网站不代写核心算法。
+ 
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 056586c..2dee794 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -317,11 +317,38 @@ test('learning plan current task is executable Attention and points at real head
+   const gqa = week3.criteria.find(item => item.id === 'gqa-heads');
+   assert.equal(gqa.required, false);
+   assert.match(gqa.text, /不能阻挡|不阻挡/);
++  const align = week3.criteria.find(item => item.id === 'next-token-align');
++  assert.equal(align.required, true);
++  assert.match(align.text, /只 shift 一次|只做一次/);
++  assert.match(align.text, /不能先训练同位置/);
++  const week3Text = [week3.goal, week3.workspace.inputs, week3.workspace.outputs]
++    .concat(week3.steps.map(step => step.title + step.body), week3.criteria.map(row => row.text))
++    .join('\n');
++  assert.match(week3Text, /zero_grad/);
++  assert.match(week3Text, /不启用梯度累积/);
++  assert.match(week3Text, /下一 token|下一 token 标签/);
++  assert.doesNotMatch(week3Text, /细节放到下周|先用同一序列做 next-token/);
+   const week2 = plan.tasks.find(item => item.weekBudget === 2);
+   assert.match(week2.workspace.outputs, /\[B, T, V\]/);
+   assert.equal(week2.criteria.find(item => item.id === 'norm-rope-read').required, false);
++  const assembled = week2.criteria.find(item => item.id === 'assembled-causal');
++  assert.equal(assembled.required, true);
++  assert.match(assembled.text, /dropout/i);
++  assert.match(assembled.text, /atol \+ rtol \* abs/);
++  assert.match(assembled.text, /完整模型|组装后/);
++  const week2Text = week2.steps.map(step => step.title + step.body).concat(week2.criteria.map(row => row.text)).join('\n');
++  assert.doesNotMatch(week2Text, /因果已在上周验|不要求本周再验因果|本周不用再验因果/);
++  assert.match(week2Text, /不必重写 Attention|不要求重写 Attention/);
+   const week8 = plan.tasks.find(item => item.weekBudget === 8);
+   assert.equal(week8.criteria.find(item => item.id === 'cache-speed').required, false);
++  const realAb = week8.criteria.find(item => item.id === 'real-ab-preds');
++  assert.equal(realAb.required, true);
++  assert.match(realAb.text, /真实/);
++  assert.match(realAb.text, /checkpoint/);
++  assert.match(realAb.text, /假输出/);
++  const week7 = plan.tasks.find(item => item.weekBudget === 7);
++  assert.match(week7.workspace.inputs, /假输出/);
++  assert.match(week7.goal, /第 8 周/);
+ });
+ 
+ function loadPages(plan, planError, extra) {
+@@ -388,12 +415,23 @@ test('home can show another week without treating that as earlier completion', (
+   assert.doesNotMatch(week2, /手写因果多头注意力/);
+   assert.doesNotMatch(week2, /lab\.decoder|criterionId|<code>/);
+   assert.match(week2, /不会把前面的周标成完成/);
++  assert.match(week2, /组装后/);
++  assert.match(week2, /atol \+ rtol \* abs/);
++  assert.doesNotMatch(week2, /因果已在上周验|不要求本周再验因果/);
+   const week3 = loadPages(plan, null, { selectedTaskId: 'lab.train.step-update' }).home(null);
+   assert.match(week3, /一次参数更新/);
+   assert.match(week3, /GQA/);
+   assert.match(week3, /不能阻挡|不挡完成/);
+   assert.match(week3, /拓展（不挡完成）/);
++  assert.match(week3, /zero_grad/);
++  assert.match(week3, /只做一次|只 shift 一次/);
+   assert.doesNotMatch(week3, /自动测试通过/);
++  assert.doesNotMatch(week3, /细节放到下周|先用同一序列做 next-token/);
++  const week8 = loadPages(plan, null, { selectedTaskId: 'lab.experiment.one-variable' }).home(null);
++  assert.match(week8, /真实 A\/B 预测|真实权重|真实 checkpoint/);
++  assert.match(week8, /假输出/);
++  assert.match(week8, /拓展（不挡完成）/);
++  assert.doesNotMatch(week8, /自动测试通过/);
+ });
+ 
+ test('phase 3 design docs agree on completion, help, and GQA stretch without claiming implementation', () => {
+@@ -412,9 +450,13 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
+   assert.match(year, /GQA 是拓展项/);
+   assert.match(eightWeeks, /\*\*不能\*\*用这项阻挡本周核心任务完成/);
+   assert.match(impl, /issue #3/);
++  assert.match(impl, /issue #4/);
+   assert.match(impl, /前八周任务写入/);
+   assert.match(impl, /GQA 为拓展项/);
+   assert.match(impl, /evidenceSystemImplemented.*false|仍为 `false`/);
++  assert.match(impl, /组装后整模型因果性|组装后因果性/);
++  assert.match(impl, /next-token 对齐/);
++  assert.match(impl, /真实 A\/B/);
+   assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
+ });
+ 
