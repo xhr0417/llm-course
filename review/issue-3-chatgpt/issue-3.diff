@@ -1,0 +1,459 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index e19efb6..a53587f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -13,7 +13,7 @@ After changing Markdown or catalog JSON, run `node tools/build-static.js` (and `
+ 
+ ## Learning records
+ 
+-Plan definitions belong in published data under `content/`. Personal completion lives in browser storage, separate from the plan. Do not prefill mastery. Do not treat “read” (`llm-course-progress`) as “implemented”, “verified”, or “can explain”. Do not label a manual checkbox as an automated test pass.
++Plan definitions belong in published data under `content/`. Personal completion lives in browser storage, separate from the plan. Do not prefill mastery. Do not treat “read” (`llm-course-progress`) as “implemented”, “verified”, or “can explain”. Do not label a manual checkbox as an automated test pass. Task completion uses only that task’s required criteria; concept dimensions are not a second gate. `user_reported` is a source, not a pass.
+ 
+ ## Scope discipline
+ 
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index 1f6942d..9656703 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -5,6 +5,9 @@
+     "criterionEvidenceKey": ["taskId", "criterionId"],
+     "criterionMayReferenceConceptId": true,
+     "conceptEvidenceDoesNotCompleteTasks": true,
++    "taskCompletionUsesRequiredCriteriaOnly": true,
++    "conceptRecordsAreNotAdvancementGates": true,
++    "evidenceSourceIsNotOutcome": true,
+     "evidenceSystemImplemented": false
+   },
+   "stages": [
+@@ -150,45 +153,57 @@
+         },
+         {
+           "title": "在空文件写单头因果注意力",
+-          "body": "只写单头：给定 Q、K、V，得到与 Q 同形状的输出。需要查 PyTorch API 可以，不要打开 7.13 的完整实现，也不要让 AI 直接给出核心函数。"
++          "body": "先自己写下输入输出和每一步 shape，并留下一次实现尝试。只写单头：给定 Q、K、V，得到与 Q 同形状的输出。需要查 PyTorch API 可以。不要一上来就打开 7.13 的完整实现，也不要让 AI 直接给出核心函数。"
+         },
+         {
+           "title": "检查单头结果",
+-          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较。对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
++          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较。先确认没有 NaN 或 Inf，再对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
++        },
++        {
++          "title": "卡住时可以分层求助",
++          "body": "自检通过后再看参考是建议顺序，不是禁令。卡住时：先请人解释报错、定位可疑步骤或给反例；仍卡住再看局部示例或 7.13。看过后合上参考，重新实现关键部分，并换一组输入再验证。独立实现指最终能脱离答案完成，不是学习期间从未接受帮助。可选记下「查 API／提示后完成／看过参考后重写」，这不是扣分。"
+         },
+         {
+           "title": "再读多头并扩展",
+           "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H。关闭 dropout，用另一组固定输入单独检查多头。对照时拆头顺序和输出投影约定必须与参考一致（先按哪一维拆头、拼头之后有没有 W_O）。因果性仍成立。单头通过不能代替多头检查。"
+         },
++        {
++          "title": "用一个小变式检查能否迁移",
++          "body": "任选一项即可，不是额外门槛：换 batch 或序列长度，先预测 shape 再运行；换一个能整除的头数，检查拆头与拼头；或者故意改错 softmax 维度或 mask 方向，说清哪一条检查会失败。下一次打开练习时，可用几分钟口述或复写其中一个关键步骤。"
++        },
+         {
+           "title": "对照而不是抄袭",
+-          "body": "自检通过后再看 7.13。若卡在 class、reshape 或 broadcasting，并行打开第 11 章对应小节，补完当前函数，不要改去做六个旧作业项目。"
++          "body": "关键部分应能在合上参考后重写。若卡在 class、reshape 或 broadcasting，并行打开第 11 章对应小节，补完当前函数，不要改去做六个旧作业项目。"
+         }
+       ],
+       "criteria": [
+         {
+           "id": "rewrite",
+           "label": "自己重写",
++          "required": true,
+           "conceptId": "attention",
+-          "text": "不看参考代码，在空文件中重写注意力核心计算（先单头，再多头）。"
++          "text": "在空文件中重写注意力核心计算（先单头，再多头）。最终能脱离答案完成；学习期间允许查 API，或看过局部参考后重写关键部分。"
+         },
+         {
+           "id": "shapes",
+           "label": "形状",
++          "required": true,
+           "conceptId": "tensor-shape",
+-          "text": "能口述或写出每一步的形状：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。"
++          "text": "能口述或写出每一步的形状：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。不必另造「实现张量形状」作业。"
+         },
+         {
+           "id": "causal",
+           "label": "因果性",
++          "required": true,
+           "conceptId": "causal-mask",
+           "text": "改变未来 token 后，更早位置的输出不变。"
+         },
+         {
+           "id": "numeric",
+           "label": "数值正确性",
++          "required": true,
+           "conceptId": "attention",
+-          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
++          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。先确认没有 NaN 或 Inf，再对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
+         }
+       ]
+     }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index aa1df42..097c559 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -7,7 +7,7 @@
+ | 机制层 | 做什么 | 落在哪一工程阶段 |
+ |---|---|---|
+ | A 展示 | 当前主要任务、补基础、教材、通过条件、知识点名称 | 阶段 1 |
+-| B 记录 | 四档状态、证据（user_reported / auto）、卡点；知识点记录可复用，任务验收绑定 taskId+criterionId | 阶段 3（与前八周数据一起） |
++| B 记录 | 四个独立维度、验收结果（未检查／未通过／用户自报通过）、来源（user_reported / auto）、卡点；任务完成只看全部必需验收项；概念记录可复用但不是第二套门槛 | 阶段 3（与前八周数据一起） |
+ | C 复习 | 解释/回忆/复写队列；默认间隔 1/3/7/21 天可调；失败记薄弱点并重练，不改写旧证据 | 阶段 3 完成之后、阶段 4 之前 |
+ 
+ ## 生成文件（全程）
+@@ -103,23 +103,33 @@
+ 
+ ## 阶段 3 — 前八周任务 + 状态、证据与卡点（机制层 B）
+ 
+-**进入本阶段前（[issue #1](https://github.com/xhr0417/llm-course/issues/1)）：** 7.6 已把 XXᵀ 的 raw-score 对称性与 softmax 权重对称性分开；README 当前正式入口为 GitHub Pages，自有域名标待同步；第 1 周硬验收仅为 attention。未完成这些不要开始本阶段。
++**进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+ 
+-**范围：** 把 [`LEARNING_PLAN.md`](LEARNING_PLAN.md) 第 5 节八周写入计划 JSON，并链到现有章：第 7（Attention）、9–13（GPT / 现代架构 / PyTorch / 手写组件与训练）、21（SFT 概念）、23（评测）、必要时 26 的 API 说明作参考。Python / PyTorch 列为并行补充，不挡 Attention。第 6–7 周写入基础 SFT 与简化评测。第 13 章 RL 标选修。第 1 周只把 causal single-head → multi-head 作为硬完成标准；最小 decoder block 从第 2 周开始。
++**本轮（issue #3）只同步计划设计：** 更新 OS、一年计划、本文件，以及现有 Attention 任务文案与 `required` 字段。`learning-plan.json` 仍只有第 1 周任务；**不实现**记录表单、八周 JSON 扩写、任务上下文导航。创建本 issue 不等于阶段 3 已实施。
+ 
+-同一知识点 id 被多周任务引用（例如 `tensor-shape` 出现在 Attention 与 decoder 任务中），**概念记录共用**。任务验收证据必须带 `taskId + criterionId`，可选 `conceptId`。过去的概念证据不得自动完成新任务的 criterion。
++**开工后的实现顺序（可验收小步，不扩大功能）：**
+ 
+-机制层 B：新存储键（例如 `llm-course-learning`）保存知识点四档状态、任务证据、卡点。证据字段含代码位置或 commit、检查结果、解释；每条标 `user_reported` 或 `auto`。本阶段没有自动脚本则只允许 `user_reported`。未通过验收不锁教材。建议进入下一任务的规则见 OS 第 3.3 / 4 节，只作提示。允许手动改当前阶段。
++1. 前八周任务数据、真实教材小节链接、手动选择当前任务。
++2. 最小验收记录、证据、卡点与本地保存。
++3. 教材任务上下文导航，以及首页信息分层。
+ 
+-进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页可把详细 workspace / steps / criteria 分层或折叠，但不要删掉新手所需说明。
++第 3.7 节求助规范、小变式、短记录说明**写入任务文案**，不另开工程阶段、不建题库或评分引擎。学习代码继续在站外空文件／学习目录中完成，网站负责说明和记录。
+ 
+-**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套状态；自报证据不会显示成自动测试通过。
++**范围：** 把 [`LEARNING_PLAN.md`](LEARNING_PLAN.md) 第 5 节八周写入计划 JSON，并标明每条验收的必需／拓展。链到现有章：第 7（Attention）、9–13（GPT / 现代架构 / PyTorch / 手写组件与训练）、21（SFT 概念）、23（评测）、必要时 26 的 API 说明作参考。Python / PyTorch 列为并行补充，不挡 Attention。第 6–7 周写入基础 SFT 与简化评测。第 13 章 RL 标选修。第 1 周只把 causal single-head → multi-head 作为硬完成标准；第 2 周核心是简单固定结构的最小 LM forward；第 3 周先打通 loss／backward／参数更新，再逐个换现代组件。**GQA 为拓展项**，未完成不阻挡核心任务。不把前八周扩到 DDP、FlashAttention 或 GRPO。
+ 
+-**完成条件：** 前八周每条都有教材 + 实现 + 验收；记录层可用；不指向已退出主线的六作业。
++同一知识点 id 被多周任务引用（例如 `tensor-shape` 出现在 Attention 与 decoder 任务中），**概念记录共用**，但不是第二套推进门槛。任务完成只依据该任务的**全部必需验收项**（从任务定义读取，不硬编码条数）。任务验收证据必须带 `taskId + criterionId`，可选 `conceptId`。过去的概念证据不得自动完成新任务的 criterion。
+ 
+-**本阶段仍不做：** 复习队列（机制层 C）；自动掌握度 / 自动评分；扩 92 项项目清单；GraphRAG / 多 Agent / GUI Agent；重新设计核验 Agent 题目。
++机制层 B：新存储键（例如 `llm-course-learning`）保存知识点的四个独立维度、任务验收结果、卡点。每条验收区分结果（未检查／未通过／用户自报通过）与来源（`user_reported` / `auto`）。`user_reported` 表示来源，不表示成功。本阶段没有自动脚本则只允许 `user_reported`，不得显示成自动验证通过。失败后追加新结果并保留原错误；完成看**当前**结果。未通过验收不锁教材。全部必需项当前通过后，提示用户确认进入下一任务，不随日历或勾选自动推进。允许手动改当前阶段。短记录默认：做了什么、检查结果及代码位置、下一步。
+ 
+-issue #1 本轮只做进入本阶段前的 P0 与计划文档对齐，**不在本轮实现阶段 3 功能**。
++进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页突出下一动作，详细 workspace / steps / criteria 可分层或折叠，但不要删掉新手所需说明。
++
++**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。
++
++**完成条件：** 前八周每条都有教材 + 实现 + 验收（含必需／拓展）；记录层可用；不指向已退出主线的六作业。
++
++**本阶段仍不做：** 复习队列（机制层 C）；自动掌握度 / 自动评分；扩 92 项项目清单；GraphRAG / 多 Agent / GUI Agent；重新设计核验 Agent 题目；引入 continuous-learning 等参考仓库的整套代码；删除 `projects/`。
++
++第 0／24 章遗留修改单独处理，不假定已提交。
+ 
+ ## 阶段 3b — 复习队列（机制层 C）
+ 
+diff --git a/docs/LEARNING_PLAN.md b/docs/LEARNING_PLAN.md
+index f50eaf6..6b4a679 100644
+--- a/docs/LEARNING_PLAN.md
++++ b/docs/LEARNING_PLAN.md
+@@ -96,22 +96,22 @@ Infra 方向：将同一任务的模型服务部署起来，研究上下文长
+ 
+ | 周 | 模型/项目线 | 当周补基础 | 完成标准 |
+ |---|---|---|---|
+-| 1 | 缩放点积注意力、causal mask、多头拆分（单头 → 多头）。**不把最小 decoder block 当作本周硬门槛** | 函数、类、模块、索引、调试；张量形状 | 不看参考代码重写 attention；说清每一步 shape；改变未来 token 不改变之前位置输出 |
+-| 2 | 拼最小 decoder block；embedding、残差、FFN、输出头；完成最小 LM forward；开始 RMSNorm/RoPE | broadcasting、reshape/transpose、nn.Module/Parameter | 输入 token 得到 [B,T,V]；能解释归一化和位置信息；与简单参考实现对照 |
+-| 3 | 完成 RoPE/RMSNorm/SwiGLU；GQA 放在基础 attention 正确后。若前面延期，GQA 可先理解并对照，降为 stretch | autograd、loss、optimizer；链式法则、softmax/CE | 用随机小输入查数值/梯度；参数确实参与优化；能解释 GQA 的头数关系 |
+-| 4 | next-token prediction；最小训练与验证循环；小样本过拟合 | Dataset/DataLoader、JSONL、文件读写、异常 | loss 下降且能过拟合很小的数据；解释 label shift 只应按实现做一次；保留独立验证样本 |
+-| 5 | 小模型短程预训练；数据切分、tokenizer/BPE 原理、学习率与 checkpoint | Git、环境锁定、命令行配置、日志；训练/验证/测试区别 | 从头运行可复现；恢复模型、optimizer、scheduler 和步数等状态；报告验证 loss |
+-| 6 | SFT template、assistant/response-only loss、padding | mask、-100、数据清洗脚本；理解 batch 差异 | 打印一条样本逐 token 监督范围；确认 prompt/padding 不计入预期 loss；解释特殊 token |
+-| 7 | C3/XCOPA 中选一套协议做简化 evaluator；复盘 87M 项目 | NumPy/pandas、accuracy、类别分布、随机/多数类基线 | 用手算样例检查 scorer；错误与真实零分分开；记录 prompt、选项计分和模型版本 |
+-| 8 | 一次小实验；补模块说明；尝试缓存/非缓存生成对照 | 控制变量、种子、结果表、bad case | 只改数据量或学习率等一个变量；用相同评测比较并解释局限；没有提升也如实记录 |
++| 1 | 缩放点积注意力、causal mask、多头拆分（单头 → 多头）。**不把最小 decoder block 当作本周硬门槛** | 函数、类、模块、索引、调试；张量形状 | **必需：** 在空文件重写 attention（先单头后多头）；说清每一步 shape；改变未来 token 不改变之前位置输出。独立实现指最终能脱离答案完成，学习期间允许分层求助 |
++| 2 | 用**简单固定结构**拼最小 decoder block：embedding、残差、FFN、输出头；完成最小 LM forward，得到 `[B,T,V]`。可开始接触 RMSNorm / RoPE，**不把它们全部变成本周额外门槛** | broadcasting、reshape/transpose、nn.Module/Parameter | **必需：** 输入 token 得到 `[B,T,V]`；能说明残差和输出头在做什么；与简单参考实现对照。**拓展：** 解释归一化和位置编码 |
++| 3 | **必需：** 先做一次 loss、backward、参数更新，确认参数参与优化；再用随机小输入查数值/梯度。然后**逐个**替换现代组件（RoPE / RMSNorm / SwiGLU），避免一次改多个模块无法定位问题。**拓展：** GQA，放在基础 attention 正确之后 | autograd、loss、optimizer；链式法则、softmax/CE | **必需：** 小输入上 loss 能 backward，参数更新可见。**拓展：** 能解释 GQA 的头数关系；延期时先理解并对照即可，**不能**用这项阻挡本周核心任务完成 |
++| 4 | next-token prediction；最小训练与验证循环；小样本过拟合 | Dataset/DataLoader、JSONL、文件读写、异常 | **必需：** loss 下降且能过拟合很小的数据；解释 label shift 只应按实现做一次；保留独立验证样本 |
++| 5 | 小模型短程预训练；数据切分、tokenizer/BPE 原理、学习率与 checkpoint | Git、环境锁定、命令行配置、日志；训练/验证/测试区别 | **必需：** 从头运行可复现；恢复模型、optimizer、scheduler 和步数等状态；报告验证 loss |
++| 6 | SFT template、assistant/response-only loss、padding | mask、-100、数据清洗脚本；理解 batch 差异 | **必需：** 打印一条样本逐 token 监督范围；确认 prompt/padding 不计入预期 loss；解释特殊 token |
++| 7 | C3/XCOPA 中选一套协议做简化 evaluator；复盘 87M 项目 | NumPy/pandas、accuracy、类别分布、随机/多数类基线 | **必需：** 用手算样例检查 scorer；错误与真实零分分开；记录 prompt、选项计分和模型版本 |
++| 8 | 一次小实验；补模块说明；尝试缓存/非缓存生成对照 | 控制变量、种子、结果表、bad case | **必需：** 只改数据量或学习率等一个变量；用相同评测比较并解释局限；没有提升也如实记录。**拓展：** 缓存对照的速度分析 |
+ 
+-第八周的 KV cache 性能不是硬门槛；先做到输出对照，速度分析留到后面。DDP/FlashAttention/GRPO 不塞进这八周。
++第八周的 KV cache 性能不是硬门槛；先做到输出对照，速度分析留到后面。第 6–7 周基础 SFT 与简化评测保持。DDP/FlashAttention/GRPO 不塞进这八周。周数是可顺延预算。后续写入 `learning-plan.json` 时，每条验收带必需／拓展属性；任务完成只看全部必需项。
+ 
+-**第 1 周硬完成标准**只覆盖 causal single-head → multi-head attention。原来写在第 1 周的「拼最小 decoder block」移到第 2 周。这不是降低标准，而是保证第一周先走完一次「自己写 → 自检 → 对照 → 修正」。
++**第 1 周硬完成标准**只覆盖 causal single-head → multi-head attention。原来写在第 1 周的「拼最小 decoder block」移到第 2 周。第 2 周核心是简单固定结构下的最小 LM forward。第 3 周先打通一次更新，再逐个换现代组件。**GQA 是拓展项**：未完成不能阻挡第 3 周核心任务。这不是降低标准，而是保证每一周先走完一次「尝试 → 检查 → 必要时求助 → 修正 → 换输入验证」。
+ 
+-**关于“手撕”的合理标准：**能够在空文件中实现核心算法并调通，不要求背下整个项目。需要查 PyTorch API 很正常。对 attention、loss mask、训练更新、scorer，先自己写再让 AI 指出问题；脚手架、重复数据处理和文档可以多用 AI，但要能解释最终行为。
++**关于“手撕”的合理标准：**能够在空文件中实现核心算法并调通，不要求背下整个项目。需要查 PyTorch API 很正常。「独立实现」是最终能脱离答案完成，不是学习期间从未接受帮助。脚手架、重复数据处理和文档可以多用 AI，但要能解释最终行为。网站不代写核心算法。
+ 
+-每次练习采用：先口述输入输出与 shape → 写核心函数 → 用两三个边界例子检查 → 对照参考 → 修正 → 次日复写一个关键部分。AI 的第一轮帮助优先给线索，不直接给完整核心实现。
++建议流程：先口述输入输出与 shape，并留下一次实现尝试 → 用两三个边界例子检查 → 卡住时优先请人解释报错、定位步骤或给反例 → 仍卡住再看局部示例或参考 → 关闭参考后重写关键部分并换输入验证。每个任务加一个适当的小变式即可，不建题库。下一次学习开始可用几分钟解释或复写一个关键步骤；自动复习队列仍留工程阶段 3b。
+ 
+ ## 6. 基础线要学到什么程度
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index 377a2f9..cebda49 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -57,33 +57,48 @@
+ - **任务**是主线上一次要完成的工作（例如「手写因果多头注意力」）。
+ - **知识点**是可复用概念，有稳定 id，例如 `attention`、`causal-mask`、`tensor-shape`。
+ - 一个任务关联**多个**知识点。同一知识点可被后续任务再次使用。
+-- **知识点记录可以复用**：四档状态挂在 conceptId 上，后续任务看到的是同一套概念记录。
++- **知识点记录可以复用**：四个独立维度挂在 conceptId 上，后续任务看到的是同一套概念记录。四个维度是：读过、自己实现、验证通过、能解释；互不自动推导。不要求每个概念都填满四项。例如 `tensor-shape` 可以通过解释和操作验证，不必另造「实现张量形状」作业。
++- **任务完成只依据该任务的全部必需验收项。** 概念记录用于薄弱点、历史和后续复习，不再作为第二套推进门槛。
+ - **任务验收记录不可因概念历史自动完成。** 每条验收证据绑定 `taskId + criterionId`，可以额外关联 `conceptId`。某个知识点过去已有「自己实现」或其它证据，不得把引用它的新任务或其 criterion 标成已通过。
+-- 计划定义（发布数据）列出任务、知识点 id、criterion id。个人存储只写这些 id 上的状态与证据。
+-- **第一功能阶段只把这条边界写进约定和计划 JSON，不实现证据存储或表单。**
++- 计划定义（发布数据）列出任务、知识点 id、criterion id，以及每条验收是必需还是拓展。个人存储只写这些 id 上的状态与证据。
++- **第一功能阶段只把这条边界写进约定和计划 JSON，不实现证据存储或表单。** 阶段 3 开工时先以这些规则为准，再按小步实现记录层。
+ 
+ ### 3.3 验收与证据
+ 
+-每个任务写清**通过条件**（可观察、可复述）。证据字段至少支持：
++每个任务写清**通过条件**（可观察、可复述）。任务完成只看该任务定义里的**全部必需验收项**，由数据读取，不硬编码「三条」或「四条」。拓展项未完成不阻挡核心任务。
+ 
+-- 代码位置或 commit（路径、行号或 hash，手工粘贴即可）
+-- 实际测试或检查结果（例如「改未来 token，过去位置输出不变」）
+-- 自己的解释（口述 shape / mask / 失败原因）
++**证据来源与检查结果分开。**「有证据」不等于「通过」，「做过检查」不等于「验证通过」。
+ 
+-每条证据必须带 **来源**：
++每项验收至少区分结果：
++
++| 结果 | 含义 |
++|---|---|
++| 未检查 | 还没有按该条做过检查 |
++| 未通过 | 做过检查，当前明确未达到条件 |
++| 用户自报通过 | 用户明确确认达到条件，并记下对应依据 |
++
++每条记录还要带 **来源**：
+ 
+ | source | 含义 |
+ |---|---|
+ | `user_reported` | 用户自己填写或勾选 |
+ | `auto` | 本站或本地脚本实际跑过并写入 |
+ 
+-初期全部允许 `user_reported`。界面必须能看出自报与自动的区别。没有自动检查时**不得**生成 `auto` 记录，不得把勾选显示成「测试已通过」。
++`user_reported` 表示来源，**不表示成功**。没有自动脚本时只生成 `user_reported`，不能显示成自动验证通过。界面必须能看出自报与自动的区别。
++
++失败后修好可追加新结果，**保留**原错误记录。完成状态依据**当前**明确的验收结果，不能因历史上曾通过而忽略后来明确的失败。无需引入复杂事件系统。
++
++同一份代码或测试输出可以关联多个验收项，但每项仍须明确对应与结果，不能自动泛化为全部通过。
++
++默认一次学习只需简短记录：做了什么；检查结果及代码位置；下一步。解释可写一句要点，不要求长报告。允许一句可选备注「查 API／提示后完成／看过参考后重写」；不新增评分，不把求助当处罚。
+ 
+-建议进入下一任务的条件（建议，不是硬锁）：该任务声明的通过条件都有**针对该 taskId + criterionId** 的证据；关联知识点至少有「自己实现」或「能解释」之一为用户记录。概念层记录只用于补基础提示和日后复习，**不能**单独把新任务勾成完成。未满足时首页仍停在当前主要任务，但教材与后续章仍可打开。
++卡点尽量具体，例如「拆头后不知道为何需要 transpose」，而不是「不会 PyTorch」。
++
++满足全部必需验收项后，提示「进入下一任务」，由用户确认切换。不随日历或最后一次勾选自动推进。手动浏览或选择后续任务，不代表补齐此前的完成状态。未满足时首页仍停在当前主要任务。教材与后续章始终可打开。
+ 
+ ### 3.4 当前任务与推进
+ 
+-- 首页只突出**一个**主要任务 + 必要补基础（例如卡在 `reshape` 时显示第 11 章对应小节）。
++- 首页只突出**一个**主要任务 + 必要补基础（例如卡在 `reshape` 时显示第 11 章对应小节）。首页突出下一动作，详情按需展开。
+ - 任务未完成就继续该任务；**不按日历把第 1 周自动换成第 2 周**。
+ - 用户可手动选择当前阶段（仍是同一条主线上的实验室 / 核验助手 / 专项）。
+ - 未通过验收不隐藏教材、参考答案或后面章节。
+@@ -95,10 +110,23 @@
+ ### 3.6 机制落地节奏（禁止一次做完）
+ 
+ 1. **展示：** 当前任务、教材、验收条件、关联知识点名称。
+-2. **记录：** 四档状态、证据、卡点。
++2. **记录：** 四个独立维度、验收结果（含失败）、卡点。任务完成只看必需验收项。
+ 3. **复习：** 到期队列与失败后的重练。
+ 
+-对应工程阶段见 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)。不因本节把证据表单和复习队列塞进第一阶段。
++对应工程阶段见 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)。不因本节把证据表单和复习队列塞进第一阶段。阶段 3 开工时先统一本节规则，再按该文件列出的小步实现，不另开功能范围。
++
++### 3.7 求助规范
++
++允许有层次地学习，再验证独立能力。「独立实现」是**最终能脱离答案完成**，不是学习期间从未接受帮助。查 API 正常。网站不代写核心算法。
++
++把「自检通过后才能看参考」当作**学习顺序建议**，避免一直检查失败就无法求助。建议流程：
++
++1. 自己写输入输出、shape，并留下一次实现尝试。
++2. 求助时优先请求解释报错、定位可疑步骤或给反例。
++3. 仍卡住时可以看局部示例或参考实现。
++4. 看过后关闭参考，重新实现关键部分，并换输入验证。
++
++每个任务安排一个适当的小变式，检查能否迁移即可，不建设题库或评分引擎。下一次学习开始可用几分钟解释或复写一个关键步骤；这是练习说明，自动复习队列仍留阶段 3b。
+ 
+ ## 4. 完整示例：小模型学习实验室 — Attention
+ 
+@@ -120,8 +148,9 @@
+ - **写在哪里：** 本机空文件（例如 `~/llm-lab/attn.py`），不要写进 `projects/` 六个旧目录
+ - **输入：** 单头为 Q/K/V，形状 `[B, T, D]`；多头再按 H 拆成 `[B, H, T, Dh]`，`Dh = D / H`；位置 t 只能看 0…t
+ - **输出：** 与 Q 同形状的上下文向量 `[B, T, D]`
+-- **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头 → 自检 → 读 7.14 扩多头 → 再自检。7.12 是无掩码手算理解材料；7.13 只在写完后对照，不要先抄完整实现
+-- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定输入分别核对单头和多头数值。对照须同掩码、缩放、dtype；多头还要同拆头顺序与输出投影。对有限数值逐元素满足 `abs(actual - expected) <= atol + rtol * abs(expected)`。不要把 7.12 的三位小数无掩码表当成因果数值标准。本站不运行 Python，不提供核心算法答案。
++- **步骤：** 先读 7.4 / 7.5 / 7.9 / 7.10 / 7.17 → 写单头并留下一次尝试 → 自检；卡住则按第 3.7 节分层求助 → 关闭参考后重写关键部分并换输入验证 → 读 7.14 扩多头 → 再自检。7.12 是无掩码手算理解材料；7.13 只在写完尝试后对照，不要先抄完整实现。
++- **检查：** 打印每步 shape；改未来 token，过去位置输出不变；关闭 dropout，用固定输入分别核对单头和多头数值。对照须同掩码、缩放、dtype；多头还要同拆头顺序与输出投影。先确认预期输出没有 NaN/Inf，再对有限数值逐元素满足 `abs(actual - expected) <= atol + rtol * abs(expected)`。不要把 7.12 的三位小数无掩码表当成因果数值标准。本站不运行 Python，不提供核心算法答案。
++- **小变式（迁移检查，不是额外门槛）：** 任选一项即可：换 batch 或序列长度并先预测 shape 再运行；换合法头数，检查拆头与拼头；故意改错 softmax 维度或 mask 方向，说清哪个检查会失败。
+ - **教材链接：** 必须指向第 7、11 章中实际存在的小节标题（由计划 JSON 的 `section` 字段与 Markdown `##` 对齐）
+ - 补基础：class / reshape / broadcasting 链到第 11 章对应小节
+ - SpongebobLite 仅作对照入口，标「对照用，不是本周作业仓库」
+@@ -133,39 +162,40 @@
+ | `rewrite` | `attention` | 空文件中重写核心计算（先单头后多头） |
+ | `shapes` | `tensor-shape` | 能讲清每一步 shape |
+ | `causal` | `causal-mask` | 未来不影响过去 |
+-| `numeric` | `attention` | 关闭 dropout；固定输入；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影；组合容差 `abs(actual - expected) <= atol + rtol * abs(expected)`；7.12 不是因果数值标准 |
++| `numeric` | `attention` | 关闭 dropout；固定输入；与掩码、缩放、dtype 一致的可信参考比较；多头统一拆头顺序和输出投影；先确认没有 NaN/Inf，再按组合容差 `abs(actual - expected) <= atol + rtol * abs(expected)` 比较有限数值；7.12 不是因果数值标准 |
+ 
+-这四条是 `lab.attention.causal-mha` 的验收，不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
++这四条都是 `lab.attention.causal-mha` 的**必需**验收。完成与否读取任务定义里的全部必需项，不因为一共有四条就写死「必须四条」，也不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
+ 
+-**用户之后可记录（第二机制层）**
++**用户之后可记录（第二机制层；本轮尚未实现表单）**
+ 
+-- 任务：实现 / 验证 / 解释 分开勾选，均为 `user_reported`，除非将来接上自动脚本
++- 每条必需验收：未检查 / 未通过 / 用户自报通过，来源默认为 `user_reported`
++- 失败记录保留；修好后追加新结果；当前结果决定是否完成
+ - 证据键：`taskId + criterionId`，可选 `conceptId`
+-- 知识点 `causal-mask` 的四档状态可被第 2 周 decoder 任务看到；但第 2 周任务仍要自己的 criterion 证据
++- 知识点 `causal-mask` 的四个独立维度可被第 2 周 decoder 任务看到；第 2 周任务仍要自己的必需验收，不得因概念历史自动完成
++- 不要求给 `tensor-shape` 另造「实现」作业才能推进
+ 
+ **建议进入下一任务（例如 embedding + 最小 decoder）当且仅当**
+ 
+-- 本任务三条 criterion 都有对应证据；且
+-- `attention`、`causal-mask`、`tensor-shape` 上至少有「自己实现」或「能解释」的用户记录。
++- 本任务全部必需验收项的**当前**结果为用户自报通过。
+ 
+-未满足时仍显示本任务为当前主要任务。用户仍可打开第 9 章或第 2 周教材。日历到了第 2 周也不自动切换当前任务。
++满足后提示用户确认切换，不自动跳走。概念层不必再勾一套「自己实现／能解释」才能推进。未满足时仍显示本任务为当前主要任务。用户仍可打开第 9 章或第 2 周教材。日历到了第 2 周也不自动切换当前任务。
+ 
+ ## 5. 学习状态
+ 
+-四种状态分开记录，互不自动推导。状态挂在**知识点**上；任务完成是「该任务各 criterion 是否已有对应证据」的汇总，不是第四套平行掌握度，也不是把概念状态复制成任务完成。
++四个独立维度分开记录，互不自动推导。它们挂在**知识点**上，用于薄弱点、历史和日后复习，**不是**第二套任务推进门槛。任务完成是「该任务全部必需验收项的当前结果是否为通过」的汇总，不是第四套平行掌握度，也不是把概念状态复制成任务完成。不要求每个概念都填满四项。
+ 
+-| 状态 | 含义 | 不是 |
++| 维度 | 含义 | 不是 |
+ |---|---|---|
+ | 读过 | 打开过或标记过对应教材 | 不是已掌握 |
+ | 自己实现 | 本人写过核心代码或数据步骤 | 不是测试已绿、不是能讲解 |
+-| 验证通过 | 按任务声明做过检查（shape、因果 mask、手算 scorer、小样本过拟合等） | 不能把手动勾选写成「自动测试通过」 |
++| 验证通过 | 按任务声明做过检查，且**当前**结果为通过（shape、因果 mask、手算 scorer、小样本过拟合等） | 做过检查但未通过不是验证通过；不能把手动勾选写成「自动测试通过」 |
+ | 能解释 | 能口述输入输出、失败原因或对照差异 | 不能由「已读」或 starter 全绿自动勾上 |
+ 
+ 现有 `localStorage` 键 `llm-course-progress` 的 `read` / `lab` / `project` / `guided` **继续保留、可读**。不得把「已读」迁移或自动转换成「已掌握」「自己实现」「验证通过」或「能解释」。
+ 
+-计划定义放在发布可用的数据中（`content/` 下的 JSON 或等价文件），内含任务、知识点 id、通过条件。个人完成记录与计划定义分开，存在本机存储。不预填任何完成状态。
++计划定义放在发布可用的数据中（`content/` 下的 JSON 或等价文件），内含任务、知识点 id、通过条件、必需／拓展。个人完成记录与计划定义分开，存在本机存储。不预填任何完成状态。
+ 
+-卡点（后做）：用户可写「卡在 broadcasting」；只影响首页补基础提示，不锁内容。
++卡点（阶段 3 记录层）：用户可写「拆头后不知道为何需要 transpose」；只影响首页补基础提示，不锁内容。
+ 
+ ## 6. 工程约束
+ 
+@@ -199,7 +229,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 6 节四种状态与证据来源仍留给记录层，本阶段不宣称已经实现。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果仍留给记录层，本阶段不宣称已经实现。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/pages.js b/js/pages.js
+index aac584b..2d32b4c 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -30,6 +30,12 @@
+     function listByRole(task, role) {
+       return task.materials.filter(function (item) { return item.role === role; });
+     }
++    function requiredCriteria(task) {
++      return (task.criteria || []).filter(function (item) { return item.required !== false; });
++    }
++    function stretchCriteria(task) {
++      return (task.criteria || []).filter(function (item) { return item.required === false; });
++    }
+     function home(last) {
+       if (options.planError) {
+         return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
+@@ -82,12 +88,17 @@
+         }).join("") + "</ol></section>" +
+         '<section class="entry-section"><h2>如何检查结果</h2><ol class="task-list">' +
+         after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ol><p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先自己写、先自检，再打开对照小节。</p></section>' +
++        '</ol><p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
+         '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
+-        task.criteria.map(function (item) {
++        requiredCriteria(task).map(function (item) {
+           return "<li><strong>" + escape(item.label || "验收") + "</strong><p>" + escape(item.text) + "</p></li>";
+         }).join("") +
+-        '</ol></section>' +
++        '</ol>' +
++        (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
++          stretchCriteria(task).map(function (item) {
++            return "<li><strong>" + escape(item.label || "拓展") + "</strong><p>" + escape(item.text) + "</p></li>";
++          }).join("") + "</ol>" : "") +
++        '</section>' +
+         '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
+         task.conceptIds.map(function (id) {
+           var concept = conceptsById[id];
+diff --git a/tools/test-course.js b/tools/test-course.js
+index ab4a89c..b9f5f9f 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -231,7 +231,14 @@ test('learning plan current task is executable Attention and points at real head
+   ['rewrite', 'shapes', 'causal', 'numeric'].forEach(id => {
+     assert.ok(criterionIds.includes(id), id);
+   });
++  task.criteria.forEach(item => {
++    assert.equal(item.required, true, item.id);
++  });
++  assert.equal(plan.dataBoundary.taskCompletionUsesRequiredCriteriaOnly, true);
++  assert.equal(plan.dataBoundary.conceptRecordsAreNotAdvancementGates, true);
++  assert.equal(plan.dataBoundary.evidenceSourceIsNotOutcome, true);
+   const numeric = task.criteria.find(item => item.id === 'numeric');
++  assert.match(numeric.text, /NaN|Inf/);
+   assert.match(numeric.text, /dropout/i);
+   assert.match(numeric.text, /单头/);
+   assert.match(numeric.text, /多头/);
+@@ -250,6 +257,11 @@ test('learning plan current task is executable Attention and points at real head
+   assert.match(checkStep.body, /atol \+ rtol \* abs/);
+   assert.doesNotMatch(checkStep.body, /两道门/);
+   assert.match(checkStep.body, /不是因果|不能当/);
++  const helpStep = task.steps.find(item => item.title.includes('求助'));
++  assert.ok(helpStep);
++  assert.match(helpStep.body, /重新实现|换一组输入|换输入/);
++  const variantStep = task.steps.find(item => item.title.includes('小变式'));
++  assert.ok(variantStep);
+   const multiStep = task.steps.find(item => item.title.includes('多头'));
+   assert.match(multiStep.body, /拆头顺序|输出投影/);
+   task.criteria.forEach(item => {
+@@ -313,6 +325,9 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.match(home, /#\/transformer\?section=/);
+   assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
+   assert.doesNotMatch(home, /自动测试通过/);
++  assert.match(home, /分层求助/);
++  assert.match(home, /小变式/);
++  assert.doesNotMatch(home, /拓展（不挡完成）/);
+   assert.doesNotMatch(home, /project-start/);
+   assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
+   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+@@ -323,6 +338,28 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.doesNotMatch(retired, /N 个可运行项目|个可运行项目/);
+ });
+ 
++test('phase 3 design docs agree on completion, help, and GQA stretch without claiming implementation', () => {
++  const os = fs.readFileSync(path.resolve(__dirname, '..', 'docs/PERSONAL_LEARNING_OS.md'), 'utf8');
++  const year = fs.readFileSync(path.resolve(__dirname, '..', 'docs/LEARNING_PLAN.md'), 'utf8');
++  const impl = fs.readFileSync(path.resolve(__dirname, '..', 'docs/IMPLEMENTATION_PLAN.md'), 'utf8');
++  const eightWeeks = year.split('## 6.')[0];
++  assert.match(os, /全部必需验收项/);
++  assert.match(os, /四个独立维度/);
++  assert.match(os, /表示来源，\*\*不表示成功\*\*/);
++  assert.match(os, /未检查/);
++  assert.match(os, /未通过/);
++  assert.match(os, /重新实现关键部分/);
++  assert.doesNotMatch(os, /本任务三条 criterion/);
++  assert.doesNotMatch(os, /至少有「自己实现」或「能解释」的用户记录/);
++  assert.match(year, /GQA 是拓展项/);
++  assert.match(eightWeeks, /\*\*不能\*\*用这项阻挡本周核心任务完成/);
++  assert.match(impl, /issue #3/);
++  assert.match(impl, /只同步计划设计/);
++  assert.match(impl, /GQA 为拓展项/);
++  assert.match(impl, /evidenceSystemImplemented|不实现/);
++  assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
++});
++
+ function softmaxRows(matrix) {
+   return matrix.map(row => {
+     const max = Math.max(...row);
