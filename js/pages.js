@@ -104,8 +104,13 @@
         return "未检查";
       }
       function criterionRecord(item, stretch) {
-        var current = learning.currentResult(task.id, item.id);
-        var evidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
+        var storedResult = learning.currentResult(task.id, item.id);
+        var storedEvidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
+        var draft = options.criterionDraft ? options.criterionDraft(task.id, item.id) : null;
+        var current = draft ? draft.result : storedResult;
+        var evidence = draft ? String(draft.evidence == null ? "" : draft.evidence) : storedEvidence;
+        var unsaved = !!(draft && (draft.result !== storedResult ||
+          String(draft.evidence || "").replace(/\s+/g, " ").trim() !== String(storedEvidence || "").replace(/\s+/g, " ").trim()));
         var radios = ["unchecked", "failed", "user_passed"].map(function (result) {
           return '<label class="check-choice"><input type="radio" name="c-' + escape(item.id) +
             '" data-check="' + escape(item.id) + '" value="' + result + '"' +
@@ -117,15 +122,21 @@
           return '<p class="page-note">曾经未通过' + (note ? "，当时依据：" + escape(note) : "") +
             "。完成只看当前结果。</p>";
         }).join("");
-        var blocked = learning.passBlocked && learning.passBlocked() === item.id
+        var blocked = learning.passBlocked && learning.passBlocked() === item.id && current === "user_passed"
           ? '<p class="page-note" role="alert">用户自报通过需要写下简短依据，例如检查结果或代码位置。</p>'
           : "";
+        var unsavedHtml = '<p class="page-note" data-unsaved="' + escape(item.id) + '"' +
+          (unsaved ? ' role="status"' : " hidden") +
+          ">本条尚未保存。点「保存本条记录」才会写入学习记录。</p>";
         return '<fieldset class="check-record"><legend>这条验收的当前结果</legend>' +
           '<div class="check-choices">' + radios + "</div>" +
           '<label class="note-field">简短依据<textarea data-evidence="' + escape(item.id) +
           '" rows="2">' + escape(evidence) + "</textarea></label>" +
+          '<p><button type="button" class="btn" data-save-check="' + escape(item.id) +
+          '">保存本条记录</button></p>' +
           blocked +
-          '<p class="page-note">用户自报通过时必填。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
+          unsavedHtml +
+          '<p class="page-note">点「保存本条记录」把当前结果和依据一起写入。用户自报通过时必填依据。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
           (stretch ? "拓展未完成不阻挡核心任务。" : "") + "</p>" +
           historyHtml +
           "</fieldset>";

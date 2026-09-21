@@ -82,6 +82,7 @@
   font: inherit;
 }
 .check-record .note-field textarea { min-height: 64px; }
+.check-record .btn { margin-top: var(--space-3); }
 .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
 .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
 .task-spec { margin: 0; max-width: 46em; }

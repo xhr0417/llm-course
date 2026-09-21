@@ -1,5 +1,5 @@
 diff --git a/DESIGN.md b/DESIGN.md
-index 0d120f4..1e4a3f3 100644
+index 0d120f4..6cf331b 100644
 --- a/DESIGN.md
 +++ b/DESIGN.md
 @@ -16,16 +16,16 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
@@ -7,7 +7,7 @@ index 0d120f4..1e4a3f3 100644
  - Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links.
  - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
 -- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
-+- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Marking 用户自报通过 requires a short evidence note for that check. Previous failed results keep their evidence. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
++- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
  - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
  - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
  - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
@@ -23,7 +23,7 @@ index 0d120f4..1e4a3f3 100644
 -Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
 +Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high, including record radios, concept checkboxes and short-record textareas. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Also verify learning-record save failure and confirm-next on home. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
 diff --git a/README.md b/README.md
-index f567a24..1a5b854 100644
+index f567a24..9c93e64 100644
 --- a/README.md
 +++ b/README.md
 @@ -12,7 +12,7 @@
@@ -31,7 +31,7 @@ index f567a24..1a5b854 100644
  ## 从哪里开始
  
 -打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。每一周都写清写什么、怎么检查、必需做到哪里。本站不代写核心算法。
-+打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。每一周都写清写什么、怎么检查、必需做到哪里。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过）；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
++打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。每一周都写清写什么、怎么检查、必需做到哪里。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过），点「保存本条记录」才写入；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
  
  教材、交互演示和搜索仍可用：
  
@@ -56,7 +56,7 @@ index db93d46..e15c9d7 100644
    "stages": [
      {
 diff --git a/css/course.css b/css/course.css
-index 288ff4a..2d3e0a2 100644
+index 288ff4a..1ae6337 100644
 --- a/css/course.css
 +++ b/css/course.css
 @@ -5,7 +5,7 @@
@@ -68,7 +68,7 @@ index 288ff4a..2d3e0a2 100644
  :where(button, .btn):active { transform: translateY(1px); }
  .skip-link { position: fixed; top: var(--space-2); left: var(--space-4); z-index: 100; transform: translateY(-200%); padding: var(--space-3); background: var(--bg-panel); color: var(--accent-text); }
  .skip-link:focus { transform: translateY(0); }
-@@ -39,6 +39,49 @@
+@@ -39,6 +39,50 @@
  }
  .task-list, .concept-list { margin: 0; padding-left: 1.25em; max-width: 46em; }
  .task-list li, .concept-list li { margin: 0 0 var(--space-3); }
@@ -115,11 +115,12 @@ index 288ff4a..2d3e0a2 100644
 +  font: inherit;
 +}
 +.check-record .note-field textarea { min-height: 64px; }
++.check-record .btn { margin-top: var(--space-3); }
  .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
  .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
  .task-spec { margin: 0; max-width: 46em; }
 diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
-index 1660cd9..316a6ca 100644
+index 1660cd9..86754ce 100644
 --- a/docs/IMPLEMENTATION_PLAN.md
 +++ b/docs/IMPLEMENTATION_PLAN.md
 @@ -105,7 +105,7 @@
@@ -127,12 +128,12 @@ index 1660cd9..316a6ca 100644
  **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
  
 -**本轮（issue #4）：** 阶段 3 第一步收尾。前八周任务写入与手动选周已完成；本轮只补齐第 3 周 next-token 对齐、第 2 周组装后因果性、第 8 周真实 A/B 预测。`evidenceSystemImplemented` 仍为 `false`。**不实现**记录表单、卡点存储、任务上下文导航。第 0／24 章遗留修改仍单独处理。
-+**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过，且每条有简短依据；更新结果时旧结果与当时依据一并保留；无依据不能算通过。拓展不挡；概念历史不自动完成新任务；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
++**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过，且每条有简短依据；每条用「保存本条记录」提交结果和依据；新提交有变化时保留旧快照，完全相同不重复追加；无依据不能算通过，也不改写已有有效记录。拓展不挡；概念历史不自动完成新任务；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
  
  **开工后的实现顺序（可验收小步，不扩大功能）：**
  
 diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
-index cebda49..3ec0185 100644
+index cebda49..ff2912f 100644
 --- a/docs/PERSONAL_LEARNING_OS.md
 +++ b/docs/PERSONAL_LEARNING_OS.md
 @@ -61,7 +61,7 @@
@@ -144,7 +145,7 @@ index cebda49..3ec0185 100644
  
  ### 3.3 验收与证据
  
-@@ -166,17 +166,18 @@
+@@ -166,17 +166,19 @@
  
  这四条都是 `lab.attention.causal-mha` 的**必需**验收。完成与否读取任务定义里的全部必需项，不因为一共有四条就写死「必须四条」，也不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
  
@@ -153,8 +154,9 @@ index cebda49..3ec0185 100644
  
  - 每条必需验收：未检查 / 未通过 / 用户自报通过，来源默认为 `user_reported`
 -- 失败记录保留；修好后追加新结果；当前结果决定是否完成
-+- 用户自报通过必须写下该条的简短依据（检查结果、代码位置或一句解释）；无依据不算完成
-+- 失败记录保留当时依据；修好后追加新结果，不覆盖旧依据；当前结果决定是否完成
++- 每条验收用「保存本条记录」把当前结果和依据一起写入；未保存的修改有提示，不因换周等重绘而悄悄消失
++- 用户自报通过必须写下该条的简短依据（检查结果、代码位置或一句解释）；无依据不算完成，也不改写已有有效记录
++- 新提交若结果或依据有变化，旧快照进历史；完全相同则不重复追加；当前结果决定是否完成
  - 证据键：`taskId + criterionId`，可选 `conceptId`
  - 知识点 `causal-mask` 的四个独立维度可被第 2 周 decoder 任务看到；第 2 周任务仍要自己的必需验收，不得因概念历史自动完成
  - 不要求给 `tensor-shape` 另造「实现」作业才能推进
@@ -166,7 +168,7 @@ index cebda49..3ec0185 100644
  
  满足后提示用户确认切换，不自动跳走。概念层不必再勾一套「自己实现／能解释」才能推进。未满足时仍显示本任务为当前主要任务。用户仍可打开第 9 章或第 2 周教材。日历到了第 2 周也不自动切换当前任务。
  
-@@ -191,11 +192,11 @@
+@@ -191,11 +193,11 @@
  | 验证通过 | 按任务声明做过检查，且**当前**结果为通过（shape、因果 mask、手算 scorer、小样本过拟合等） | 做过检查但未通过不是验证通过；不能把手动勾选写成「自动测试通过」 |
  | 能解释 | 能口述输入输出、失败原因或对照差异 | 不能由「已读」或 starter 全绿自动勾上 |
  
@@ -180,7 +182,7 @@ index cebda49..3ec0185 100644
  
  ## 6. 工程约束
  
-@@ -229,7 +230,7 @@
+@@ -229,7 +231,7 @@
  
  ## 10. DESIGN.md 随第一功能阶段更新的条目
  
@@ -202,25 +204,33 @@ index 725f65c..41a1695 100644
    <script src="js/search.js"></script>
    <script src="js/app.js"></script>
 diff --git a/js/app.js b/js/app.js
-index d4c42eb..2afc022 100644
+index d4c42eb..3c073cc 100644
 --- a/js/app.js
 +++ b/js/app.js
-@@ -12,6 +12,14 @@
+@@ -8,10 +8,22 @@
+   var chapters = [], tracks = [], references = [], current = null, currentPath = null, activeTrack = null, pages, search;
+   var cache = {}, requestId = 0, pendingSection = null;
+   var learningPlan = null, planError = null, selectedTaskId = stored("llm-course-current-task");
++  var criterionDrafts = {};
+   var reader = CourseReader.create({ root: root, tocNav: byId("tocNav"), escapeHtml: escape });
    function stored(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
    function remember(key, value) { try { localStorage.setItem(key, value); } catch (error) { /* Session remains usable without persistence. */ } }
    var progress = CourseProgress.create({ onChange: function () { updateProgress(); } });
 +  var learning = CourseLearning.create({ onChange: function () { updateStorageNotice(); } });
++  function draftKey(taskId, id) { return String(taskId || "") + "::" + String(id || ""); }
++  function normalizeNote(text) { return String(text || "").replace(/\s+/g, " ").trim(); }
++  function criterionDraft(taskId, id) { return criterionDrafts[draftKey(taskId, id)] || null; }
 +  function pageOptions(plan, error) {
 +    return {
 +      chapters: chapters, tracks: tracks, plan: plan, planError: error,
 +      selectedTaskId: selectedTaskId, references: references, progress: progress,
-+      learning: learning, escapeHtml: escape
++      learning: learning, criterionDraft: criterionDraft, escapeHtml: escape
 +    };
 +  }
    function closeSidebar() {
      sidebar.classList.remove("open"); byId("overlay").classList.remove("show");
      byId("menuToggle").setAttribute("aria-expanded", "false");
-@@ -56,9 +64,26 @@
+@@ -56,9 +68,26 @@
        readButton.classList.toggle("done", read);
        readButton.setAttribute("aria-pressed", String(read));
      }
@@ -250,7 +260,15 @@ index d4c42eb..2afc022 100644
    }
    function renderNav() {
      var items = activeTrack ? activeTrack.chapters.map(function (id) { return chapters.find(function (chapter) { return chapter.id === id; }); }) : chapters;
-@@ -98,21 +123,7 @@
+@@ -85,6 +114,7 @@
+   }
+   function route() {
+     if (location.hash && !location.hash.startsWith("#/")) return;
++    if (currentPath === "home") syncDraftsFromDom();
+     var token = ++requestId, locationRoute = routes.parse(location.hash), path = locationRoute.page;
+     if (pendingSection && pendingSection.id !== path) pendingSection = null;
+     current = null; currentPath = path;
+@@ -98,21 +128,7 @@
      });
      if (path === "home") {
        entry(pages.home(readLast()), "我的学习");
@@ -273,7 +291,7 @@ index d4c42eb..2afc022 100644
        return;
      }
      if (path === "catalog") return entry(pages.catalog(), "全部章节");
-@@ -164,6 +175,77 @@
+@@ -164,6 +180,137 @@
        byId("retryChapter").addEventListener("click", route);
      });
    }
@@ -285,9 +303,58 @@ index d4c42eb..2afc022 100644
 +  }
 +  function paintHome() {
 +    var y = typeof window.scrollY === "number" ? window.scrollY : 0;
++    syncDraftsFromDom();
 +    entry(pages.home(readLast()), "我的学习");
 +    bindHome();
 +    if (typeof window.scrollTo === "function") window.scrollTo(0, y);
++  }
++  function readCriterionForm(id) {
++    var task = currentPlanTask();
++    var draft = task ? criterionDraft(task.id, id) : null;
++    var area = root.querySelector('textarea[data-evidence="' + id + '"]');
++    return {
++      result: draft ? draft.result : (task ? learning.currentResult(task.id, id) : "unchecked"),
++      evidence: area ? area.value : (draft ? draft.evidence : "")
++    };
++  }
++  function formDiffers(taskId, id, form) {
++    return form.result !== learning.currentResult(taskId, id)
++      || normalizeNote(form.evidence) !== normalizeNote(learning.currentEvidence(taskId, id));
++  }
++  function rememberDraft(id, form) {
++    var task = currentPlanTask();
++    if (!task) return;
++    var next = form || readCriterionForm(id);
++    if (formDiffers(task.id, id, next)) criterionDrafts[draftKey(task.id, id)] = next;
++    else delete criterionDrafts[draftKey(task.id, id)];
++  }
++  function setUnsavedNotice(id, dirty) {
++    var note = root.querySelector('[data-unsaved="' + id + '"]');
++    if (!note) return;
++    note.hidden = !dirty;
++    if (dirty) note.setAttribute("role", "status");
++    else note.removeAttribute("role");
++  }
++  function markDraft(id, form) {
++    var task = currentPlanTask();
++    if (!task) return;
++    rememberDraft(id, form);
++    setUnsavedNotice(id, !!criterionDraft(task.id, id));
++  }
++  function syncDraftsFromDom() {
++    if (!root) return;
++    root.querySelectorAll("textarea[data-evidence]").forEach(function (area) {
++      rememberDraft(area.getAttribute("data-evidence"));
++    });
++  }
++  function saveCriterion(id) {
++    var task = currentPlanTask();
++    if (!task) return;
++    var form = readCriterionForm(id);
++    var ok = learning.recordCriterion(task.id, id, form.result, form.evidence);
++    if (ok) delete criterionDrafts[draftKey(task.id, id)];
++    else criterionDrafts[draftKey(task.id, id)] = form;
++    paintHome();
 +  }
 +  function bindHome() {
 +    updateStorageNotice();
@@ -299,6 +366,7 @@ index d4c42eb..2afc022 100644
 +        var week = Number(button.getAttribute("data-week"));
 +        var task = learningPlan.tasks.find(function (item) { return item.weekBudget === week; });
 +        if (!task) return;
++        syncDraftsFromDom();
 +        selectedTaskId = task.id;
 +        remember("llm-course-current-task", task.id);
 +        pages = CoursePages(pageOptions(learningPlan, planError));
@@ -308,12 +376,22 @@ index d4c42eb..2afc022 100644
 +    root.querySelectorAll("input[data-check]").forEach(function (input) {
 +      input.addEventListener("change", function () {
 +        if (!input.checked) return;
-+        var task = currentPlanTask();
-+        if (!task) return;
 +        var id = input.getAttribute("data-check");
 +        var area = root.querySelector('textarea[data-evidence="' + id + '"]');
-+        learning.recordCriterion(task.id, id, input.value, area ? area.value : "");
-+        paintHome();
++        markDraft(id, { result: input.value, evidence: area ? area.value : "" });
++      });
++    });
++    root.querySelectorAll("textarea[data-evidence]").forEach(function (area) {
++      area.addEventListener("input", function () {
++        markDraft(area.getAttribute("data-evidence"));
++      });
++      area.addEventListener("change", function () {
++        markDraft(area.getAttribute("data-evidence"));
++      });
++    });
++    root.querySelectorAll("[data-save-check]").forEach(function (button) {
++      button.addEventListener("click", function () {
++        saveCriterion(button.getAttribute("data-save-check"));
 +      });
 +    });
 +    root.querySelectorAll("input[data-concept]").forEach(function (input) {
@@ -351,7 +429,7 @@ index d4c42eb..2afc022 100644
    function initShell() {
      document.querySelector(".skip-link").addEventListener("click", function (event) {
        event.preventDefault(); root.focus(); window.scrollTo({ top: 0 });
-@@ -187,7 +269,7 @@
+@@ -187,7 +334,7 @@
      byId("backTop").addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
      document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
    }
@@ -360,7 +438,7 @@ index d4c42eb..2afc022 100644
    function startRoutingAndSearch() {
      if (search) return;
      window.addEventListener("hashchange", route);
-@@ -208,8 +290,7 @@
+@@ -208,8 +355,7 @@
      if (plan && selectedTaskId && !plan.tasks.some(function (item) { return item.id === selectedTaskId; })) {
        selectedTaskId = null;
      }
@@ -370,7 +448,7 @@ index d4c42eb..2afc022 100644
      startRoutingAndSearch();
      if (currentPath === "home") route();
    }
-@@ -223,8 +304,7 @@
+@@ -223,8 +369,7 @@
    Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json")]).then(function (data) {
      chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
      renderer.setCatalog({ chapters: chapters, tracks: tracks });
@@ -382,10 +460,10 @@ index d4c42eb..2afc022 100644
      return loadLearningPlan();
 diff --git a/js/learning.js b/js/learning.js
 new file mode 100644
-index 0000000..8b12421
+index 0000000..a269b87
 --- /dev/null
 +++ b/js/learning.js
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,240 @@
 +(function (root, factory) {
 +  if (typeof module === "object" && module.exports) module.exports = factory(root);
 +  else root.CourseLearning = factory(root);
@@ -420,8 +498,25 @@ index 0000000..8b12421
 +    var blockedPassId = "";
 +    var onChange = typeof options.onChange === "function" ? options.onChange : function () {};
 +
++    function normalizeEvidence(text) {
++      return String(text || "").replace(/\s+/g, " ").trim();
++    }
++
 +    function hasEvidence(text) {
-+      return String(text || "").replace(/\s+/g, " ").trim().length > 0;
++      return normalizeEvidence(text).length > 0;
++    }
++
++    function cloneEntry(item) {
++      return {
++        result: item.result,
++        source: item.source || SOURCE,
++        evidence: item.evidence || "",
++        at: item.at || Date.now()
++      };
++    }
++
++    function sameSnapshot(a, b) {
++      return !!(a && b && a.result === b.result && normalizeEvidence(a.evidence) === normalizeEvidence(b.evidence));
 +    }
 +
 +    function persist() {
@@ -493,7 +588,7 @@ index 0000000..8b12421
 +
 +    function recordCriterion(taskId, criterionId, result, evidence) {
 +      if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return false;
-+      var note = String(evidence == null ? "" : evidence).replace(/\s+/g, " ").trim();
++      var note = normalizeEvidence(evidence);
 +      if (result === RESULTS.user_passed && !hasEvidence(note)) {
 +        blockedPassId = String(criterionId || "");
 +        onChange();
@@ -503,16 +598,14 @@ index 0000000..8b12421
 +      var key = criterionKey(taskId, criterionId);
 +      var record = recordOf(taskId, criterionId) || { current: null, history: [] };
 +      var history = Array.isArray(record.history) ? record.history.slice() : [];
-+      if (record.current && record.current.result && record.current.result !== result) {
-+        history.push({
-+          result: record.current.result,
-+          source: record.current.source || SOURCE,
-+          evidence: record.current.evidence || "",
-+          at: record.current.at || Date.now()
-+        });
++      var next = { result: result, source: SOURCE, evidence: note, at: Date.now() };
++      if (record.current && record.current.result) {
++        var prev = cloneEntry(record.current);
++        if (sameSnapshot(prev, next)) return true;
++        history.push(prev);
 +      }
 +      state.criteria[key] = {
-+        current: { result: result, source: SOURCE, evidence: note, at: Date.now() },
++        current: next,
 +        history: history
 +      };
 +      persist();
@@ -612,7 +705,7 @@ index 0000000..8b12421
 +  return { create: create, KEY: KEY, RESULTS: RESULTS };
 +});
 diff --git a/js/pages.js b/js/pages.js
-index 340ba99..8091a08 100644
+index 340ba99..a4c00f0 100644
 --- a/js/pages.js
 +++ b/js/pages.js
 @@ -4,6 +4,17 @@
@@ -633,7 +726,7 @@ index 340ba99..8091a08 100644
      function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
      function referenceFor(chapterId) { return references.find(function (item) { return item.chapter === chapterId; }) || null; }
      function name(item) { return item.shortTitle || item.title; }
-@@ -87,6 +98,70 @@
+@@ -87,6 +98,81 @@
        var resume = previous ? '<section class="resume-panel"><span class="page-label">上次打开的教材</span><h2>' +
          escape(name(previous)) + '</h2><p>这是阅读位置，不是练习完成，也不表示已掌握。</p>' +
          action("继续阅读", routes.href(previous.id, lastTrack)) + '</section>' : "";
@@ -643,8 +736,13 @@ index 340ba99..8091a08 100644
 +        return "未检查";
 +      }
 +      function criterionRecord(item, stretch) {
-+        var current = learning.currentResult(task.id, item.id);
-+        var evidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
++        var storedResult = learning.currentResult(task.id, item.id);
++        var storedEvidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
++        var draft = options.criterionDraft ? options.criterionDraft(task.id, item.id) : null;
++        var current = draft ? draft.result : storedResult;
++        var evidence = draft ? String(draft.evidence == null ? "" : draft.evidence) : storedEvidence;
++        var unsaved = !!(draft && (draft.result !== storedResult ||
++          String(draft.evidence || "").replace(/\s+/g, " ").trim() !== String(storedEvidence || "").replace(/\s+/g, " ").trim()));
 +        var radios = ["unchecked", "failed", "user_passed"].map(function (result) {
 +          return '<label class="check-choice"><input type="radio" name="c-' + escape(item.id) +
 +            '" data-check="' + escape(item.id) + '" value="' + result + '"' +
@@ -656,15 +754,21 @@ index 340ba99..8091a08 100644
 +          return '<p class="page-note">曾经未通过' + (note ? "，当时依据：" + escape(note) : "") +
 +            "。完成只看当前结果。</p>";
 +        }).join("");
-+        var blocked = learning.passBlocked && learning.passBlocked() === item.id
++        var blocked = learning.passBlocked && learning.passBlocked() === item.id && current === "user_passed"
 +          ? '<p class="page-note" role="alert">用户自报通过需要写下简短依据，例如检查结果或代码位置。</p>'
 +          : "";
++        var unsavedHtml = '<p class="page-note" data-unsaved="' + escape(item.id) + '"' +
++          (unsaved ? ' role="status"' : " hidden") +
++          ">本条尚未保存。点「保存本条记录」才会写入学习记录。</p>";
 +        return '<fieldset class="check-record"><legend>这条验收的当前结果</legend>' +
 +          '<div class="check-choices">' + radios + "</div>" +
 +          '<label class="note-field">简短依据<textarea data-evidence="' + escape(item.id) +
 +          '" rows="2">' + escape(evidence) + "</textarea></label>" +
++          '<p><button type="button" class="btn" data-save-check="' + escape(item.id) +
++          '">保存本条记录</button></p>' +
 +          blocked +
-+          '<p class="page-note">用户自报通过时必填。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
++          unsavedHtml +
++          '<p class="page-note">点「保存本条记录」把当前结果和依据一起写入。用户自报通过时必填依据。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
 +          (stretch ? "拓展未完成不阻挡核心任务。" : "") + "</p>" +
 +          historyHtml +
 +          "</fieldset>";
@@ -704,7 +808,7 @@ index 340ba99..8091a08 100644
        return header(stage.title + "—" + (task.shortTitle || task.title),
          "当前练习：" + task.title + "。先看写什么、怎么检查、必需做到哪里。",
          "我的学习") +
-@@ -112,20 +187,15 @@
+@@ -112,20 +198,15 @@
          "</ol>" : "") +
          '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
          '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
@@ -809,7 +913,7 @@ index d00e2aa..2ba08fa 100644
      "js/search.js",
      "js/app.js"
 diff --git a/tools/test-course.js b/tools/test-course.js
-index 2dee794..4823203 100644
+index 2dee794..19b4681 100644
 --- a/tools/test-course.js
 +++ b/tools/test-course.js
 @@ -5,6 +5,7 @@ const path = require('node:path');
@@ -837,7 +941,7 @@ index 2dee794..4823203 100644
      references,
      progress: { isRead: () => false },
      escapeHtml: value => String(value)
-@@ -392,6 +394,13 @@ test('primary entry shows the Attention lab and retires homework projects from m
+@@ -392,6 +394,14 @@ test('primary entry shows the Attention lab and retires homework projects from m
    assert.match(home, /第 8 周/);
    assert.match(home, /data-week="2"/);
    assert.doesNotMatch(home, /自动测试通过/);
@@ -847,11 +951,12 @@ index 2dee794..4823203 100644
 +  assert.match(home, /不是本站跑过的自动检查/);
 +  assert.match(home, /短记录/);
 +  assert.match(home, /简短依据/);
++  assert.match(home, /保存本条记录/);
 +  assert.doesNotMatch(home, /进入下一任务/);
    assert.match(home, /分层求助/);
    assert.match(home, /小变式/);
    assert.doesNotMatch(home, /拓展（不挡完成）/);
-@@ -434,7 +443,7 @@ test('home can show another week without treating that as earlier completion', (
+@@ -434,7 +444,7 @@ test('home can show another week without treating that as earlier completion', (
    assert.doesNotMatch(week8, /自动测试通过/);
  });
  
@@ -860,7 +965,7 @@ index 2dee794..4823203 100644
    const os = fs.readFileSync(path.resolve(__dirname, '..', 'docs/PERSONAL_LEARNING_OS.md'), 'utf8');
    const year = fs.readFileSync(path.resolve(__dirname, '..', 'docs/LEARNING_PLAN.md'), 'utf8');
    const impl = fs.readFileSync(path.resolve(__dirname, '..', 'docs/IMPLEMENTATION_PLAN.md'), 'utf8');
-@@ -445,6 +454,7 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
+@@ -445,6 +455,7 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
    assert.match(os, /未检查/);
    assert.match(os, /未通过/);
    assert.match(os, /重新实现关键部分/);
@@ -868,7 +973,7 @@ index 2dee794..4823203 100644
    assert.doesNotMatch(os, /本任务三条 criterion/);
    assert.doesNotMatch(os, /至少有「自己实现」或「能解释」的用户记录/);
    assert.match(year, /GQA 是拓展项/);
-@@ -453,7 +463,8 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
+@@ -453,7 +464,8 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
    assert.match(impl, /issue #4/);
    assert.match(impl, /前八周任务写入/);
    assert.match(impl, /GQA 为拓展项/);
@@ -878,7 +983,7 @@ index 2dee794..4823203 100644
    assert.match(impl, /组装后整模型因果性|组装后因果性/);
    assert.match(impl, /next-token 对齐/);
    assert.match(impl, /真实 A\/B/);
-@@ -622,3 +633,172 @@ test('home week picker switches the current exercise and remembers it', async ()
+@@ -622,3 +634,261 @@ test('home week picker switches the current exercise and remembers it', async ()
    await harness.waitFor(() => /拼最小 decoder/.test(restored.text()));
    assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
  });
@@ -896,6 +1001,7 @@ index 2dee794..4823203 100644
 +  const area = app.content.querySelector('textarea[data-evidence="' + id + '"]');
 +  assert.ok(area, id);
 +  area.value = text;
++  area.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
 +}
 +
 +function clickChoice(app, check, value) {
@@ -904,10 +1010,21 @@ index 2dee794..4823203 100644
 +  input.click();
 +}
 +
++function saveCheck(app, id) {
++  const button = app.content.querySelector('[data-save-check="' + id + '"]');
++  assert.ok(button, 'save ' + id);
++  button.click();
++}
++
++function unsavedNote(app, id) {
++  return app.content.querySelector('[data-unsaved="' + id + '"]');
++}
++
 +function passRequired(app, ids) {
 +  ids.forEach(id => {
 +    fillEvidence(app, id, '依据 ' + id);
 +    clickChoice(app, id, 'user_passed');
++    saveCheck(app, id);
 +  });
 +}
 +
@@ -923,10 +1040,21 @@ index 2dee794..4823203 100644
 +  assert.equal(learning.currentResult(week1.id, 'numeric'), 'unchecked');
 +  assert.equal(learning.isTaskComplete(week1), false);
 +  learning.recordCriterion(week1.id, 'rewrite', 'failed', '数值对照失败，位置 attn.py');
++  learning.recordCriterion(week1.id, 'rewrite', 'failed', '失败 D');
++  learning.recordCriterion(week1.id, 'rewrite', 'failed', '失败 D');
++  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '失败 D');
++  assert.equal(learning.failedHistory(week1.id, 'rewrite').length, 1);
++  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '数值对照失败，位置 attn.py');
++  assert.equal(learning.recordCriterion(week1.id, 'rewrite', 'user_passed', ''), false);
++  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'failed');
++  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '失败 D');
 +  assert.equal(learning.isTaskComplete(week1), false);
 +  ['rewrite', 'shapes', 'causal'].forEach(id => learning.recordCriterion(week1.id, id, 'user_passed', '依据 ' + id));
 +  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '依据 rewrite');
-+  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '数值对照失败，位置 attn.py');
++  assert.deepEqual(
++    learning.failedHistory(week1.id, 'rewrite').map(item => item.evidence),
++    ['数值对照失败，位置 attn.py', '失败 D']
++  );
 +  assert.equal(learning.isTaskComplete(week1), false);
 +  learning.recordCriterion(week1.id, 'numeric', 'user_passed');
 +  assert.equal(learning.isTaskComplete(week1), false);
@@ -937,7 +1065,10 @@ index 2dee794..4823203 100644
 +  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
 +  const saved = JSON.parse(storage.getItem(learningModule.KEY));
 +  assert.equal(saved.criteria[week1.id + '::rewrite'].current.source, 'user_reported');
-+  assert.equal(saved.criteria[week1.id + '::rewrite'].history[0].evidence, '数值对照失败，位置 attn.py');
++  assert.deepEqual(
++    saved.criteria[week1.id + '::rewrite'].history.map(item => item.evidence),
++    ['数值对照失败，位置 attn.py', '失败 D']
++  );
 +
 +  ['read', 'implemented', 'verified', 'explained'].forEach(dim => {
 +    learning.setConceptDim('causal-mask', dim, true);
@@ -971,14 +1102,17 @@ index 2dee794..4823203 100644
 +  assert.doesNotMatch(app.html(), /taskId|criterionId|lab\.attention|<code>/);
 +
 +  clickChoice(app, 'rewrite', 'user_passed');
++  saveCheck(app, 'rewrite');
 +  await harness.waitFor(() => /需要写下简短依据/.test(app.text()));
-+  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="unchecked"]').checked, true);
++  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="user_passed"]').checked, true);
 +  assert.doesNotMatch(app.text(), /进入下一任务/);
 +
 +  fillEvidence(app, 'rewrite', '数值对照失败，位置 attn.py');
 +  clickChoice(app, 'rewrite', 'failed');
++  saveCheck(app, 'rewrite');
 +  fillEvidence(app, 'rewrite', '修复后对照通过');
 +  clickChoice(app, 'rewrite', 'user_passed');
++  saveCheck(app, 'rewrite');
 +  await harness.waitFor(() => /曾经未通过/.test(app.text()));
 +  assert.match(app.text(), /数值对照失败，位置 attn.py/);
 +  assert.match(app.text(), /修复后对照通过/);
@@ -1041,6 +1175,7 @@ index 2dee794..4823203 100644
 +  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
 +  fillEvidence(app, 'rewrite', '依据 rewrite');
 +  clickChoice(app, 'rewrite', 'user_passed');
++  saveCheck(app, 'rewrite');
 +  await harness.waitFor(() => /学习记录无法保存/.test(app.byId('storageNotice').textContent || ''));
 +  assert.equal(app.byId('storageNotice').hidden, false);
 +  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="user_passed"]').checked, true);
@@ -1050,4 +1185,63 @@ index 2dee794..4823203 100644
 +  await harness.waitFor(() => app.byId('advanceTask'));
 +  assert.match(app.text(), /小模型学习实验室—Attention/);
 +  assert.equal(app.localStorage.getItem('llm-course-learning'), null);
++});
++
++test('saving a check keeps evidence-only edits and consecutive fail snapshots', async () => {
++  const app = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
++
++  fillEvidence(app, 'rewrite', '失败 C');
++  clickChoice(app, 'rewrite', 'failed');
++  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
++  app.content.querySelector('[data-week="2"]').click();
++  await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
++  app.content.querySelector('[data-week="1"]').click();
++  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
++  assert.equal(app.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 C');
++  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
++  assert.equal(app.localStorage.getItem(learningModule.KEY), null);
++
++  saveCheck(app, 'rewrite');
++  await harness.waitFor(() => unsavedNote(app, 'rewrite') && unsavedNote(app, 'rewrite').hidden);
++  assert.equal(JSON.parse(app.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'].current.evidence, '失败 C');
++
++  fillEvidence(app, 'rewrite', '失败 D');
++  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
++  saveCheck(app, 'rewrite');
++  await harness.waitFor(() => /曾经未通过/.test(app.text()) && /失败 C/.test(app.text()));
++  assert.equal(app.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 D');
++  assert.equal(unsavedNote(app, 'rewrite').hidden, true);
++
++  const afterEvidenceEdit = harness.bootApp({
++    hash: '#/',
++    storage: { 'llm-course-learning': app.localStorage.getItem(learningModule.KEY) }
++  });
++  await harness.waitFor(() => /手写因果多头注意力/.test(afterEvidenceEdit.text()));
++  assert.equal(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 D');
++  assert.match(afterEvidenceEdit.text(), /失败 C/);
++  assert.doesNotMatch(afterEvidenceEdit.html(), /taskId|criterionId|lab\.attention|<code>/);
++
++  fillEvidence(afterEvidenceEdit, 'rewrite', '');
++  clickChoice(afterEvidenceEdit, 'rewrite', 'user_passed');
++  saveCheck(afterEvidenceEdit, 'rewrite');
++  await harness.waitFor(() => /需要写下简短依据/.test(afterEvidenceEdit.text()));
++  assert.equal(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value, '');
++  const kept = JSON.parse(afterEvidenceEdit.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'];
++  assert.equal(kept.current.result, 'failed');
++  assert.equal(kept.current.evidence, '失败 D');
++  assert.equal(kept.history[0].evidence, '失败 C');
++
++  fillEvidence(afterEvidenceEdit, 'rewrite', '通过 E');
++  clickChoice(afterEvidenceEdit, 'rewrite', 'user_passed');
++  saveCheck(afterEvidenceEdit, 'rewrite');
++  await harness.waitFor(() => /通过 E/.test(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value));
++  const passed = JSON.parse(afterEvidenceEdit.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'];
++  assert.equal(passed.current.result, 'user_passed');
++  assert.equal(passed.current.evidence, '通过 E');
++  assert.deepEqual(passed.history.filter(item => item.result === 'failed').map(item => item.evidence), ['失败 C', '失败 D']);
++  assert.match(afterEvidenceEdit.text(), /失败 C/);
++  assert.match(afterEvidenceEdit.text(), /失败 D/);
++  assert.doesNotMatch(afterEvidenceEdit.text(), /进入下一任务/);
++  assert.doesNotMatch(afterEvidenceEdit.html(), /自动测试通过/);
 +});

@@ -32,8 +32,25 @@
     var blockedPassId = "";
     var onChange = typeof options.onChange === "function" ? options.onChange : function () {};
 
+    function normalizeEvidence(text) {
+      return String(text || "").replace(/\s+/g, " ").trim();
+    }
+
     function hasEvidence(text) {
-      return String(text || "").replace(/\s+/g, " ").trim().length > 0;
+      return normalizeEvidence(text).length > 0;
+    }
+
+    function cloneEntry(item) {
+      return {
+        result: item.result,
+        source: item.source || SOURCE,
+        evidence: item.evidence || "",
+        at: item.at || Date.now()
+      };
+    }
+
+    function sameSnapshot(a, b) {
+      return !!(a && b && a.result === b.result && normalizeEvidence(a.evidence) === normalizeEvidence(b.evidence));
     }
 
     function persist() {
@@ -105,7 +122,7 @@
 
     function recordCriterion(taskId, criterionId, result, evidence) {
       if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return false;
-      var note = String(evidence == null ? "" : evidence).replace(/\s+/g, " ").trim();
+      var note = normalizeEvidence(evidence);
       if (result === RESULTS.user_passed && !hasEvidence(note)) {
         blockedPassId = String(criterionId || "");
         onChange();
@@ -115,16 +132,14 @@
       var key = criterionKey(taskId, criterionId);
       var record = recordOf(taskId, criterionId) || { current: null, history: [] };
       var history = Array.isArray(record.history) ? record.history.slice() : [];
-      if (record.current && record.current.result && record.current.result !== result) {
-        history.push({
-          result: record.current.result,
-          source: record.current.source || SOURCE,
-          evidence: record.current.evidence || "",
-          at: record.current.at || Date.now()
-        });
+      var next = { result: result, source: SOURCE, evidence: note, at: Date.now() };
+      if (record.current && record.current.result) {
+        var prev = cloneEntry(record.current);
+        if (sameSnapshot(prev, next)) return true;
+        history.push(prev);
       }
       state.criteria[key] = {
-        current: { result: result, source: SOURCE, evidence: note, at: Date.now() },
+        current: next,
         history: history
       };
       persist();

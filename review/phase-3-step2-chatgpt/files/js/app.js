@@ -8,16 +8,20 @@
   var chapters = [], tracks = [], references = [], current = null, currentPath = null, activeTrack = null, pages, search;
   var cache = {}, requestId = 0, pendingSection = null;
   var learningPlan = null, planError = null, selectedTaskId = stored("llm-course-current-task");
+  var criterionDrafts = {};
   var reader = CourseReader.create({ root: root, tocNav: byId("tocNav"), escapeHtml: escape });
   function stored(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
   function remember(key, value) { try { localStorage.setItem(key, value); } catch (error) { /* Session remains usable without persistence. */ } }
   var progress = CourseProgress.create({ onChange: function () { updateProgress(); } });
   var learning = CourseLearning.create({ onChange: function () { updateStorageNotice(); } });
+  function draftKey(taskId, id) { return String(taskId || "") + "::" + String(id || ""); }
+  function normalizeNote(text) { return String(text || "").replace(/\s+/g, " ").trim(); }
+  function criterionDraft(taskId, id) { return criterionDrafts[draftKey(taskId, id)] || null; }
   function pageOptions(plan, error) {
     return {
       chapters: chapters, tracks: tracks, plan: plan, planError: error,
       selectedTaskId: selectedTaskId, references: references, progress: progress,
-      learning: learning, escapeHtml: escape
+      learning: learning, criterionDraft: criterionDraft, escapeHtml: escape
     };
   }
   function closeSidebar() {
@@ -110,6 +114,7 @@
   }
   function route() {
     if (location.hash && !location.hash.startsWith("#/")) return;
+    if (currentPath === "home") syncDraftsFromDom();
     var token = ++requestId, locationRoute = routes.parse(location.hash), path = locationRoute.page;
     if (pendingSection && pendingSection.id !== path) pendingSection = null;
     current = null; currentPath = path;
@@ -183,9 +188,58 @@
   }
   function paintHome() {
     var y = typeof window.scrollY === "number" ? window.scrollY : 0;
+    syncDraftsFromDom();
     entry(pages.home(readLast()), "我的学习");
     bindHome();
     if (typeof window.scrollTo === "function") window.scrollTo(0, y);
+  }
+  function readCriterionForm(id) {
+    var task = currentPlanTask();
+    var draft = task ? criterionDraft(task.id, id) : null;
+    var area = root.querySelector('textarea[data-evidence="' + id + '"]');
+    return {
+      result: draft ? draft.result : (task ? learning.currentResult(task.id, id) : "unchecked"),
+      evidence: area ? area.value : (draft ? draft.evidence : "")
+    };
+  }
+  function formDiffers(taskId, id, form) {
+    return form.result !== learning.currentResult(taskId, id)
+      || normalizeNote(form.evidence) !== normalizeNote(learning.currentEvidence(taskId, id));
+  }
+  function rememberDraft(id, form) {
+    var task = currentPlanTask();
+    if (!task) return;
+    var next = form || readCriterionForm(id);
+    if (formDiffers(task.id, id, next)) criterionDrafts[draftKey(task.id, id)] = next;
+    else delete criterionDrafts[draftKey(task.id, id)];
+  }
+  function setUnsavedNotice(id, dirty) {
+    var note = root.querySelector('[data-unsaved="' + id + '"]');
+    if (!note) return;
+    note.hidden = !dirty;
+    if (dirty) note.setAttribute("role", "status");
+    else note.removeAttribute("role");
+  }
+  function markDraft(id, form) {
+    var task = currentPlanTask();
+    if (!task) return;
+    rememberDraft(id, form);
+    setUnsavedNotice(id, !!criterionDraft(task.id, id));
+  }
+  function syncDraftsFromDom() {
+    if (!root) return;
+    root.querySelectorAll("textarea[data-evidence]").forEach(function (area) {
+      rememberDraft(area.getAttribute("data-evidence"));
+    });
+  }
+  function saveCriterion(id) {
+    var task = currentPlanTask();
+    if (!task) return;
+    var form = readCriterionForm(id);
+    var ok = learning.recordCriterion(task.id, id, form.result, form.evidence);
+    if (ok) delete criterionDrafts[draftKey(task.id, id)];
+    else criterionDrafts[draftKey(task.id, id)] = form;
+    paintHome();
   }
   function bindHome() {
     updateStorageNotice();
@@ -197,6 +251,7 @@
         var week = Number(button.getAttribute("data-week"));
         var task = learningPlan.tasks.find(function (item) { return item.weekBudget === week; });
         if (!task) return;
+        syncDraftsFromDom();
         selectedTaskId = task.id;
         remember("llm-course-current-task", task.id);
         pages = CoursePages(pageOptions(learningPlan, planError));
@@ -206,12 +261,22 @@
     root.querySelectorAll("input[data-check]").forEach(function (input) {
       input.addEventListener("change", function () {
         if (!input.checked) return;
-        var task = currentPlanTask();
-        if (!task) return;
         var id = input.getAttribute("data-check");
         var area = root.querySelector('textarea[data-evidence="' + id + '"]');
-        learning.recordCriterion(task.id, id, input.value, area ? area.value : "");
-        paintHome();
+        markDraft(id, { result: input.value, evidence: area ? area.value : "" });
+      });
+    });
+    root.querySelectorAll("textarea[data-evidence]").forEach(function (area) {
+      area.addEventListener("input", function () {
+        markDraft(area.getAttribute("data-evidence"));
+      });
+      area.addEventListener("change", function () {
+        markDraft(area.getAttribute("data-evidence"));
+      });
+    });
+    root.querySelectorAll("[data-save-check]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        saveCriterion(button.getAttribute("data-save-check"));
       });
     });
     root.querySelectorAll("input[data-concept]").forEach(function (input) {

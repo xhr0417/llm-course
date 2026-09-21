@@ -400,6 +400,7 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.match(home, /不是本站跑过的自动检查/);
   assert.match(home, /短记录/);
   assert.match(home, /简短依据/);
+  assert.match(home, /保存本条记录/);
   assert.doesNotMatch(home, /进入下一任务/);
   assert.match(home, /分层求助/);
   assert.match(home, /小变式/);
@@ -647,6 +648,7 @@ function fillEvidence(app, id, text) {
   const area = app.content.querySelector('textarea[data-evidence="' + id + '"]');
   assert.ok(area, id);
   area.value = text;
+  area.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
 }
 
 function clickChoice(app, check, value) {
@@ -655,10 +657,21 @@ function clickChoice(app, check, value) {
   input.click();
 }
 
+function saveCheck(app, id) {
+  const button = app.content.querySelector('[data-save-check="' + id + '"]');
+  assert.ok(button, 'save ' + id);
+  button.click();
+}
+
+function unsavedNote(app, id) {
+  return app.content.querySelector('[data-unsaved="' + id + '"]');
+}
+
 function passRequired(app, ids) {
   ids.forEach(id => {
     fillEvidence(app, id, '依据 ' + id);
     clickChoice(app, id, 'user_passed');
+    saveCheck(app, id);
   });
 }
 
@@ -674,10 +687,21 @@ test('learning completes a task only when every required item is currently user-
   assert.equal(learning.currentResult(week1.id, 'numeric'), 'unchecked');
   assert.equal(learning.isTaskComplete(week1), false);
   learning.recordCriterion(week1.id, 'rewrite', 'failed', '数值对照失败，位置 attn.py');
+  learning.recordCriterion(week1.id, 'rewrite', 'failed', '失败 D');
+  learning.recordCriterion(week1.id, 'rewrite', 'failed', '失败 D');
+  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '失败 D');
+  assert.equal(learning.failedHistory(week1.id, 'rewrite').length, 1);
+  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '数值对照失败，位置 attn.py');
+  assert.equal(learning.recordCriterion(week1.id, 'rewrite', 'user_passed', ''), false);
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'failed');
+  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '失败 D');
   assert.equal(learning.isTaskComplete(week1), false);
   ['rewrite', 'shapes', 'causal'].forEach(id => learning.recordCriterion(week1.id, id, 'user_passed', '依据 ' + id));
   assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '依据 rewrite');
-  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '数值对照失败，位置 attn.py');
+  assert.deepEqual(
+    learning.failedHistory(week1.id, 'rewrite').map(item => item.evidence),
+    ['数值对照失败，位置 attn.py', '失败 D']
+  );
   assert.equal(learning.isTaskComplete(week1), false);
   learning.recordCriterion(week1.id, 'numeric', 'user_passed');
   assert.equal(learning.isTaskComplete(week1), false);
@@ -688,7 +712,10 @@ test('learning completes a task only when every required item is currently user-
   assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
   const saved = JSON.parse(storage.getItem(learningModule.KEY));
   assert.equal(saved.criteria[week1.id + '::rewrite'].current.source, 'user_reported');
-  assert.equal(saved.criteria[week1.id + '::rewrite'].history[0].evidence, '数值对照失败，位置 attn.py');
+  assert.deepEqual(
+    saved.criteria[week1.id + '::rewrite'].history.map(item => item.evidence),
+    ['数值对照失败，位置 attn.py', '失败 D']
+  );
 
   ['read', 'implemented', 'verified', 'explained'].forEach(dim => {
     learning.setConceptDim('causal-mask', dim, true);
@@ -722,14 +749,17 @@ test('home record forms keep failures, isolate progress, and wait for confirm-ne
   assert.doesNotMatch(app.html(), /taskId|criterionId|lab\.attention|<code>/);
 
   clickChoice(app, 'rewrite', 'user_passed');
+  saveCheck(app, 'rewrite');
   await harness.waitFor(() => /需要写下简短依据/.test(app.text()));
-  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="unchecked"]').checked, true);
+  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="user_passed"]').checked, true);
   assert.doesNotMatch(app.text(), /进入下一任务/);
 
   fillEvidence(app, 'rewrite', '数值对照失败，位置 attn.py');
   clickChoice(app, 'rewrite', 'failed');
+  saveCheck(app, 'rewrite');
   fillEvidence(app, 'rewrite', '修复后对照通过');
   clickChoice(app, 'rewrite', 'user_passed');
+  saveCheck(app, 'rewrite');
   await harness.waitFor(() => /曾经未通过/.test(app.text()));
   assert.match(app.text(), /数值对照失败，位置 attn.py/);
   assert.match(app.text(), /修复后对照通过/);
@@ -792,6 +822,7 @@ test('learning save failure is visible and does not look like an automated pass'
   await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
   fillEvidence(app, 'rewrite', '依据 rewrite');
   clickChoice(app, 'rewrite', 'user_passed');
+  saveCheck(app, 'rewrite');
   await harness.waitFor(() => /学习记录无法保存/.test(app.byId('storageNotice').textContent || ''));
   assert.equal(app.byId('storageNotice').hidden, false);
   assert.equal(app.content.querySelector('input[data-check="rewrite"][value="user_passed"]').checked, true);
@@ -801,4 +832,63 @@ test('learning save failure is visible and does not look like an automated pass'
   await harness.waitFor(() => app.byId('advanceTask'));
   assert.match(app.text(), /小模型学习实验室—Attention/);
   assert.equal(app.localStorage.getItem('llm-course-learning'), null);
+});
+
+test('saving a check keeps evidence-only edits and consecutive fail snapshots', async () => {
+  const app = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
+
+  fillEvidence(app, 'rewrite', '失败 C');
+  clickChoice(app, 'rewrite', 'failed');
+  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
+  app.content.querySelector('[data-week="2"]').click();
+  await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
+  app.content.querySelector('[data-week="1"]').click();
+  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
+  assert.equal(app.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 C');
+  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
+  assert.equal(app.localStorage.getItem(learningModule.KEY), null);
+
+  saveCheck(app, 'rewrite');
+  await harness.waitFor(() => unsavedNote(app, 'rewrite') && unsavedNote(app, 'rewrite').hidden);
+  assert.equal(JSON.parse(app.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'].current.evidence, '失败 C');
+
+  fillEvidence(app, 'rewrite', '失败 D');
+  assert.equal(unsavedNote(app, 'rewrite').hidden, false);
+  saveCheck(app, 'rewrite');
+  await harness.waitFor(() => /曾经未通过/.test(app.text()) && /失败 C/.test(app.text()));
+  assert.equal(app.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 D');
+  assert.equal(unsavedNote(app, 'rewrite').hidden, true);
+
+  const afterEvidenceEdit = harness.bootApp({
+    hash: '#/',
+    storage: { 'llm-course-learning': app.localStorage.getItem(learningModule.KEY) }
+  });
+  await harness.waitFor(() => /手写因果多头注意力/.test(afterEvidenceEdit.text()));
+  assert.equal(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value, '失败 D');
+  assert.match(afterEvidenceEdit.text(), /失败 C/);
+  assert.doesNotMatch(afterEvidenceEdit.html(), /taskId|criterionId|lab\.attention|<code>/);
+
+  fillEvidence(afterEvidenceEdit, 'rewrite', '');
+  clickChoice(afterEvidenceEdit, 'rewrite', 'user_passed');
+  saveCheck(afterEvidenceEdit, 'rewrite');
+  await harness.waitFor(() => /需要写下简短依据/.test(afterEvidenceEdit.text()));
+  assert.equal(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value, '');
+  const kept = JSON.parse(afterEvidenceEdit.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'];
+  assert.equal(kept.current.result, 'failed');
+  assert.equal(kept.current.evidence, '失败 D');
+  assert.equal(kept.history[0].evidence, '失败 C');
+
+  fillEvidence(afterEvidenceEdit, 'rewrite', '通过 E');
+  clickChoice(afterEvidenceEdit, 'rewrite', 'user_passed');
+  saveCheck(afterEvidenceEdit, 'rewrite');
+  await harness.waitFor(() => /通过 E/.test(afterEvidenceEdit.content.querySelector('textarea[data-evidence="rewrite"]').value));
+  const passed = JSON.parse(afterEvidenceEdit.localStorage.getItem(learningModule.KEY)).criteria['lab.attention.causal-mha::rewrite'];
+  assert.equal(passed.current.result, 'user_passed');
+  assert.equal(passed.current.evidence, '通过 E');
+  assert.deepEqual(passed.history.filter(item => item.result === 'failed').map(item => item.evidence), ['失败 C', '失败 D']);
+  assert.match(afterEvidenceEdit.text(), /失败 C/);
+  assert.match(afterEvidenceEdit.text(), /失败 D/);
+  assert.doesNotMatch(afterEvidenceEdit.text(), /进入下一任务/);
+  assert.doesNotMatch(afterEvidenceEdit.html(), /自动测试通过/);
 });
