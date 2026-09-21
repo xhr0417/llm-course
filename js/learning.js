@@ -253,24 +253,20 @@
       };
     }
 
-    function sameReview(a, b) {
-      return !!(a && b && a.result === b.result && a.form === b.form);
-    }
-
     function recordReview(conceptId, result, form, now) {
       var id = String(conceptId || "");
       if (!id) return false;
       if (result !== REVIEW.passed && result !== REVIEW.failed) return false;
       if (!FORMS[form]) return false;
+      var record = state.reviews[id];
+      if (!record || typeof record.dueAt !== "number") return false;
       var ts = nowMs(now);
+      if (ts < record.dueAt) return true;
       var days = intervalDays();
-      var record = state.reviews[id] || emptyReview(ts, days);
       var history = Array.isArray(record.history) ? record.history.slice() : [];
       var next = { result: result, form: form, at: ts };
       if (record.current && record.current.result) {
-        var prev = cloneReviewEntry(record.current);
-        if (sameReview(prev, next)) return true;
-        history.push(prev);
+        history.push(cloneReviewEntry(record.current));
       }
       var index = clampIndex(record.intervalIndex, days);
       if (result === REVIEW.passed) index = Math.min(index + 1, days.length - 1);

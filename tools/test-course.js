@@ -1144,3 +1144,69 @@ test('review state is separate from task evidence and only lists due concepts', 
   assert.equal(storage.getItem('llm-course-current-task'), week1.id);
 });
 
+test('the same review form still advances when a later round is due', () => {
+  const plan = require('../content/learning-plan.json');
+  const t0 = 1700000000000;
+  const DAY = 24 * 60 * 60 * 1000;
+  const week1 = plan.tasks.find(item => item.weekBudget === 1);
+  const storage = memoryStorage({
+    'llm-course-current-task': week1.id,
+    [learningModule.KEY]: JSON.stringify({
+      version: 1,
+      criteria: {
+        [week1.id + '::rewrite']: {
+          current: { result: 'user_passed', source: 'user_reported', evidence: '对照通过', at: t0 },
+          history: []
+        }
+      },
+      concepts: { attention: { implemented: true, explained: true } }
+    })
+  });
+  const learning = learningModule.create({ storage });
+  learning.load();
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + DAY), false);
+  assert.equal(learning.armReview('attention', t0), true);
+  assert.equal(learning.reviewOf('attention').current, null);
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0), true);
+  assert.equal(learning.reviewOf('attention').current, null);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + DAY);
+
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 1);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 4 * DAY);
+  const afterFirst = JSON.parse(storage.getItem(learningModule.KEY));
+  assert.equal(afterFirst.reviews.attention.history.length, 0);
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 1);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 4 * DAY);
+  assert.equal(learning.reviewOf('attention').history.length, 0);
+
+  const criteriaBefore = JSON.parse(storage.getItem(learningModule.KEY)).criteria;
+  const conceptsBefore = JSON.parse(storage.getItem(learningModule.KEY)).concepts;
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + 4 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 2);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 11 * DAY);
+  assert.equal(learning.reviewOf('attention').history.length, 1);
+  assert.equal(learning.reviewOf('attention').history[0].form, 'recall');
+  assert.equal(learning.reviewOf('attention').history[0].result, 'passed');
+  const afterSecond = JSON.parse(storage.getItem(learningModule.KEY));
+  assert.deepEqual(afterSecond.criteria, criteriaBefore);
+  assert.deepEqual(afterSecond.concepts, conceptsBefore);
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
+  assert.equal(learning.conceptDim('attention', 'implemented'), true);
+  assert.equal(storage.getItem('llm-course-current-task'), week1.id);
+
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + 11 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 3);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 32 * DAY);
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + 32 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 3);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 53 * DAY);
+  assert.equal(learning.reviewOf('attention').history.length, 3);
+  assert.equal(learning.dueReviews(t0 + 32 * DAY).some(item => item.conceptId === 'attention'), false);
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
+  assert.equal(learning.conceptDim('attention', 'explained'), true);
+  assert.equal(storage.getItem('llm-course-current-task'), week1.id);
+});
+
+
