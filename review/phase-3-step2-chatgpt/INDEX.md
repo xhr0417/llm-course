@@ -6,9 +6,9 @@
 - 分支：`main`
 - 基线提交：[`c0296a6`](https://github.com/xhr0417/llm-course/commit/c0296a6) — `fix: 补齐第 2/3/8 周因果、对齐与真实评测`（issue #4 已通过）
 - 上一版实现：[`95c2f20`](https://github.com/xhr0417/llm-course/commit/95c2f20a3e8fcd8af126bdb7c0c47e96a4e0c935) — `fix: 验收依据随结果保存，无依据不能算通过`。只覆盖「通过必须有依据、失败依据进历史」；**不是**本轮要审的实现。
-- 本轮实现提交：本文件所在 commit — 每条验收显式「保存本条记录」；同结果不同依据保留旧快照；完全相同不重复追加；未保存草稿提示与保护。
+- 本轮实现提交：[`6a4d812`](https://github.com/xhr0417/llm-course/commit/6a4d8126283b803cdc5d39b88260e0f4b3ad44cb) — `fix: 验收改为显式保存，避免未写入的依据丢失`。每条验收显式「保存本条记录」；同结果不同依据保留旧快照；完全相同不重复追加；未保存草稿提示与保护。
 - 本轮：**阶段 3 第二步**最小记录层的保存闭环。`evidenceSystemImplemented` 现为 `true`。不要把 `95c2f20` 当成已经包含保存按钮。
-- 审核入口：本文件（请固定到本轮实现提交，不要用 `95c2f20` 上的旧 INDEX）
+- 审核入口：本文件（固定到 [`6a4d812`](https://github.com/xhr0417/llm-course/blob/6a4d8126283b803cdc5d39b88260e0f4b3ad44cb/review/phase-3-step2-chatgpt/INDEX.md)，不要用 `95c2f20` 上的旧 INDEX）
 - 差异：`phase-3-step2.diff`（相对 `c0296a6`，不含第 0/24 章遗留修改；含 `95c2f20` 的依据修正 **以及** 本轮保存闭环）
 
 **发布区分（禁止写成笼统的「本轮没有发布」）：**
@@ -17,7 +17,7 @@
 
 `main` push → GitHub Actions → build dist → `actions/deploy-pages` → 自动部署。
 
-[`95c2f20`](https://github.com/xhr0417/llm-course/commit/95c2f20a3e8fcd8af126bdb7c0c47e96a4e0c935) 已 push，[当时 CI 与 Pages 部署成功](https://github.com/xhr0417/llm-course/actions/runs/35549851932)，那一版 **没有**「保存本条记录」。本轮保存补丁随 **本提交** 推 `main`；Pages 是否已含保存按钮，只看本提交的 Actions，不要用 `95c2f20` 的绿勾代替。
+[`95c2f20`](https://github.com/xhr0417/llm-course/commit/95c2f20a3e8fcd8af126bdb7c0c47e96a4e0c935) 已 push，[当时 CI 与 Pages 部署成功](https://github.com/xhr0417/llm-course/actions/runs/35549851932)，那一版 **没有**「保存本条记录」。本轮保存补丁随 [`6a4d812`](https://github.com/xhr0417/llm-course/commit/6a4d8126283b803cdc5d39b88260e0f4b3ad44cb) 推 `main`；Pages 是否已含保存按钮，只看该提交的 Actions，不要用 `95c2f20` 的绿勾代替。
 
 ### 自有服务器（`llm.xhr0417.cn`）
 
@@ -94,7 +94,7 @@
 
 ### 未测项（不宣称通过）
 
-- 写本包时本轮 CI / Pages 尚未出结果；`95c2f20` 的绿勾不能代表本层。以本提交的 GitHub Actions 为准。
+- 写本包时本轮 CI / Pages 尚未出结果；`95c2f20` 的绿勾不能代表本层。以 [`6a4d812`](https://github.com/xhr0417/llm-course/commit/6a4d8126283b803cdc5d39b88260e0f4b3ad44cb) 的 GitHub Actions 为准。
 - 系统 Chrome 下 375 / 768 / 1280 的完整视觉走查（本轮浏览器未改视口）。
 - 自有服务器（未运行 `tools/publish.sh`）。
 - 阶段 3 第三步：教材任务上下文导航、首页分层。
