@@ -70,8 +70,11 @@
       };
     }));
 
-    function hrefFor(document_) {
-      return document_.reference ? options.referenceHref(document_.reference.id) : options.chapterHref(document_.chapter.id);
+    function hrefFor(document_, section) {
+      var heading = section && section !== document_.title ? section : null;
+      return document_.reference
+        ? options.referenceHref(document_.reference.id, heading)
+        : options.chapterHref(document_.chapter.id, heading);
     }
 
     function close(restoreFocus) {
@@ -107,7 +110,7 @@
         (failed ? " · 索引不完整，" + failed + " 章暂未加载，可刷新重试" : "") +
         (results.length > 60 ? " · 显示前 60 条" : "");
       list.innerHTML = results.length ? results.slice(0, 60).map(function (result, resultIndex) {
-        return '<a class="search-hit" data-search-index="' + resultIndex + '" href="' + escape(hrefFor(result.document)) + '">' +
+        return '<a class="search-hit" data-search-index="' + resultIndex + '" href="' + escape(hrefFor(result.document, result.section)) + '">' +
           '<div class="hit-chapter">' + escape(result.document.title) + " · " + escape(result.section) + "</div>" +
           '<div class="hit-snippet">' + escape(result.snippet) + "</div></a>";
       }).join("") : '<div class="search-empty">' +
