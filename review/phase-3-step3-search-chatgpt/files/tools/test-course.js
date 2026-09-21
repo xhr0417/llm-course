@@ -744,6 +744,8 @@ test('in-chapter TOC and search update the task bar for the heading in view', as
   });
   const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
     .find(item => /7\.14/.test(item.textContent));
+  assert.match(hit.getAttribute('href'), /transformer\?section=/);
+  assert.match(decodeURIComponent(hit.getAttribute('href') || ''), /7\.14 Multi-Head/);
   hit.click();
   assert.match(app.text(), /必要教材 · 6 \/ 6 · 7\.14/);
   assert.match(app.text(), /下一相关小节：7\.12/);
@@ -761,6 +763,8 @@ test('search from home and from another chapter opens the target heading', async
     const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
       .find(item => heading.test(item.textContent));
     assert.ok(hit, query);
+    assert.match(hit.getAttribute('href'), /[?&]section=/);
+    assert.match(decodeURIComponent(hit.getAttribute('href') || ''), heading);
     hit.click();
   }
 

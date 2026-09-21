@@ -382,8 +382,12 @@
     window.addEventListener("hashchange", route);
     search = CourseSearch.create({ chapters: chapters, references: references,
       fetchChapter: fetchChapter, fetchReference: fetchReference, escapeHtml: escape,
-      chapterHref: function (id) { return routes.href(id, activeTrack); },
-      referenceHref: function (id) { return "#/reference/" + encodeURIComponent(id); },
+      chapterHref: function (id, section) { return routes.href(id, activeTrack, section); },
+      referenceHref: function (id, section) {
+        var href = "#/reference/" + encodeURIComponent(id);
+        if (section) href += "?section=" + encodeURIComponent(section);
+        return href;
+      },
       closeSidebar: closeSidebar,
       onNavigate: function (path, title) {
         if (currentPath === path) {
