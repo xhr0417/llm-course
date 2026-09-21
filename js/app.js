@@ -386,8 +386,17 @@
       referenceHref: function (id) { return "#/reference/" + encodeURIComponent(id); },
       closeSidebar: closeSidebar,
       onNavigate: function (path, title) {
-        if (currentPath === path) { reader.focusSection(title); pendingSection = null; }
-        else pendingSection = { id: path, title: title };
+        if (currentPath === path) {
+          reader.focusSection(title);
+          pendingSection = null;
+          return;
+        }
+        pendingSection = { id: path, title: title };
+        var href = path.indexOf("reference/") === 0
+          ? "#/reference/" + encodeURIComponent(path.slice("reference/".length))
+          : routes.href(path, activeTrack, title);
+        if (location.hash === href) route();
+        else location.hash = href;
       } });
     search.start();
   }

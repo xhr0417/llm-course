@@ -407,6 +407,14 @@ function chapterMarkdown(chapter) {
       ""
     );
   }
+  if (chapter.id === "modern-llm") {
+    lines.push(
+      "## 10.4 RMSNorm：更简单的归一化 ★",
+      "",
+      "RMSNorm-TOKEN for search jump",
+      ""
+    );
+  }
   return lines.join("\n");
 }
 
@@ -489,7 +497,8 @@ function bootApp(options) {
   mountShell(createElement, body);
   Object.keys(byId).forEach(function (id) { byId[id].ownerDocument = null; });
 
-  const location = { hash: options.hash || "#/" };
+  let hashValue = options.hash || "#/";
+  const location = {};
   const storage = Object.assign(Object.create(null), options.storage || {});
   const localStorage = {
     getItem: function (key) { return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null; },
@@ -571,6 +580,17 @@ function bootApp(options) {
   ctx.globalThis = ctx;
   ctx.self = ctx;
   ctx.Node = function () {};
+  Object.defineProperty(location, "hash", {
+    configurable: true,
+    enumerable: true,
+    get: function () { return hashValue; },
+    set: function (value) {
+      const next = String(value || "");
+      if (hashValue === next) return;
+      hashValue = next;
+      ctx.dispatchEvent({ type: "hashchange" });
+    }
+  });
 
   [
     "js/renderer.js",
@@ -593,8 +613,11 @@ function bootApp(options) {
     content: byId.content,
     byId: function (id) { return byId[id] || null; },
     go: function (hash) {
+      if (location.hash === hash) {
+        ctx.dispatchEvent({ type: "hashchange" });
+        return;
+      }
       location.hash = hash;
-      ctx.dispatchEvent({ type: "hashchange" });
     },
     text: function () { return (byId.content && byId.content.textContent) || ""; },
     html: function () { return (byId.content && byId.content.innerHTML) || ""; },

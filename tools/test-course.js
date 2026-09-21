@@ -749,6 +749,43 @@ test('in-chapter TOC and search update the task bar for the heading in view', as
   assert.match(app.text(), /下一相关小节：7\.12/);
 });
 
+test('search from home and from another chapter opens the target heading', async () => {
+  async function searchAndOpen(app, query, heading) {
+    const input = app.byId('searchInput');
+    input.value = query;
+    input.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
+    await harness.waitFor(() => {
+      const hits = app.byId('searchList').querySelectorAll('.search-hit');
+      return hits.some(function (hit) { return heading.test(hit.textContent); });
+    });
+    const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
+      .find(item => heading.test(item.textContent));
+    assert.ok(hit, query);
+    hit.click();
+  }
+
+  const fromHome = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /打开必要教材/.test(fromHome.text()));
+  await searchAndOpen(fromHome, 'RMSNorm', /10\.4 RMSNorm/);
+  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromHome.text()));
+  assert.match(fromHome.location.hash, /modern-llm/);
+  assert.match(fromHome.text(), /10\.4 RMSNorm：更简单的归一化/);
+  assert.doesNotMatch(fromHome.text(), /GRPO-TOKEN transformer/);
+
+  const fromChapter = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /打开必要教材/.test(fromChapter.text()));
+  const start = fromChapter.content.querySelector('a.btn.primary');
+  fromChapter.go(start.getAttribute('href'));
+  await harness.waitFor(() => /必要教材 · 1 \/ 6/.test(fromChapter.text()));
+  assert.match(fromChapter.location.hash, /transformer/);
+  await searchAndOpen(fromChapter, 'RMSNorm', /10\.4 RMSNorm/);
+  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromChapter.text()));
+  assert.match(fromChapter.location.hash, /modern-llm/);
+  assert.match(fromChapter.text(), /10\.4 RMSNorm：更简单的归一化/);
+  assert.doesNotMatch(fromChapter.text(), /GRPO-TOKEN transformer/);
+  assert.doesNotMatch(fromChapter.text(), /必要教材 · 1 \/ 6 · 7\.4/);
+});
+
 test('task heading scroll offset uses the measured sticky bar height', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
   assert.match(css, /scroll-margin-top:\s*calc\(var\(--topbar-h\) \+ var\(--task-context-h/);
