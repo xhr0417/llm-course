@@ -166,7 +166,7 @@
     root.innerHTML = '<div class="loading" role="status">正在加载课程…</div>';
     fetchChapter(chapter).then(function (text) {
       if (token !== requestId) return;
-      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id));
+      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id), locationRoute.section);
       byId("markRead").addEventListener("click", function () { progress.toggleRead(chapter.id); });
       progress.initGuidedLabs(root, chapter.id);
       reader.init(chapter.id);

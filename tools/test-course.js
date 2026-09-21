@@ -466,10 +466,61 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /GQA 为拓展项/);
   assert.match(impl, /evidenceSystemImplemented.*true|已为 `true`/);
   assert.match(impl, /最小记录层|最小验收记录/);
+  assert.match(impl, /阶段 3 第三步|教材任务上下文/);
   assert.match(impl, /组装后整模型因果性|组装后因果性/);
   assert.match(impl, /next-token 对齐/);
   assert.match(impl, /真实 A\/B/);
   assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
+});
+
+test('home keeps the current goal visible and folds detailed checks', () => {
+  const plan = require('../content/learning-plan.json');
+  const home = loadPages(plan).home(null);
+  const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
+  const primaryAt = home.indexOf('打开必要教材');
+  const foldAt = home.indexOf('class="home-fold"');
+  const criteriaAt = home.indexOf('验收条件');
+  assert.ok(primaryAt >= 0 && foldAt > primaryAt);
+  assert.ok(criteriaAt > foldAt);
+  assert.match(home, /<details class="home-fold"><summary>必要教材<\/summary>/);
+  assert.match(home, /<details class="home-fold"><summary>短记录<\/summary>/);
+  assert.match(home, /验收与记录（必需 0 \/ \d+ 条当前通过）/);
+  assert.match(home, /保存本条记录/);
+  assert.match(css, /\.home-fold:not\(\[open\]\)\s*>\s*\.fold-body\s*\{\s*display:\s*none/);
+  assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+});
+
+test('textbook chapters show the current task and the next related section', () => {
+  const plan = require('../content/learning-plan.json');
+  const pages = loadPages(plan);
+  const transformer = chapters.find(item => item.id === 'transformer');
+  const map = chapters.find(item => item.id === 'map');
+  const first = pages.lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
+  assert.match(first, /class="task-context"/);
+  assert.match(first, /手写因果多头注意力/);
+  assert.match(first, /返回当前练习/);
+  assert.match(first, /下一相关小节：7\.5 Q、K、V：三个投影/);
+  assert.match(first, /写完后对照：7\.12/);
+  assert.match(first, /全书下一课/);
+  assert.doesNotMatch(first, /lab\.attention|<code>/);
+  assert.doesNotMatch(first, /自动测试通过/);
+  const lastRequired = pages.lesson(transformer, null, '<p>body</p>', null, '7.14 Multi-Head Attention ★');
+  assert.match(lastRequired, /下一相关小节：7\.12/);
+  assert.match(lastRequired, /写完后对照：7\.12/);
+  const lastCheck = pages.lesson(transformer, null, '<p>body</p>', null, '7.13 公式 ↔ 代码逐行对应 ★');
+  assert.match(lastCheck, /返回当前练习/);
+  assert.doesNotMatch(lastCheck, /下一相关小节/);
+  assert.doesNotMatch(lastCheck, /写完后对照：/);
+  const unrelated = pages.lesson(map, null, '<p>body</p>', null);
+  assert.match(unrelated, /手写因果多头注意力/);
+  assert.match(unrelated, /返回当前练习/);
+  assert.doesNotMatch(unrelated, /下一相关小节/);
+  assert.doesNotMatch(unrelated, /写完后对照/);
+  const week2 = loadPages(plan, null, { selectedTaskId: 'lab.decoder.min-lm' })
+    .lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
+  assert.match(week2, /拼最小 decoder/);
+  assert.match(week2, /返回当前练习/);
+  assert.doesNotMatch(week2, /下一相关小节/);
 });
 
 function softmaxRows(matrix) {
@@ -633,6 +684,26 @@ test('home week picker switches the current exercise and remembers it', async ()
   });
   await harness.waitFor(() => /拼最小 decoder/.test(restored.text()));
   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+});
+
+test('opening required material from home keeps task context on the chapter', async () => {
+  const app = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /打开必要教材/.test(app.text()));
+  assert.match(app.html(), /class="home-fold"/);
+  const start = app.content.querySelector('a.btn.primary');
+  assert.ok(start);
+  assert.match(start.getAttribute('href'), /transformer\?section=/);
+  app.go(start.getAttribute('href'));
+  await harness.waitFor(() => /返回当前练习/.test(app.text()));
+  assert.match(app.text(), /手写因果多头注意力/);
+  assert.match(app.text(), /下一相关小节/);
+  assert.match(app.text(), /全书下一课|全书上一课/);
+  const back = app.content.querySelector('.task-context a.btn');
+  assert.equal(back.getAttribute('href'), '#/');
+  app.go('#/');
+  await harness.waitFor(() => /打开必要教材/.test(app.text()));
+  assert.match(app.html(), /class="home-fold"/);
+  assert.match(app.text(), /保存本条记录/);
 });
 
 function memoryStorage(seed) {

@@ -84,6 +84,52 @@
 .check-record .note-field textarea { min-height: 64px; }
 .check-record .btn { margin-top: var(--space-3); }
 .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
+.task-context {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.task-context p { margin: var(--space-2) 0; max-width: 46em; }
+.task-context-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: var(--space-3) 0; }
+.task-context-actions .btn { min-height: 44px; }
+.home-fold {
+  margin-top: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.home-fold > summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.home-fold > summary::-webkit-details-marker { display: none; }
+.home-fold > summary::before {
+  content: "▸";
+  color: var(--text-faint);
+  transition: transform .15s;
+  font-size: 13px;
+}
+.home-fold[open] > summary::before { transform: rotate(90deg); }
+.home-fold[open] > summary { border-bottom: 1px solid var(--border); }
+.home-fold:not([open]) > .fold-body { display: none; }
+body:has(.task-context) .md :is(h2, h3, h4, h5, h6) {
+  scroll-margin-top: calc(var(--topbar-h) + 12rem);
+}
+.home-fold > .fold-body { padding: var(--space-3) var(--space-4) var(--space-4); }
+.home-fold h2 { font-size: var(--text-base); margin: 0 0 var(--space-3); }
 .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
 .task-spec { margin: 0; max-width: 46em; }
 .task-spec dt { font-weight: 600; margin-top: var(--space-4); }

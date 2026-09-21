@@ -66,6 +66,74 @@
         }).join("") +
         '</div><p class="page-note">点某一周只更换练习说明。不会把前面的周标成完成，也不会按日期自动跳周。</p>';
     }
+    function fold(title, inner, open) {
+      return '<details class="home-fold"' + (open ? " open" : "") + "><summary>" + escape(title) +
+        '</summary><div class="fold-body">' + inner + "</div></details>";
+    }
+    function roleLabel(role) {
+      if (role === "required") return "必要教材";
+      if (role === "check-after") return "写完后对照";
+      if (role === "parallel") return "并行补基础";
+      if (role === "reference") return "对照入口";
+      return "练习材料";
+    }
+    function spineMaterials(task) {
+      return (task && task.materials || []).filter(function (item) {
+        return item.chapterId && !item.external;
+      });
+    }
+    function findMaterial(task, chapterId, section) {
+      var list = spineMaterials(task);
+      var index = -1;
+      if (section) {
+        index = list.findIndex(function (item) {
+          return item.chapterId === chapterId && item.section === section;
+        });
+      } else {
+        index = list.findIndex(function (item) { return item.chapterId === chapterId; });
+      }
+      if (index < 0) return null;
+      return { list: list, index: index, item: list[index] };
+    }
+    function nextRelated(match) {
+      if (!match) return null;
+      var current = match.item;
+      var i;
+      for (i = match.index + 1; i < match.list.length; i++) {
+        if (match.list[i].role === current.role) return match.list[i];
+      }
+      if (current.role === "required") {
+        for (i = match.index + 1; i < match.list.length; i++) {
+          if (match.list[i].role === "check-after") return match.list[i];
+        }
+      }
+      return null;
+    }
+    function taskContext(item, section) {
+      var task = plan && resolveTask(plan);
+      if (!task) return "";
+      var match = findMaterial(task, item.id, section);
+      var html = '<aside class="task-context" aria-label="当前练习导航">' +
+        '<span class="page-label">当前练习</span><p>' + escape(task.title) + "</p>" +
+        '<div class="task-context-actions"><a class="btn" href="#/">返回当前练习</a>';
+      var next = nextRelated(match);
+      if (next) html += action("下一相关小节：" + next.label, materialHref(next));
+      html += "</div>";
+      if (match) {
+        var sameRole = match.list.filter(function (entry) { return entry.role === match.item.role; });
+        var roleIndex = sameRole.indexOf(match.item) + 1;
+        html += '<p class="page-note">' + escape(roleLabel(match.item.role)) + " · " +
+          String(roleIndex) + " / " + String(sameRole.length) + " · " +
+          escape(match.item.label) + "</p>";
+        if (match.item.role !== "check-after") {
+          var after = listByRole(task, "check-after").filter(function (entry) { return entry.chapterId; });
+          if (after[0]) {
+            html += '<p class="page-note">写完后对照：' + escape(after[0].label) + "</p>";
+          }
+        }
+      }
+      return html + "</aside>";
+    }
     function home(last) {
       if (options.planError) {
         return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
@@ -155,14 +223,13 @@
               "> " + dim[1] + "</label>";
           }).join("") + "</div></li>";
       }
-      var notes = '<section class="entry-section"><h2>短记录</h2>' +
+      var notes = fold("短记录",
         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
         '<label class="note-field">做了什么<textarea data-note="what" rows="3">' + escape(learning.note(task.id, "what")) + "</textarea></label>" +
         '<label class="note-field">检查结果及代码位置<textarea data-note="check" rows="3">' + escape(learning.note(task.id, "check")) + "</textarea></label>" +
         '<label class="note-field">下一步<textarea data-note="next" rows="3">' + escape(learning.note(task.id, "next")) + "</textarea></label>" +
         '<label class="note-field">卡点（可选，不锁教材）<textarea data-stuck="1" rows="2">' + escape(learning.stuck(task.id)) + "</textarea></label>" +
-        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : "") +
-        "</section>";
+        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : ""));
       var complete = learning.isTaskComplete(task);
       var next = learning.nextTask(plan, task);
       var advance = complete
@@ -173,6 +240,16 @@
             : '<p class="page-note">这是本阶段最后一项练习。</p>') +
           "</section>"
         : "";
+      var criteriaOpen = !!(learning.passBlocked && learning.passBlocked()) ||
+        (task.criteria || []).some(function (item) {
+          return !!(options.criterionDraft && options.criterionDraft(task.id, item.id));
+        });
+      var requiredCount = requiredCriteria(task).filter(function (item) {
+        return learning.currentResult(task.id, item.id) === "user_passed" &&
+          learning.currentEvidence && learning.currentEvidence(task.id, item.id);
+      }).length;
+      var criteriaSummary = "验收与记录（必需 " + String(requiredCount) + " / " +
+        String(requiredCriteria(task).length) + " 条当前通过）";
       return header(stage.title + "—" + (task.shortTitle || task.title),
         "当前练习：" + task.title + "。先看写什么、怎么检查、必需做到哪里。",
         "我的学习") +
@@ -181,38 +258,43 @@
         weekButtons(plan, stage, task) +
         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
         '</section>' +
-        '<section class="entry-section"><h2>必要教材</h2><ol class="task-list">' +
-        required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-        '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p></section>' +
-        '<section class="entry-section"><h2>在哪里写、输入输出是什么</h2>' +
-        '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
-        '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
-        '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl></section>' +
-        '<section class="entry-section"><h2>实现步骤</h2><ol class="task-list task-steps">' +
-        task.steps.map(function (step) {
-          return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
-        }).join("") + "</ol></section>" +
-        '<section class="entry-section"><h2>如何检查结果</h2>' +
-        (after.length ? '<ol class="task-list">' +
-        after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-        "</ol>" : "") +
-        '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
-        '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
-        requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
-        '</ol>' +
-        (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
-          stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : "") +
-        '</section>' +
-        '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
-        task.conceptIds.map(conceptRow).join("") + "</ul></section>" +
-        notes +
         advance +
-        (parallel.length ? '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
-        parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p></section>' : "") +
-        (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
+        fold("必要教材",
+          '<ol class="task-list">' +
+          required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+          '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p>') +
+        fold("在哪里写、输入输出是什么",
+          '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
+          '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
+          '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl>') +
+        fold("实现步骤",
+          '<ol class="task-list task-steps">' +
+          task.steps.map(function (step) {
+            return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
+          }).join("") + "</ol>") +
+        fold("如何检查结果",
+          (after.length ? '<ol class="task-list">' +
+          after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+          "</ol>" : "") +
+          '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p>') +
+        fold(criteriaSummary,
+          '<h2>验收条件</h2><ol class="task-list">' +
+          requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
+          "</ol>" +
+          (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
+            stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : ""),
+          criteriaOpen) +
+        fold("相关概念",
+          '<ul class="concept-list">' + task.conceptIds.map(conceptRow).join("") + "</ul>") +
+        notes +
+        (parallel.length ? fold("并行补基础",
+          '<ul class="task-list">' +
+          parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+          '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p>') : "") +
+        (reference.length ? fold("对照入口",
+          '<ul class="task-list">' +
           reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
-          "</ul></section>" : "") +
+          "</ul>") : "") +
         resume +
         '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
     }
@@ -244,25 +326,29 @@
         action("回到我的学习", "#/") + '</section>' +
         '<p class="page-note">第 25–31 章仍可当教材阅读。其中的历史仓库链接已标明可选参考，不是当前作业。</p>';
     }
-    function footer(item, track) {
+    function footer(item, track, bookNav) {
       var adjacent = routes.neighbors(chapters, track, item.id);
+      var prevLabel = bookNav ? "全书上一课" : "上一课";
+      var nextLabel = bookNav ? "全书下一课" : "下一课";
       function link(id, label, cls) {
         return '<a class="footer-link ' + cls + '" href="' + routes.href(id, track) + '"><span class="fl-label">' + label +
           '</span><span class="fl-title">' + escape(name(chapter(id))) + '</span></a>';
       }
-      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, "上一课", "") : '<span></span>') +
-        (adjacent.next ? link(adjacent.next, "下一课", "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
+      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, prevLabel, "") : '<span></span>') +
+        (adjacent.next ? link(adjacent.next, nextLabel, "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
           '"><span class="fl-label">已到最后一课</span><span class="fl-title">返回' + (track ? "查阅分组" : "章节目录") + '</span></a>') + '</nav>';
     }
-    function lesson(item, track, body, reference) {
+    function lesson(item, track, body, reference, section) {
       var read = progress.isRead(item.id);
       var routeLink = track ? '<a href="#/track/' + track.id + '">' + escape(track.title) + '</a>' : '<a href="#/catalog">全部章节</a>';
-      return '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
+      var context = taskContext(item, section);
+      return context +
+        '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
         header(item.title, item.desc, "课程") + '<div class="chapter-actions"><button class="btn' + (read ? " done" : "") +
         '" id="markRead" aria-pressed="' + read + '">' + (read ? "已读完 · 点击取消" : "标记已读") + '</button>' +
         '<span class="page-note">已读只保存在此浏览器，不是已掌握</span>' +
         (reference ? '<a class="reference-link" href="#/reference/' + reference.id + '">按需查阅本章参考手册 →</a>' : "") +
-        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track);
+        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track, !!context);
     }
     function referencePage(reference, item, body) {
       return '<div class="lesson-context"><a href="#/' + item.id + '">返回第 ' + escape(item.num) + ' 章</a>' +
