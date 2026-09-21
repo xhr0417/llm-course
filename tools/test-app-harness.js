@@ -61,6 +61,13 @@ function simpleMatch(node, selector) {
     if (token[0] === "#") return node.id === token.slice(1);
     if (token[0] === "[") {
       const body = token.slice(1, -1);
+      const prefix = body.indexOf("^=");
+      if (prefix !== -1) {
+        const key = body.slice(0, prefix);
+        const value = body.slice(prefix + 2).replace(/^["']|["']$/g, "");
+        const actual = node.getAttribute(key) || "";
+        return actual.slice(0, value.length) === value;
+      }
       const eq = body.indexOf("=");
       if (eq === -1) return node.getAttribute(body) != null;
       const key = body.slice(0, eq);
@@ -130,6 +137,7 @@ function createElementFactory(byId) {
         applyAttrs(node, match[3] || "");
         const current = stack[stack.length - 1];
         node.parentNode = current;
+        node.ownerDocument = current.ownerDocument;
         current.childNodes.push(node);
         const voidLike = VOID.has(match[2].toLowerCase()) || /\/$/.test((match[3] || "").trim()) || /\/$/.test(match[0].trim());
         if (!voidLike) stack.push(node);
@@ -154,7 +162,10 @@ function createElementFactory(byId) {
       tagName: String(tag).toUpperCase(),
       childNodes: [],
       parentNode: null,
-      style: {},
+      style: {
+        setProperty: function (name, value) { this[name] = String(value); },
+        getPropertyValue: function (name) { return this[name] || ""; }
+      },
       hidden: false,
       disabled: false,
       value: "",
@@ -169,6 +180,15 @@ function createElementFactory(byId) {
       _listeners: {},
       attributes: Object.create(null),
       ownerDocument: null,
+      get dataset() {
+        const data = {};
+        Object.keys(node.attributes).forEach(function (key) {
+          if (key.slice(0, 5) !== "data-") return;
+          const name = key.slice(5).replace(/-([a-z])/g, function (_, letter) { return letter.toUpperCase(); });
+          data[name] = node.attributes[key];
+        });
+        return data;
+      },
       get classList() { return makeClassList(node); },
       get parentElement() {
         return node.parentNode && node.parentNode.tagName ? node.parentNode : null;
@@ -242,7 +262,15 @@ function createElementFactory(byId) {
           if (type === "checkbox") node.checked = !node.checked;
           else if (type === "radio") node.checked = true;
         }
-        node.dispatchEvent({ type: "click", button: 0, preventDefault: function () { this.defaultPrevented = true; } });
+        const event = { type: "click", button: 0, target: node, preventDefault: function () { this.defaultPrevented = true; } };
+        var current = node;
+        while (current && typeof current.dispatchEvent === "function") {
+          current.dispatchEvent(event);
+          current = current.parentNode;
+        }
+        if (node.ownerDocument && typeof node.ownerDocument.dispatchEvent === "function") {
+          node.ownerDocument.dispatchEvent(event);
+        }
         if (node.tagName === "INPUT") {
           node.dispatchEvent({ type: "change", preventDefault: function () { this.defaultPrevented = true; } });
         }
@@ -258,9 +286,10 @@ function createElementFactory(byId) {
         return false;
       },
       closest: function (selector) {
+        const groups = String(selector).split(",").map(function (item) { return item.trim(); }).filter(Boolean);
         let current = node;
         while (current && current.tagName) {
-          if (simpleMatch(current, selector)) return current;
+          if (groups.some(function (group) { return simpleMatch(current, group); })) return current;
           current = current.parentNode;
         }
         return null;
@@ -273,11 +302,42 @@ function createElementFactory(byId) {
       },
       appendChild: function (child) {
         child.parentNode = node;
+        child.ownerDocument = node.ownerDocument;
         node.childNodes.push(child);
         return child;
       },
+      insertBefore: function (child, before) {
+        child.parentNode = node;
+        child.ownerDocument = node.ownerDocument;
+        const index = before ? node.childNodes.indexOf(before) : -1;
+        if (index < 0) node.childNodes.push(child);
+        else node.childNodes.splice(index, 0, child);
+        return child;
+      },
+      removeChild: function (child) {
+        node.childNodes = node.childNodes.filter(function (item) { return item !== child; });
+        child.parentNode = null;
+        return child;
+      },
+      replaceChild: function (next, old) {
+        const index = node.childNodes.indexOf(old);
+        next.parentNode = node;
+        next.ownerDocument = node.ownerDocument;
+        if (index >= 0) node.childNodes[index] = next;
+        else node.childNodes.push(next);
+        old.parentNode = null;
+        return old;
+      },
+      replaceWith: function () {
+        const parent = node.parentNode;
+        const next = arguments[0];
+        if (!parent) return;
+        if (next && typeof parent.replaceChild === "function") parent.replaceChild(next, node);
+        else if (typeof parent.removeChild === "function") parent.removeChild(node);
+      },
       getBoundingClientRect: function () {
-        return { top: 80, left: 0, width: 100, height: 24, bottom: 104, right: 100 };
+        var height = node.classList && node.classList.contains("task-context") ? 168 : 24;
+        return { top: 58, left: 0, width: 800, height: height, bottom: 58 + height, right: 800 };
       },
       scrollIntoView: function () {}
     };
@@ -323,14 +383,31 @@ function failResponse() {
 }
 
 function chapterMarkdown(chapter) {
-  return [
+  const lines = [
     "# " + chapter.title,
     "",
     "## 7.4 Self-Attention 是什么 ★",
     "",
     "GRPO-TOKEN " + chapter.id + " 用于搜索与章节渲染。",
     ""
-  ].join("\n");
+  ];
+  if (chapter.id === "transformer") {
+    lines.push(
+      "## 7.5 Q、K、V：三个投影 ★",
+      "",
+      "QKV placeholder",
+      "",
+      "## 7.6 为什么标准 Transformer 使用独立的 Q/K 投影？★",
+      "",
+      "not a week-1 material",
+      "",
+      "## 7.14 Multi-Head Attention ★",
+      "",
+      "last required heading",
+      ""
+    );
+  }
+  return lines.join("\n");
 }
 
 function createFetch(options) {
@@ -385,15 +462,21 @@ function mountShell(createElement, body) {
     ["div", { id: "progressFill" }],
     ["p", { id: "storageNotice" }],
     ["input", { id: "searchInput" }],
-    ["div", { id: "searchResults" }],
-    ["div", { id: "searchList" }],
-    ["span", { id: "searchSummary" }],
-    ["button", { id: "closeSearch" }],
     ["button", { id: "themeToggle" }],
     ["button", { id: "resetProgress" }],
     ["button", { id: "backTop" }],
     ["main", { id: "content" }]
   ].forEach(function (item) { add(item[0], item[1]); });
+  const searchResults = add("div", { id: "searchResults", "class": "search-results" });
+  [
+    ["span", { id: "searchSummary" }],
+    ["button", { id: "closeSearch" }],
+    ["div", { id: "searchList", "class": "search-list" }]
+  ].forEach(function (item) {
+    const node = createElement(item[0]);
+    Object.keys(item[1]).forEach(function (key) { node.setAttribute(key, item[1][key]); });
+    searchResults.appendChild(node);
+  });
 }
 
 function bootApp(options) {

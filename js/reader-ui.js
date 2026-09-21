@@ -70,6 +70,9 @@
       }
       buildToc();
       initDemos(root);
+      if (typeof options.onSection === "function") {
+        options.onSection(String(element.textContent || "").trim());
+      }
       // behavior 必须显式给：继承 html{scroll-behavior:smooth} 时这次滚动会被丢弃，停在页面顶部。
       element.scrollIntoView({ block: "start", behavior: "instant" });
       element.setAttribute("tabindex", "-1");
@@ -149,10 +152,10 @@
       }
       headings = Array.from(root.querySelectorAll("#mdBody h2, #mdBody h3"));
       headings.forEach(function (heading, index) {
-        heading.id = "sec-" + index + "-" + slug(heading.textContent);
+        heading.setAttribute("id", "sec-" + index + "-" + slug(heading.textContent));
       });
       root.querySelectorAll("#mdBody details.fold > summary").forEach(function (summary, index) {
-        summary.id = "sec-fold-" + index + "-" + slug(summary.textContent);
+        summary.setAttribute("id", "sec-fold-" + index + "-" + slug(summary.textContent));
       });
       buildToc();
       var quizState = loadQuizState();

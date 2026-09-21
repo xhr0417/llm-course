@@ -505,12 +505,17 @@ test('textbook chapters show the current task and the next related section', () 
   assert.doesNotMatch(first, /lab\.attention|<code>/);
   assert.doesNotMatch(first, /自动测试通过/);
   const lastRequired = pages.lesson(transformer, null, '<p>body</p>', null, '7.14 Multi-Head Attention ★');
+  assert.match(lastRequired, /必要教材 · 6 \/ 6 · 7\.14/);
   assert.match(lastRequired, /下一相关小节：7\.12/);
   assert.match(lastRequired, /写完后对照：7\.12/);
   const lastCheck = pages.lesson(transformer, null, '<p>body</p>', null, '7.13 公式 ↔ 代码逐行对应 ★');
   assert.match(lastCheck, /返回当前练习/);
   assert.doesNotMatch(lastCheck, /下一相关小节/);
   assert.doesNotMatch(lastCheck, /写完后对照：/);
+  const otherHeading = pages.lesson(transformer, null, '<p>body</p>', null, '7.6 为什么标准 Transformer 使用独立的 Q/K 投影？★');
+  assert.match(otherHeading, /返回当前练习/);
+  assert.doesNotMatch(otherHeading, /下一相关小节/);
+  assert.doesNotMatch(otherHeading, /必要教材/);
   const unrelated = pages.lesson(map, null, '<p>body</p>', null);
   assert.match(unrelated, /手写因果多头注意力/);
   assert.match(unrelated, /返回当前练习/);
@@ -704,6 +709,52 @@ test('opening required material from home keeps task context on the chapter', as
   await harness.waitFor(() => /打开必要教材/.test(app.text()));
   assert.match(app.html(), /class="home-fold"/);
   assert.match(app.text(), /保存本条记录/);
+});
+
+test('in-chapter TOC and search update the task bar for the heading in view', async () => {
+  const app = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /打开必要教材/.test(app.text()));
+  const start = app.content.querySelector('a.btn.primary');
+  app.go(start.getAttribute('href'));
+  await harness.waitFor(() => /必要教材 · 1 \/ 6/.test(app.text()));
+  assert.match(app.text(), /下一相关小节：7\.5/);
+  assert.equal(app.document.documentElement.style['--task-context-h'], '168px');
+
+  const toc = app.byId('tocNav');
+  const toLast = Array.from(toc.querySelectorAll('.toc-link')).find(link => /7\.14/.test(link.textContent));
+  assert.ok(toLast);
+  toLast.click();
+  assert.match(app.text(), /必要教材 · 6 \/ 6 · 7\.14/);
+  assert.match(app.text(), /下一相关小节：7\.12/);
+  assert.doesNotMatch(app.text(), /下一相关小节：7\.5/);
+
+  const toOther = Array.from(toc.querySelectorAll('.toc-link')).find(link => /7\.6/.test(link.textContent));
+  assert.ok(toOther);
+  toOther.click();
+  assert.match(app.text(), /返回当前练习/);
+  assert.doesNotMatch(app.text(), /下一相关小节/);
+  assert.doesNotMatch(app.text(), /必要教材/);
+
+  const search = app.byId('searchInput');
+  search.value = '7.14 Multi-Head';
+  search.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
+  await harness.waitFor(() => {
+    const hits = app.byId('searchList').querySelectorAll('.search-hit');
+    return hits.some(function (hit) { return /7\.14/.test(hit.textContent); });
+  });
+  const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
+    .find(item => /7\.14/.test(item.textContent));
+  hit.click();
+  assert.match(app.text(), /必要教材 · 6 \/ 6 · 7\.14/);
+  assert.match(app.text(), /下一相关小节：7\.12/);
+});
+
+test('task heading scroll offset uses the measured sticky bar height', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
+  assert.match(css, /scroll-margin-top:\s*calc\(var\(--topbar-h\) \+ var\(--task-context-h/);
+  assert.doesNotMatch(css, /12rem/);
+  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8'), /measureTaskContext/);
+  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'js/reader-ui.js'), 'utf8'), /onSection/);
 });
 
 function memoryStorage(seed) {

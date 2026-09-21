@@ -9,7 +9,10 @@
   var cache = {}, requestId = 0, pendingSection = null;
   var learningPlan = null, planError = null, selectedTaskId = stored("llm-course-current-task");
   var criterionDrafts = {};
-  var reader = CourseReader.create({ root: root, tocNav: byId("tocNav"), escapeHtml: escape });
+  var reader = CourseReader.create({
+    root: root, tocNav: byId("tocNav"), escapeHtml: escape,
+    onSection: function (title) { syncTaskContext(title); }
+  });
   function stored(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
   function remember(key, value) { try { localStorage.setItem(key, value); } catch (error) { /* Session remains usable without persistence. */ } }
   var progress = CourseProgress.create({ onChange: function () { updateProgress(); } });
@@ -174,6 +177,7 @@
       updateProgress(); window.scrollTo({ top: 0, behavior: "instant" });
       var chapterSection = locationRoute.section || (pendingSection && pendingSection.id === chapter.id && pendingSection.title);
       if (chapterSection) { reader.focusSection(chapterSection); pendingSection = null; }
+      else measureTaskContext();
     }).catch(function (error) {
       if (token !== requestId) return;
       root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '<p><button class="btn" id="retryChapter">重新加载</button></p></div>';
@@ -185,6 +189,43 @@
     return learningPlan.tasks.find(function (item) { return item.id === selectedTaskId; })
       || learningPlan.tasks.find(function (item) { return item.id === learningPlan.currentTaskId; })
       || learningPlan.tasks[0];
+  }
+  function measureTaskContext() {
+    var bar = root && root.querySelector(".task-context");
+    var height = bar && bar.getBoundingClientRect ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+    var style = document.documentElement && document.documentElement.style;
+    if (!style) return;
+    if (typeof style.setProperty === "function") style.setProperty("--task-context-h", height + "px");
+    else style["--task-context-h"] = height + "px";
+  }
+  function replaceNode(existing, next) {
+    if (!existing || !next) return;
+    if (typeof existing.replaceWith === "function") {
+      existing.replaceWith(next);
+      return;
+    }
+    var parent = existing.parentNode;
+    if (parent && typeof parent.replaceChild === "function") parent.replaceChild(next, existing);
+  }
+  function syncTaskContext(section) {
+    var existing = root && root.querySelector(".task-context");
+    if (!existing || !current || !pages || typeof pages.taskContext !== "function") {
+      measureTaskContext();
+      return;
+    }
+    var html = pages.taskContext(current, section || null);
+    if (!html) {
+      if (existing.parentNode && typeof existing.parentNode.removeChild === "function") {
+        existing.parentNode.removeChild(existing);
+      } else if (typeof existing.remove === "function") existing.remove();
+      measureTaskContext();
+      return;
+    }
+    var wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    var next = wrap.querySelector ? wrap.querySelector(".task-context") : wrap.firstChild;
+    if (next) replaceNode(existing, next);
+    measureTaskContext();
   }
   function paintHome() {
     var y = typeof window.scrollY === "number" ? window.scrollY : 0;
@@ -331,6 +372,7 @@
       if (confirm("确定要重置阅读和项目步骤进度吗？")) { progress.reset(); route(); }
     });
     window.addEventListener("scroll", function () { byId("backTop").hidden = window.scrollY < 500; }, { passive: true });
+    window.addEventListener("resize", measureTaskContext);
     byId("backTop").addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
   }

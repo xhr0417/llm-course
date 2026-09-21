@@ -3,6 +3,7 @@
   --space-6: 24px; --space-8: 32px; --space-12: 48px;
   --text-xs: 12px; --text-sm: 14px; --text-base: 16px;
   --text-lg: 20px; --text-title: 32px;
+  --task-context-h: 0px;
 }
 [hidden] { display: none !important; }
 :where(a, button, summary, input, textarea, label):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
@@ -88,16 +89,17 @@
   position: sticky;
   top: var(--topbar-h);
   z-index: 5;
-  margin: 0 0 var(--space-6);
-  padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-4);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
-.task-context p { margin: var(--space-2) 0; max-width: 46em; }
-.task-context-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: var(--space-3) 0; }
+.task-context p { margin: var(--space-1) 0; max-width: 46em; }
+.task-context-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; }
 .task-context-actions .btn { min-height: 44px; }
+.task-context .page-note { margin: var(--space-1) 0; }
 .home-fold {
   margin-top: var(--space-6);
   border: 1px solid var(--border);
@@ -125,8 +127,9 @@
 .home-fold[open] > summary::before { transform: rotate(90deg); }
 .home-fold[open] > summary { border-bottom: 1px solid var(--border); }
 .home-fold:not([open]) > .fold-body { display: none; }
-body:has(.task-context) .md :is(h2, h3, h4, h5, h6) {
-  scroll-margin-top: calc(var(--topbar-h) + 12rem);
+body:has(.task-context) .md :is(h2, h3, h4, h5, h6),
+body:has(.task-context) .md .gs-title {
+  scroll-margin-top: calc(var(--topbar-h) + var(--task-context-h, 0px) + var(--space-3));
 }
 .home-fold > .fold-body { padding: var(--space-3) var(--space-4) var(--space-4); }
 .home-fold h2 { font-size: var(--text-base); margin: 0 0 var(--space-3); }

@@ -114,7 +114,7 @@
       if (!task) return "";
       var match = findMaterial(task, item.id, section);
       var html = '<aside class="task-context" aria-label="当前练习导航">' +
-        '<span class="page-label">当前练习</span><p>' + escape(task.title) + "</p>" +
+        '<p><span class="page-label">当前练习</span> ' + escape(task.title) + "</p>" +
         '<div class="task-context-actions"><a class="btn" href="#/">返回当前练习</a>';
       var next = nextRelated(match);
       if (next) html += action("下一相关小节：" + next.label, materialHref(next));
@@ -122,15 +122,14 @@
       if (match) {
         var sameRole = match.list.filter(function (entry) { return entry.role === match.item.role; });
         var roleIndex = sameRole.indexOf(match.item) + 1;
-        html += '<p class="page-note">' + escape(roleLabel(match.item.role)) + " · " +
+        var line = escape(roleLabel(match.item.role)) + " · " +
           String(roleIndex) + " / " + String(sameRole.length) + " · " +
-          escape(match.item.label) + "</p>";
+          escape(match.item.label);
         if (match.item.role !== "check-after") {
           var after = listByRole(task, "check-after").filter(function (entry) { return entry.chapterId; });
-          if (after[0]) {
-            html += '<p class="page-note">写完后对照：' + escape(after[0].label) + "</p>";
-          }
+          if (after[0]) line += "。写完后对照：" + escape(after[0].label);
         }
+        html += '<p class="page-note">' + line + "</p>";
       }
       return html + "</aside>";
     }
@@ -359,6 +358,6 @@
         '<span class="fl-label">返回教材</span><span class="fl-title">' + escape(name(item)) + '</span></a></nav>';
     }
     return { home: home, track: trackPage, catalog: catalog, projects: projectPage, lesson: lesson,
-      reference: referencePage, referenceFor: referenceFor };
+      reference: referencePage, referenceFor: referenceFor, taskContext: taskContext };
   };
 })();

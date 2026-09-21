@@ -148,6 +148,7 @@
         if (!hit || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         var result = results[Number(hit.dataset.searchIndex)];
         if (!result) return;
+        event.preventDefault();
         close(false);
         options.onNavigate(result.document.path, result.section);
       });
