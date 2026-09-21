@@ -1,0 +1,967 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index 6cf331b..bdb99d8 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -14,9 +14,9 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
+ 
+ ## 5. Shared components
+ - Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+-- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links.
++- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links. On a task textbook heading,「下一相关小节」is the forward action;「返回当前练习」is a secondary button.
+ - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
+-- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
++- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. The home page keeps the current goal, week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. In-chapter table of contents and search jumps update that bar to the heading now in view; a heading that is not on the current exercise does not keep a stale next-section action. The sticky bar is compact, and heading scroll offset uses the measured bar height so the target title is not covered. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
+ - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+ - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+ - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
+@@ -28,4 +28,4 @@ Keep existing purposeful interactions and diagrams. New transitions only change
+ Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+ 
+ ## 8. Accessibility and verification
+-Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high, including record radios, concept checkboxes and short-record textareas. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Also verify learning-record save failure and confirm-next on home. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
++Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high, including record radios, concept checkboxes and short-record textareas. Verify「我的学习」, catalog, textbook chapters (current-task context, return to the exercise, next related section, in-chapter TOC/search updating that context, target headings fully visible under the sticky bar), search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Also verify learning-record save failure and confirm-next on home, and that closed home disclosures still keep their content. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
+diff --git a/README.md b/README.md
+index 9c93e64..5dd38e1 100644
+--- a/README.md
++++ b/README.md
+@@ -12,7 +12,7 @@
+ 
+ ## 从哪里开始
+ 
+-打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。每一周都写清写什么、怎么检查、必需做到哪里。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过），点「保存本条记录」才写入；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
++打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。首页先给出当前目标和主按钮，详细验收、历史和参考按需展开。从练习打开教材时，章节页会显示当前练习、返回练习，以及下一相关小节。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过），点「保存本条记录」才写入；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
+ 
+ 教材、交互演示和搜索仍可用：
+ 
+diff --git a/css/course.css b/css/course.css
+index 1ae6337..5089d80 100644
+--- a/css/course.css
++++ b/css/course.css
+@@ -3,6 +3,7 @@
+   --space-6: 24px; --space-8: 32px; --space-12: 48px;
+   --text-xs: 12px; --text-sm: 14px; --text-base: 16px;
+   --text-lg: 20px; --text-title: 32px;
++  --task-context-h: 0px;
+ }
+ [hidden] { display: none !important; }
+ :where(a, button, summary, input, textarea, label):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@@ -84,6 +85,54 @@
+ .check-record .note-field textarea { min-height: 64px; }
+ .check-record .btn { margin-top: var(--space-3); }
+ .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
++.task-context {
++  position: sticky;
++  top: var(--topbar-h);
++  z-index: 5;
++  margin: 0 0 var(--space-4);
++  padding: var(--space-2) var(--space-4);
++  background: var(--bg-panel);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  box-shadow: var(--shadow);
++}
++.task-context p { margin: var(--space-1) 0; max-width: 46em; }
++.task-context-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; }
++.task-context-actions .btn { min-height: 44px; }
++.task-context .page-note { margin: var(--space-1) 0; }
++.home-fold {
++  margin-top: var(--space-6);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  background: var(--bg-panel);
++  overflow: hidden;
++}
++.home-fold > summary {
++  cursor: pointer;
++  min-height: 44px;
++  padding: var(--space-3) var(--space-4);
++  font-weight: 600;
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  list-style: none;
++}
++.home-fold > summary::-webkit-details-marker { display: none; }
++.home-fold > summary::before {
++  content: "▸";
++  color: var(--text-faint);
++  transition: transform .15s;
++  font-size: 13px;
++}
++.home-fold[open] > summary::before { transform: rotate(90deg); }
++.home-fold[open] > summary { border-bottom: 1px solid var(--border); }
++.home-fold:not([open]) > .fold-body { display: none; }
++body:has(.task-context) .md :is(h2, h3, h4, h5, h6),
++body:has(.task-context) .md .gs-title {
++  scroll-margin-top: calc(var(--topbar-h) + var(--task-context-h, 0px) + var(--space-3));
++}
++.home-fold > .fold-body { padding: var(--space-3) var(--space-4) var(--space-4); }
++.home-fold h2 { font-size: var(--text-base); margin: 0 0 var(--space-3); }
+ .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
+ .task-spec { margin: 0; max-width: 46em; }
+ .task-spec dt { font-weight: 600; margin-top: var(--space-4); }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 86754ce..a8cb2d1 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -105,7 +105,7 @@
+ 
+ **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+ 
+-**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过，且每条有简短依据；每条用「保存本条记录」提交结果和依据；新提交有变化时保留旧快照，完全相同不重复追加；无依据不能算通过，也不改写已有有效记录。拓展不挡；概念历史不自动完成新任务；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
++**本轮（阶段 3 第三步整体终审）：** 教材任务上下文导航与首页信息分层已落地，跨章搜索专项已封板。前八周任务写入与最小记录层已通过验收（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）。`evidenceSystemImplemented` 已为 `true`。第三步已做：从练习进入教材后显示当前任务、返回当前练习、下一相关小节；首页把当前目标和主操作放在前面，详细验收、历史与参考按需展开；章内目录与搜索定位同步更新任务条；吸顶条按实测高度给标题留白；同章搜索原地定位；跨章搜索改路由后再定位，搜索结果链接带目标小节。沿用已验收记录规则：完成只看全部必需项的当前用户自报通过且每条有简短依据；「保存本条记录」；有变化才写入历史，完全相同不重复追加；无依据不能算通过。不增加复习队列、自动评分或新项目。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。跨章搜索专项封板不等于第三步完成，第三步整体待终审；阶段 3 整体尚未完成。不开始 3b。
+ 
+ **开工后的实现顺序（可验收小步，不扩大功能）：**
+ 
+@@ -123,7 +123,7 @@
+ 
+ 进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页突出下一动作，详细 workspace / steps / criteria 可分层或折叠，但不要删掉新手所需说明。
+ 
+-**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。
++**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。从当前练习打开必要教材后，章节页显示当前练习、返回当前练习，以及该小节的下一相关小节；全书上一课/下一课仍在。章内目录或搜索定位后任务条跟着当前小节更新（7.14 为必要教材 6/6、下一相关小节 7.12；非任务小节不显示错误的下一步）；目标标题按实测吸顶高度留白，在 375／768／1280 下不被挡住。首页搜索与从另一章点搜索结果都能进入目标章并落到目标小节；搜索结果自身的链接也带目标小节，新标签打开时不会只停在章首。首页当前目标与主按钮保持可见，详细验收、历史与参考在折叠块中仍可展开，记录规则不变。
+ 
+ **完成条件：** 前八周每条都有教材 + 实现 + 验收（含必需／拓展）；记录层可用；不指向已退出主线的六作业。
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index ff2912f..0c89b1d 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -231,7 +231,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页进一步分层仍未做。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/app.js b/js/app.js
+index 3c073cc..1a34970 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -9,7 +9,10 @@
+   var cache = {}, requestId = 0, pendingSection = null;
+   var learningPlan = null, planError = null, selectedTaskId = stored("llm-course-current-task");
+   var criterionDrafts = {};
+-  var reader = CourseReader.create({ root: root, tocNav: byId("tocNav"), escapeHtml: escape });
++  var reader = CourseReader.create({
++    root: root, tocNav: byId("tocNav"), escapeHtml: escape,
++    onSection: function (title) { syncTaskContext(title); }
++  });
+   function stored(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
+   function remember(key, value) { try { localStorage.setItem(key, value); } catch (error) { /* Session remains usable without persistence. */ } }
+   var progress = CourseProgress.create({ onChange: function () { updateProgress(); } });
+@@ -166,7 +169,7 @@
+     root.innerHTML = '<div class="loading" role="status">正在加载课程…</div>';
+     fetchChapter(chapter).then(function (text) {
+       if (token !== requestId) return;
+-      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id));
++      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id), locationRoute.section);
+       byId("markRead").addEventListener("click", function () { progress.toggleRead(chapter.id); });
+       progress.initGuidedLabs(root, chapter.id);
+       reader.init(chapter.id);
+@@ -174,6 +177,7 @@
+       updateProgress(); window.scrollTo({ top: 0, behavior: "instant" });
+       var chapterSection = locationRoute.section || (pendingSection && pendingSection.id === chapter.id && pendingSection.title);
+       if (chapterSection) { reader.focusSection(chapterSection); pendingSection = null; }
++      else measureTaskContext();
+     }).catch(function (error) {
+       if (token !== requestId) return;
+       root.innerHTML = '<div class="loading" role="alert">' + escape(error.message) + '<p><button class="btn" id="retryChapter">重新加载</button></p></div>';
+@@ -186,6 +190,43 @@
+       || learningPlan.tasks.find(function (item) { return item.id === learningPlan.currentTaskId; })
+       || learningPlan.tasks[0];
+   }
++  function measureTaskContext() {
++    var bar = root && root.querySelector(".task-context");
++    var height = bar && bar.getBoundingClientRect ? Math.ceil(bar.getBoundingClientRect().height) : 0;
++    var style = document.documentElement && document.documentElement.style;
++    if (!style) return;
++    if (typeof style.setProperty === "function") style.setProperty("--task-context-h", height + "px");
++    else style["--task-context-h"] = height + "px";
++  }
++  function replaceNode(existing, next) {
++    if (!existing || !next) return;
++    if (typeof existing.replaceWith === "function") {
++      existing.replaceWith(next);
++      return;
++    }
++    var parent = existing.parentNode;
++    if (parent && typeof parent.replaceChild === "function") parent.replaceChild(next, existing);
++  }
++  function syncTaskContext(section) {
++    var existing = root && root.querySelector(".task-context");
++    if (!existing || !current || !pages || typeof pages.taskContext !== "function") {
++      measureTaskContext();
++      return;
++    }
++    var html = pages.taskContext(current, section || null);
++    if (!html) {
++      if (existing.parentNode && typeof existing.parentNode.removeChild === "function") {
++        existing.parentNode.removeChild(existing);
++      } else if (typeof existing.remove === "function") existing.remove();
++      measureTaskContext();
++      return;
++    }
++    var wrap = document.createElement("div");
++    wrap.innerHTML = html;
++    var next = wrap.querySelector ? wrap.querySelector(".task-context") : wrap.firstChild;
++    if (next) replaceNode(existing, next);
++    measureTaskContext();
++  }
+   function paintHome() {
+     var y = typeof window.scrollY === "number" ? window.scrollY : 0;
+     syncDraftsFromDom();
+@@ -331,6 +372,7 @@
+       if (confirm("确定要重置阅读和项目步骤进度吗？")) { progress.reset(); route(); }
+     });
+     window.addEventListener("scroll", function () { byId("backTop").hidden = window.scrollY < 500; }, { passive: true });
++    window.addEventListener("resize", measureTaskContext);
+     byId("backTop").addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
+   }
+@@ -340,12 +382,25 @@
+     window.addEventListener("hashchange", route);
+     search = CourseSearch.create({ chapters: chapters, references: references,
+       fetchChapter: fetchChapter, fetchReference: fetchReference, escapeHtml: escape,
+-      chapterHref: function (id) { return routes.href(id, activeTrack); },
+-      referenceHref: function (id) { return "#/reference/" + encodeURIComponent(id); },
++      chapterHref: function (id, section) { return routes.href(id, activeTrack, section); },
++      referenceHref: function (id, section) {
++        var href = "#/reference/" + encodeURIComponent(id);
++        if (section) href += "?section=" + encodeURIComponent(section);
++        return href;
++      },
+       closeSidebar: closeSidebar,
+       onNavigate: function (path, title) {
+-        if (currentPath === path) { reader.focusSection(title); pendingSection = null; }
+-        else pendingSection = { id: path, title: title };
++        if (currentPath === path) {
++          reader.focusSection(title);
++          pendingSection = null;
++          return;
++        }
++        pendingSection = { id: path, title: title };
++        var href = path.indexOf("reference/") === 0
++          ? "#/reference/" + encodeURIComponent(path.slice("reference/".length))
++          : routes.href(path, activeTrack, title);
++        if (location.hash === href) route();
++        else location.hash = href;
+       } });
+     search.start();
+   }
+diff --git a/js/pages.js b/js/pages.js
+index a4c00f0..13ec269 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -66,6 +66,73 @@
+         }).join("") +
+         '</div><p class="page-note">点某一周只更换练习说明。不会把前面的周标成完成，也不会按日期自动跳周。</p>';
+     }
++    function fold(title, inner, open) {
++      return '<details class="home-fold"' + (open ? " open" : "") + "><summary>" + escape(title) +
++        '</summary><div class="fold-body">' + inner + "</div></details>";
++    }
++    function roleLabel(role) {
++      if (role === "required") return "必要教材";
++      if (role === "check-after") return "写完后对照";
++      if (role === "parallel") return "并行补基础";
++      if (role === "reference") return "对照入口";
++      return "练习材料";
++    }
++    function spineMaterials(task) {
++      return (task && task.materials || []).filter(function (item) {
++        return item.chapterId && !item.external;
++      });
++    }
++    function findMaterial(task, chapterId, section) {
++      var list = spineMaterials(task);
++      var index = -1;
++      if (section) {
++        index = list.findIndex(function (item) {
++          return item.chapterId === chapterId && item.section === section;
++        });
++      } else {
++        index = list.findIndex(function (item) { return item.chapterId === chapterId; });
++      }
++      if (index < 0) return null;
++      return { list: list, index: index, item: list[index] };
++    }
++    function nextRelated(match) {
++      if (!match) return null;
++      var current = match.item;
++      var i;
++      for (i = match.index + 1; i < match.list.length; i++) {
++        if (match.list[i].role === current.role) return match.list[i];
++      }
++      if (current.role === "required") {
++        for (i = match.index + 1; i < match.list.length; i++) {
++          if (match.list[i].role === "check-after") return match.list[i];
++        }
++      }
++      return null;
++    }
++    function taskContext(item, section) {
++      var task = plan && resolveTask(plan);
++      if (!task) return "";
++      var match = findMaterial(task, item.id, section);
++      var html = '<aside class="task-context" aria-label="当前练习导航">' +
++        '<p><span class="page-label">当前练习</span> ' + escape(task.title) + "</p>" +
++        '<div class="task-context-actions"><a class="btn" href="#/">返回当前练习</a>';
++      var next = nextRelated(match);
++      if (next) html += action("下一相关小节：" + next.label, materialHref(next));
++      html += "</div>";
++      if (match) {
++        var sameRole = match.list.filter(function (entry) { return entry.role === match.item.role; });
++        var roleIndex = sameRole.indexOf(match.item) + 1;
++        var line = escape(roleLabel(match.item.role)) + " · " +
++          String(roleIndex) + " / " + String(sameRole.length) + " · " +
++          escape(match.item.label);
++        if (match.item.role !== "check-after") {
++          var after = listByRole(task, "check-after").filter(function (entry) { return entry.chapterId; });
++          if (after[0]) line += "。写完后对照：" + escape(after[0].label);
++        }
++        html += '<p class="page-note">' + line + "</p>";
++      }
++      return html + "</aside>";
++    }
+     function home(last) {
+       if (options.planError) {
+         return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
+@@ -155,14 +222,13 @@
+               "> " + dim[1] + "</label>";
+           }).join("") + "</div></li>";
+       }
+-      var notes = '<section class="entry-section"><h2>短记录</h2>' +
++      var notes = fold("短记录",
+         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
+         '<label class="note-field">做了什么<textarea data-note="what" rows="3">' + escape(learning.note(task.id, "what")) + "</textarea></label>" +
+         '<label class="note-field">检查结果及代码位置<textarea data-note="check" rows="3">' + escape(learning.note(task.id, "check")) + "</textarea></label>" +
+         '<label class="note-field">下一步<textarea data-note="next" rows="3">' + escape(learning.note(task.id, "next")) + "</textarea></label>" +
+         '<label class="note-field">卡点（可选，不锁教材）<textarea data-stuck="1" rows="2">' + escape(learning.stuck(task.id)) + "</textarea></label>" +
+-        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : "") +
+-        "</section>";
++        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : ""));
+       var complete = learning.isTaskComplete(task);
+       var next = learning.nextTask(plan, task);
+       var advance = complete
+@@ -173,6 +239,16 @@
+             : '<p class="page-note">这是本阶段最后一项练习。</p>') +
+           "</section>"
+         : "";
++      var criteriaOpen = !!(learning.passBlocked && learning.passBlocked()) ||
++        (task.criteria || []).some(function (item) {
++          return !!(options.criterionDraft && options.criterionDraft(task.id, item.id));
++        });
++      var requiredCount = requiredCriteria(task).filter(function (item) {
++        return learning.currentResult(task.id, item.id) === "user_passed" &&
++          learning.currentEvidence && learning.currentEvidence(task.id, item.id);
++      }).length;
++      var criteriaSummary = "验收与记录（必需 " + String(requiredCount) + " / " +
++        String(requiredCriteria(task).length) + " 条当前通过）";
+       return header(stage.title + "—" + (task.shortTitle || task.title),
+         "当前练习：" + task.title + "。先看写什么、怎么检查、必需做到哪里。",
+         "我的学习") +
+@@ -181,38 +257,43 @@
+         weekButtons(plan, stage, task) +
+         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
+         '</section>' +
+-        '<section class="entry-section"><h2>必要教材</h2><ol class="task-list">' +
+-        required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p></section>' +
+-        '<section class="entry-section"><h2>在哪里写、输入输出是什么</h2>' +
+-        '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
+-        '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
+-        '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl></section>' +
+-        '<section class="entry-section"><h2>实现步骤</h2><ol class="task-list task-steps">' +
+-        task.steps.map(function (step) {
+-          return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
+-        }).join("") + "</ol></section>" +
+-        '<section class="entry-section"><h2>如何检查结果</h2>' +
+-        (after.length ? '<ol class="task-list">' +
+-        after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        "</ol>" : "") +
+-        '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
+-        '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
+-        requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
+-        '</ol>' +
+-        (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
+-          stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : "") +
+-        '</section>' +
+-        '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
+-        task.conceptIds.map(conceptRow).join("") + "</ul></section>" +
+-        notes +
+         advance +
+-        (parallel.length ? '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
+-        parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p></section>' : "") +
+-        (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
++        fold("必要教材",
++          '<ol class="task-list">' +
++          required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p>') +
++        fold("在哪里写、输入输出是什么",
++          '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
++          '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
++          '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl>') +
++        fold("实现步骤",
++          '<ol class="task-list task-steps">' +
++          task.steps.map(function (step) {
++            return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
++          }).join("") + "</ol>") +
++        fold("如何检查结果",
++          (after.length ? '<ol class="task-list">' +
++          after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          "</ol>" : "") +
++          '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p>') +
++        fold(criteriaSummary,
++          '<h2>验收条件</h2><ol class="task-list">' +
++          requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
++          "</ol>" +
++          (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
++            stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : ""),
++          criteriaOpen) +
++        fold("相关概念",
++          '<ul class="concept-list">' + task.conceptIds.map(conceptRow).join("") + "</ul>") +
++        notes +
++        (parallel.length ? fold("并行补基础",
++          '<ul class="task-list">' +
++          parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p>') : "") +
++        (reference.length ? fold("对照入口",
++          '<ul class="task-list">' +
+           reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-          "</ul></section>" : "") +
++          "</ul>") : "") +
+         resume +
+         '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
+     }
+@@ -244,25 +325,29 @@
+         action("回到我的学习", "#/") + '</section>' +
+         '<p class="page-note">第 25–31 章仍可当教材阅读。其中的历史仓库链接已标明可选参考，不是当前作业。</p>';
+     }
+-    function footer(item, track) {
++    function footer(item, track, bookNav) {
+       var adjacent = routes.neighbors(chapters, track, item.id);
++      var prevLabel = bookNav ? "全书上一课" : "上一课";
++      var nextLabel = bookNav ? "全书下一课" : "下一课";
+       function link(id, label, cls) {
+         return '<a class="footer-link ' + cls + '" href="' + routes.href(id, track) + '"><span class="fl-label">' + label +
+           '</span><span class="fl-title">' + escape(name(chapter(id))) + '</span></a>';
+       }
+-      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, "上一课", "") : '<span></span>') +
+-        (adjacent.next ? link(adjacent.next, "下一课", "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
++      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, prevLabel, "") : '<span></span>') +
++        (adjacent.next ? link(adjacent.next, nextLabel, "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
+           '"><span class="fl-label">已到最后一课</span><span class="fl-title">返回' + (track ? "查阅分组" : "章节目录") + '</span></a>') + '</nav>';
+     }
+-    function lesson(item, track, body, reference) {
++    function lesson(item, track, body, reference, section) {
+       var read = progress.isRead(item.id);
+       var routeLink = track ? '<a href="#/track/' + track.id + '">' + escape(track.title) + '</a>' : '<a href="#/catalog">全部章节</a>';
+-      return '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
++      var context = taskContext(item, section);
++      return context +
++        '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
+         header(item.title, item.desc, "课程") + '<div class="chapter-actions"><button class="btn' + (read ? " done" : "") +
+         '" id="markRead" aria-pressed="' + read + '">' + (read ? "已读完 · 点击取消" : "标记已读") + '</button>' +
+         '<span class="page-note">已读只保存在此浏览器，不是已掌握</span>' +
+         (reference ? '<a class="reference-link" href="#/reference/' + reference.id + '">按需查阅本章参考手册 →</a>' : "") +
+-        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track);
++        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track, !!context);
+     }
+     function referencePage(reference, item, body) {
+       return '<div class="lesson-context"><a href="#/' + item.id + '">返回第 ' + escape(item.num) + ' 章</a>' +
+@@ -273,6 +358,6 @@
+         '<span class="fl-label">返回教材</span><span class="fl-title">' + escape(name(item)) + '</span></a></nav>';
+     }
+     return { home: home, track: trackPage, catalog: catalog, projects: projectPage, lesson: lesson,
+-      reference: referencePage, referenceFor: referenceFor };
++      reference: referencePage, referenceFor: referenceFor, taskContext: taskContext };
+   };
+ })();
+diff --git a/js/reader-ui.js b/js/reader-ui.js
+index ad10b17..968d144 100644
+--- a/js/reader-ui.js
++++ b/js/reader-ui.js
+@@ -70,6 +70,9 @@
+       }
+       buildToc();
+       initDemos(root);
++      if (typeof options.onSection === "function") {
++        options.onSection(String(element.textContent || "").trim());
++      }
+       // behavior 必须显式给：继承 html{scroll-behavior:smooth} 时这次滚动会被丢弃，停在页面顶部。
+       element.scrollIntoView({ block: "start", behavior: "instant" });
+       element.setAttribute("tabindex", "-1");
+@@ -149,10 +152,10 @@
+       }
+       headings = Array.from(root.querySelectorAll("#mdBody h2, #mdBody h3"));
+       headings.forEach(function (heading, index) {
+-        heading.id = "sec-" + index + "-" + slug(heading.textContent);
++        heading.setAttribute("id", "sec-" + index + "-" + slug(heading.textContent));
+       });
+       root.querySelectorAll("#mdBody details.fold > summary").forEach(function (summary, index) {
+-        summary.id = "sec-fold-" + index + "-" + slug(summary.textContent);
++        summary.setAttribute("id", "sec-fold-" + index + "-" + slug(summary.textContent));
+       });
+       buildToc();
+       var quizState = loadQuizState();
+diff --git a/js/search.js b/js/search.js
+index c1836d2..931f1bc 100644
+--- a/js/search.js
++++ b/js/search.js
+@@ -70,8 +70,11 @@
+       };
+     }));
+ 
+-    function hrefFor(document_) {
+-      return document_.reference ? options.referenceHref(document_.reference.id) : options.chapterHref(document_.chapter.id);
++    function hrefFor(document_, section) {
++      var heading = section && section !== document_.title ? section : null;
++      return document_.reference
++        ? options.referenceHref(document_.reference.id, heading)
++        : options.chapterHref(document_.chapter.id, heading);
+     }
+ 
+     function close(restoreFocus) {
+@@ -107,7 +110,7 @@
+         (failed ? " · 索引不完整，" + failed + " 章暂未加载，可刷新重试" : "") +
+         (results.length > 60 ? " · 显示前 60 条" : "");
+       list.innerHTML = results.length ? results.slice(0, 60).map(function (result, resultIndex) {
+-        return '<a class="search-hit" data-search-index="' + resultIndex + '" href="' + escape(hrefFor(result.document)) + '">' +
++        return '<a class="search-hit" data-search-index="' + resultIndex + '" href="' + escape(hrefFor(result.document, result.section)) + '">' +
+           '<div class="hit-chapter">' + escape(result.document.title) + " · " + escape(result.section) + "</div>" +
+           '<div class="hit-snippet">' + escape(result.snippet) + "</div></a>";
+       }).join("") : '<div class="search-empty">' +
+@@ -148,6 +151,7 @@
+         if (!hit || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+         var result = results[Number(hit.dataset.searchIndex)];
+         if (!result) return;
++        event.preventDefault();
+         close(false);
+         options.onNavigate(result.document.path, result.section);
+       });
+diff --git a/tools/test-app-harness.js b/tools/test-app-harness.js
+index 2ba08fa..37bde56 100644
+--- a/tools/test-app-harness.js
++++ b/tools/test-app-harness.js
+@@ -61,6 +61,13 @@ function simpleMatch(node, selector) {
+     if (token[0] === "#") return node.id === token.slice(1);
+     if (token[0] === "[") {
+       const body = token.slice(1, -1);
++      const prefix = body.indexOf("^=");
++      if (prefix !== -1) {
++        const key = body.slice(0, prefix);
++        const value = body.slice(prefix + 2).replace(/^["']|["']$/g, "");
++        const actual = node.getAttribute(key) || "";
++        return actual.slice(0, value.length) === value;
++      }
+       const eq = body.indexOf("=");
+       if (eq === -1) return node.getAttribute(body) != null;
+       const key = body.slice(0, eq);
+@@ -130,6 +137,7 @@ function createElementFactory(byId) {
+         applyAttrs(node, match[3] || "");
+         const current = stack[stack.length - 1];
+         node.parentNode = current;
++        node.ownerDocument = current.ownerDocument;
+         current.childNodes.push(node);
+         const voidLike = VOID.has(match[2].toLowerCase()) || /\/$/.test((match[3] || "").trim()) || /\/$/.test(match[0].trim());
+         if (!voidLike) stack.push(node);
+@@ -154,7 +162,10 @@ function createElementFactory(byId) {
+       tagName: String(tag).toUpperCase(),
+       childNodes: [],
+       parentNode: null,
+-      style: {},
++      style: {
++        setProperty: function (name, value) { this[name] = String(value); },
++        getPropertyValue: function (name) { return this[name] || ""; }
++      },
+       hidden: false,
+       disabled: false,
+       value: "",
+@@ -169,6 +180,15 @@ function createElementFactory(byId) {
+       _listeners: {},
+       attributes: Object.create(null),
+       ownerDocument: null,
++      get dataset() {
++        const data = {};
++        Object.keys(node.attributes).forEach(function (key) {
++          if (key.slice(0, 5) !== "data-") return;
++          const name = key.slice(5).replace(/-([a-z])/g, function (_, letter) { return letter.toUpperCase(); });
++          data[name] = node.attributes[key];
++        });
++        return data;
++      },
+       get classList() { return makeClassList(node); },
+       get parentElement() {
+         return node.parentNode && node.parentNode.tagName ? node.parentNode : null;
+@@ -242,7 +262,15 @@ function createElementFactory(byId) {
+           if (type === "checkbox") node.checked = !node.checked;
+           else if (type === "radio") node.checked = true;
+         }
+-        node.dispatchEvent({ type: "click", button: 0, preventDefault: function () { this.defaultPrevented = true; } });
++        const event = { type: "click", button: 0, target: node, preventDefault: function () { this.defaultPrevented = true; } };
++        var current = node;
++        while (current && typeof current.dispatchEvent === "function") {
++          current.dispatchEvent(event);
++          current = current.parentNode;
++        }
++        if (node.ownerDocument && typeof node.ownerDocument.dispatchEvent === "function") {
++          node.ownerDocument.dispatchEvent(event);
++        }
+         if (node.tagName === "INPUT") {
+           node.dispatchEvent({ type: "change", preventDefault: function () { this.defaultPrevented = true; } });
+         }
+@@ -258,9 +286,10 @@ function createElementFactory(byId) {
+         return false;
+       },
+       closest: function (selector) {
++        const groups = String(selector).split(",").map(function (item) { return item.trim(); }).filter(Boolean);
+         let current = node;
+         while (current && current.tagName) {
+-          if (simpleMatch(current, selector)) return current;
++          if (groups.some(function (group) { return simpleMatch(current, group); })) return current;
+           current = current.parentNode;
+         }
+         return null;
+@@ -273,11 +302,42 @@ function createElementFactory(byId) {
+       },
+       appendChild: function (child) {
+         child.parentNode = node;
++        child.ownerDocument = node.ownerDocument;
+         node.childNodes.push(child);
+         return child;
+       },
++      insertBefore: function (child, before) {
++        child.parentNode = node;
++        child.ownerDocument = node.ownerDocument;
++        const index = before ? node.childNodes.indexOf(before) : -1;
++        if (index < 0) node.childNodes.push(child);
++        else node.childNodes.splice(index, 0, child);
++        return child;
++      },
++      removeChild: function (child) {
++        node.childNodes = node.childNodes.filter(function (item) { return item !== child; });
++        child.parentNode = null;
++        return child;
++      },
++      replaceChild: function (next, old) {
++        const index = node.childNodes.indexOf(old);
++        next.parentNode = node;
++        next.ownerDocument = node.ownerDocument;
++        if (index >= 0) node.childNodes[index] = next;
++        else node.childNodes.push(next);
++        old.parentNode = null;
++        return old;
++      },
++      replaceWith: function () {
++        const parent = node.parentNode;
++        const next = arguments[0];
++        if (!parent) return;
++        if (next && typeof parent.replaceChild === "function") parent.replaceChild(next, node);
++        else if (typeof parent.removeChild === "function") parent.removeChild(node);
++      },
+       getBoundingClientRect: function () {
+-        return { top: 80, left: 0, width: 100, height: 24, bottom: 104, right: 100 };
++        var height = node.classList && node.classList.contains("task-context") ? 168 : 24;
++        return { top: 58, left: 0, width: 800, height: height, bottom: 58 + height, right: 800 };
+       },
+       scrollIntoView: function () {}
+     };
+@@ -323,14 +383,39 @@ function failResponse() {
+ }
+ 
+ function chapterMarkdown(chapter) {
+-  return [
++  const lines = [
+     "# " + chapter.title,
+     "",
+     "## 7.4 Self-Attention 是什么 ★",
+     "",
+     "GRPO-TOKEN " + chapter.id + " 用于搜索与章节渲染。",
+     ""
+-  ].join("\n");
++  ];
++  if (chapter.id === "transformer") {
++    lines.push(
++      "## 7.5 Q、K、V：三个投影 ★",
++      "",
++      "QKV placeholder",
++      "",
++      "## 7.6 为什么标准 Transformer 使用独立的 Q/K 投影？★",
++      "",
++      "not a week-1 material",
++      "",
++      "## 7.14 Multi-Head Attention ★",
++      "",
++      "last required heading",
++      ""
++    );
++  }
++  if (chapter.id === "modern-llm") {
++    lines.push(
++      "## 10.4 RMSNorm：更简单的归一化 ★",
++      "",
++      "RMSNorm-TOKEN for search jump",
++      ""
++    );
++  }
++  return lines.join("\n");
+ }
+ 
+ function createFetch(options) {
+@@ -385,15 +470,21 @@ function mountShell(createElement, body) {
+     ["div", { id: "progressFill" }],
+     ["p", { id: "storageNotice" }],
+     ["input", { id: "searchInput" }],
+-    ["div", { id: "searchResults" }],
+-    ["div", { id: "searchList" }],
+-    ["span", { id: "searchSummary" }],
+-    ["button", { id: "closeSearch" }],
+     ["button", { id: "themeToggle" }],
+     ["button", { id: "resetProgress" }],
+     ["button", { id: "backTop" }],
+     ["main", { id: "content" }]
+   ].forEach(function (item) { add(item[0], item[1]); });
++  const searchResults = add("div", { id: "searchResults", "class": "search-results" });
++  [
++    ["span", { id: "searchSummary" }],
++    ["button", { id: "closeSearch" }],
++    ["div", { id: "searchList", "class": "search-list" }]
++  ].forEach(function (item) {
++    const node = createElement(item[0]);
++    Object.keys(item[1]).forEach(function (key) { node.setAttribute(key, item[1][key]); });
++    searchResults.appendChild(node);
++  });
+ }
+ 
+ function bootApp(options) {
+@@ -406,7 +497,8 @@ function bootApp(options) {
+   mountShell(createElement, body);
+   Object.keys(byId).forEach(function (id) { byId[id].ownerDocument = null; });
+ 
+-  const location = { hash: options.hash || "#/" };
++  let hashValue = options.hash || "#/";
++  const location = {};
+   const storage = Object.assign(Object.create(null), options.storage || {});
+   const localStorage = {
+     getItem: function (key) { return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null; },
+@@ -488,6 +580,17 @@ function bootApp(options) {
+   ctx.globalThis = ctx;
+   ctx.self = ctx;
+   ctx.Node = function () {};
++  Object.defineProperty(location, "hash", {
++    configurable: true,
++    enumerable: true,
++    get: function () { return hashValue; },
++    set: function (value) {
++      const next = String(value || "");
++      if (hashValue === next) return;
++      hashValue = next;
++      ctx.dispatchEvent({ type: "hashchange" });
++    }
++  });
+ 
+   [
+     "js/renderer.js",
+@@ -510,8 +613,11 @@ function bootApp(options) {
+     content: byId.content,
+     byId: function (id) { return byId[id] || null; },
+     go: function (hash) {
++      if (location.hash === hash) {
++        ctx.dispatchEvent({ type: "hashchange" });
++        return;
++      }
+       location.hash = hash;
+-      ctx.dispatchEvent({ type: "hashchange" });
+     },
+     text: function () { return (byId.content && byId.content.textContent) || ""; },
+     html: function () { return (byId.content && byId.content.innerHTML) || ""; },
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 19b4681..ca16724 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -466,12 +466,68 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
+   assert.match(impl, /GQA 为拓展项/);
+   assert.match(impl, /evidenceSystemImplemented.*true|已为 `true`/);
+   assert.match(impl, /最小记录层|最小验收记录/);
++  assert.match(impl, /阶段 3 第三步|教材任务上下文/);
+   assert.match(impl, /组装后整模型因果性|组装后因果性/);
+   assert.match(impl, /next-token 对齐/);
+   assert.match(impl, /真实 A\/B/);
+   assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
+ });
+ 
++test('home keeps the current goal visible and folds detailed checks', () => {
++  const plan = require('../content/learning-plan.json');
++  const home = loadPages(plan).home(null);
++  const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
++  const primaryAt = home.indexOf('打开必要教材');
++  const foldAt = home.indexOf('class="home-fold"');
++  const criteriaAt = home.indexOf('验收条件');
++  assert.ok(primaryAt >= 0 && foldAt > primaryAt);
++  assert.ok(criteriaAt > foldAt);
++  assert.match(home, /<details class="home-fold"><summary>必要教材<\/summary>/);
++  assert.match(home, /<details class="home-fold"><summary>短记录<\/summary>/);
++  assert.match(home, /验收与记录（必需 0 \/ \d+ 条当前通过）/);
++  assert.match(home, /保存本条记录/);
++  assert.match(css, /\.home-fold:not\(\[open\]\)\s*>\s*\.fold-body\s*\{\s*display:\s*none/);
++  assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
++});
++
++test('textbook chapters show the current task and the next related section', () => {
++  const plan = require('../content/learning-plan.json');
++  const pages = loadPages(plan);
++  const transformer = chapters.find(item => item.id === 'transformer');
++  const map = chapters.find(item => item.id === 'map');
++  const first = pages.lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
++  assert.match(first, /class="task-context"/);
++  assert.match(first, /手写因果多头注意力/);
++  assert.match(first, /返回当前练习/);
++  assert.match(first, /下一相关小节：7\.5 Q、K、V：三个投影/);
++  assert.match(first, /写完后对照：7\.12/);
++  assert.match(first, /全书下一课/);
++  assert.doesNotMatch(first, /lab\.attention|<code>/);
++  assert.doesNotMatch(first, /自动测试通过/);
++  const lastRequired = pages.lesson(transformer, null, '<p>body</p>', null, '7.14 Multi-Head Attention ★');
++  assert.match(lastRequired, /必要教材 · 6 \/ 6 · 7\.14/);
++  assert.match(lastRequired, /下一相关小节：7\.12/);
++  assert.match(lastRequired, /写完后对照：7\.12/);
++  const lastCheck = pages.lesson(transformer, null, '<p>body</p>', null, '7.13 公式 ↔ 代码逐行对应 ★');
++  assert.match(lastCheck, /返回当前练习/);
++  assert.doesNotMatch(lastCheck, /下一相关小节/);
++  assert.doesNotMatch(lastCheck, /写完后对照：/);
++  const otherHeading = pages.lesson(transformer, null, '<p>body</p>', null, '7.6 为什么标准 Transformer 使用独立的 Q/K 投影？★');
++  assert.match(otherHeading, /返回当前练习/);
++  assert.doesNotMatch(otherHeading, /下一相关小节/);
++  assert.doesNotMatch(otherHeading, /必要教材/);
++  const unrelated = pages.lesson(map, null, '<p>body</p>', null);
++  assert.match(unrelated, /手写因果多头注意力/);
++  assert.match(unrelated, /返回当前练习/);
++  assert.doesNotMatch(unrelated, /下一相关小节/);
++  assert.doesNotMatch(unrelated, /写完后对照/);
++  const week2 = loadPages(plan, null, { selectedTaskId: 'lab.decoder.min-lm' })
++    .lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
++  assert.match(week2, /拼最小 decoder/);
++  assert.match(week2, /返回当前练习/);
++  assert.doesNotMatch(week2, /下一相关小节/);
++});
++
+ function softmaxRows(matrix) {
+   return matrix.map(row => {
+     const max = Math.max(...row);
+@@ -635,6 +691,113 @@ test('home week picker switches the current exercise and remembers it', async ()
+   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+ });
+ 
++test('opening required material from home keeps task context on the chapter', async () => {
++  const app = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(app.text()));
++  assert.match(app.html(), /class="home-fold"/);
++  const start = app.content.querySelector('a.btn.primary');
++  assert.ok(start);
++  assert.match(start.getAttribute('href'), /transformer\?section=/);
++  app.go(start.getAttribute('href'));
++  await harness.waitFor(() => /返回当前练习/.test(app.text()));
++  assert.match(app.text(), /手写因果多头注意力/);
++  assert.match(app.text(), /下一相关小节/);
++  assert.match(app.text(), /全书下一课|全书上一课/);
++  const back = app.content.querySelector('.task-context a.btn');
++  assert.equal(back.getAttribute('href'), '#/');
++  app.go('#/');
++  await harness.waitFor(() => /打开必要教材/.test(app.text()));
++  assert.match(app.html(), /class="home-fold"/);
++  assert.match(app.text(), /保存本条记录/);
++});
++
++test('in-chapter TOC and search update the task bar for the heading in view', async () => {
++  const app = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(app.text()));
++  const start = app.content.querySelector('a.btn.primary');
++  app.go(start.getAttribute('href'));
++  await harness.waitFor(() => /必要教材 · 1 \/ 6/.test(app.text()));
++  assert.match(app.text(), /下一相关小节：7\.5/);
++  assert.equal(app.document.documentElement.style['--task-context-h'], '168px');
++
++  const toc = app.byId('tocNav');
++  const toLast = Array.from(toc.querySelectorAll('.toc-link')).find(link => /7\.14/.test(link.textContent));
++  assert.ok(toLast);
++  toLast.click();
++  assert.match(app.text(), /必要教材 · 6 \/ 6 · 7\.14/);
++  assert.match(app.text(), /下一相关小节：7\.12/);
++  assert.doesNotMatch(app.text(), /下一相关小节：7\.5/);
++
++  const toOther = Array.from(toc.querySelectorAll('.toc-link')).find(link => /7\.6/.test(link.textContent));
++  assert.ok(toOther);
++  toOther.click();
++  assert.match(app.text(), /返回当前练习/);
++  assert.doesNotMatch(app.text(), /下一相关小节/);
++  assert.doesNotMatch(app.text(), /必要教材/);
++
++  const search = app.byId('searchInput');
++  search.value = '7.14 Multi-Head';
++  search.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
++  await harness.waitFor(() => {
++    const hits = app.byId('searchList').querySelectorAll('.search-hit');
++    return hits.some(function (hit) { return /7\.14/.test(hit.textContent); });
++  });
++  const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
++    .find(item => /7\.14/.test(item.textContent));
++  assert.match(hit.getAttribute('href'), /transformer\?section=/);
++  assert.match(decodeURIComponent(hit.getAttribute('href') || ''), /7\.14 Multi-Head/);
++  hit.click();
++  assert.match(app.text(), /必要教材 · 6 \/ 6 · 7\.14/);
++  assert.match(app.text(), /下一相关小节：7\.12/);
++});
++
++test('search from home and from another chapter opens the target heading', async () => {
++  async function searchAndOpen(app, query, heading) {
++    const input = app.byId('searchInput');
++    input.value = query;
++    input.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
++    await harness.waitFor(() => {
++      const hits = app.byId('searchList').querySelectorAll('.search-hit');
++      return hits.some(function (hit) { return heading.test(hit.textContent); });
++    });
++    const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
++      .find(item => heading.test(item.textContent));
++    assert.ok(hit, query);
++    assert.match(hit.getAttribute('href'), /[?&]section=/);
++    assert.match(decodeURIComponent(hit.getAttribute('href') || ''), heading);
++    hit.click();
++  }
++
++  const fromHome = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(fromHome.text()));
++  await searchAndOpen(fromHome, 'RMSNorm', /10\.4 RMSNorm/);
++  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromHome.text()));
++  assert.match(fromHome.location.hash, /modern-llm/);
++  assert.match(fromHome.text(), /10\.4 RMSNorm：更简单的归一化/);
++  assert.doesNotMatch(fromHome.text(), /GRPO-TOKEN transformer/);
++
++  const fromChapter = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(fromChapter.text()));
++  const start = fromChapter.content.querySelector('a.btn.primary');
++  fromChapter.go(start.getAttribute('href'));
++  await harness.waitFor(() => /必要教材 · 1 \/ 6/.test(fromChapter.text()));
++  assert.match(fromChapter.location.hash, /transformer/);
++  await searchAndOpen(fromChapter, 'RMSNorm', /10\.4 RMSNorm/);
++  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromChapter.text()));
++  assert.match(fromChapter.location.hash, /modern-llm/);
++  assert.match(fromChapter.text(), /10\.4 RMSNorm：更简单的归一化/);
++  assert.doesNotMatch(fromChapter.text(), /GRPO-TOKEN transformer/);
++  assert.doesNotMatch(fromChapter.text(), /必要教材 · 1 \/ 6 · 7\.4/);
++});
++
++test('task heading scroll offset uses the measured sticky bar height', () => {
++  const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
++  assert.match(css, /scroll-margin-top:\s*calc\(var\(--topbar-h\) \+ var\(--task-context-h/);
++  assert.doesNotMatch(css, /12rem/);
++  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'js/app.js'), 'utf8'), /measureTaskContext/);
++  assert.match(fs.readFileSync(path.resolve(__dirname, '..', 'js/reader-ui.js'), 'utf8'), /onSection/);
++});
++
+ function memoryStorage(seed) {
+   const data = Object.assign(Object.create(null), seed || {});
+   return {
