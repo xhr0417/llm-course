@@ -1,0 +1,154 @@
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 9a42fb2..c17d944 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -105,7 +105,7 @@
+ 
+ **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+ 
+-**本轮（阶段 3 第三步）：** 教材任务上下文导航与首页信息分层。前八周任务写入与最小记录层已通过验收（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）。`evidenceSystemImplemented` 已为 `true`。本轮只做：从练习进入教材后显示当前任务、返回当前练习、下一相关小节；首页把当前目标和主操作放在前面，详细验收、历史与参考按需展开。章内目录与搜索定位同步更新任务条；吸顶条按实测高度给标题留白。沿用已验收记录规则：完成只看全部必需项的当前用户自报通过且每条有简短依据；「保存本条记录」；有变化才写入历史，完全相同不重复追加；无依据不能算通过。不增加复习队列、自动评分或新项目。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。阶段 3 整体尚未完成。
++**本轮（阶段 3 第三步）：** 教材任务上下文导航与首页信息分层。前八周任务写入与最小记录层已通过验收（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）。`evidenceSystemImplemented` 已为 `true`。本轮只做：从练习进入教材后显示当前任务、返回当前练习、下一相关小节；首页把当前目标和主操作放在前面，详细验收、历史与参考按需展开。章内目录与搜索定位同步更新任务条；吸顶条按实测高度给标题留白。同章搜索原地定位；跨章搜索切换到目标章后再落到目标小节。沿用已验收记录规则：完成只看全部必需项的当前用户自报通过且每条有简短依据；「保存本条记录」；有变化才写入历史，完全相同不重复追加；无依据不能算通过。不增加复习队列、自动评分或新项目。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。阶段 3 整体尚未完成。
+ 
+ **开工后的实现顺序（可验收小步，不扩大功能）：**
+ 
+@@ -123,7 +123,7 @@
+ 
+ 进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页突出下一动作，详细 workspace / steps / criteria 可分层或折叠，但不要删掉新手所需说明。
+ 
+-**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。从当前练习打开必要教材后，章节页显示当前练习、返回当前练习，以及该小节的下一相关小节；全书上一课/下一课仍在。章内目录或搜索定位后任务条跟着当前小节更新（7.14 为必要教材 6/6、下一相关小节 7.12；非任务小节不显示错误的下一步）；目标标题按实测吸顶高度留白，在 375／768／1280 下不被挡住。首页当前目标与主按钮保持可见，详细验收、历史与参考在折叠块中仍可展开，记录规则不变。
++**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。从当前练习打开必要教材后，章节页显示当前练习、返回当前练习，以及该小节的下一相关小节；全书上一课/下一课仍在。章内目录或搜索定位后任务条跟着当前小节更新（7.14 为必要教材 6/6、下一相关小节 7.12；非任务小节不显示错误的下一步）；目标标题按实测吸顶高度留白，在 375／768／1280 下不被挡住。首页搜索与从另一章点搜索结果都能进入目标章并落到目标小节。首页当前目标与主按钮保持可见，详细验收、历史与参考在折叠块中仍可展开，记录规则不变。
+ 
+ **完成条件：** 前八周每条都有教材 + 实现 + 验收（含必需／拓展）；记录层可用；不指向已退出主线的六作业。
+ 
+diff --git a/js/app.js b/js/app.js
+index d9c7b82..38c0476 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -386,8 +386,17 @@
+       referenceHref: function (id) { return "#/reference/" + encodeURIComponent(id); },
+       closeSidebar: closeSidebar,
+       onNavigate: function (path, title) {
+-        if (currentPath === path) { reader.focusSection(title); pendingSection = null; }
+-        else pendingSection = { id: path, title: title };
++        if (currentPath === path) {
++          reader.focusSection(title);
++          pendingSection = null;
++          return;
++        }
++        pendingSection = { id: path, title: title };
++        var href = path.indexOf("reference/") === 0
++          ? "#/reference/" + encodeURIComponent(path.slice("reference/".length))
++          : routes.href(path, activeTrack, title);
++        if (location.hash === href) route();
++        else location.hash = href;
+       } });
+     search.start();
+   }
+diff --git a/tools/test-app-harness.js b/tools/test-app-harness.js
+index 41d0f97..37bde56 100644
+--- a/tools/test-app-harness.js
++++ b/tools/test-app-harness.js
+@@ -407,6 +407,14 @@ function chapterMarkdown(chapter) {
+       ""
+     );
+   }
++  if (chapter.id === "modern-llm") {
++    lines.push(
++      "## 10.4 RMSNorm：更简单的归一化 ★",
++      "",
++      "RMSNorm-TOKEN for search jump",
++      ""
++    );
++  }
+   return lines.join("\n");
+ }
+ 
+@@ -489,7 +497,8 @@ function bootApp(options) {
+   mountShell(createElement, body);
+   Object.keys(byId).forEach(function (id) { byId[id].ownerDocument = null; });
+ 
+-  const location = { hash: options.hash || "#/" };
++  let hashValue = options.hash || "#/";
++  const location = {};
+   const storage = Object.assign(Object.create(null), options.storage || {});
+   const localStorage = {
+     getItem: function (key) { return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null; },
+@@ -571,6 +580,17 @@ function bootApp(options) {
+   ctx.globalThis = ctx;
+   ctx.self = ctx;
+   ctx.Node = function () {};
++  Object.defineProperty(location, "hash", {
++    configurable: true,
++    enumerable: true,
++    get: function () { return hashValue; },
++    set: function (value) {
++      const next = String(value || "");
++      if (hashValue === next) return;
++      hashValue = next;
++      ctx.dispatchEvent({ type: "hashchange" });
++    }
++  });
+ 
+   [
+     "js/renderer.js",
+@@ -593,8 +613,11 @@ function bootApp(options) {
+     content: byId.content,
+     byId: function (id) { return byId[id] || null; },
+     go: function (hash) {
++      if (location.hash === hash) {
++        ctx.dispatchEvent({ type: "hashchange" });
++        return;
++      }
+       location.hash = hash;
+-      ctx.dispatchEvent({ type: "hashchange" });
+     },
+     text: function () { return (byId.content && byId.content.textContent) || ""; },
+     html: function () { return (byId.content && byId.content.innerHTML) || ""; },
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 3cd0463..0f9c491 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -749,6 +749,43 @@ test('in-chapter TOC and search update the task bar for the heading in view', as
+   assert.match(app.text(), /下一相关小节：7\.12/);
+ });
+ 
++test('search from home and from another chapter opens the target heading', async () => {
++  async function searchAndOpen(app, query, heading) {
++    const input = app.byId('searchInput');
++    input.value = query;
++    input.dispatchEvent({ type: 'input', preventDefault: function () { this.defaultPrevented = true; } });
++    await harness.waitFor(() => {
++      const hits = app.byId('searchList').querySelectorAll('.search-hit');
++      return hits.some(function (hit) { return heading.test(hit.textContent); });
++    });
++    const hit = Array.from(app.byId('searchList').querySelectorAll('.search-hit'))
++      .find(item => heading.test(item.textContent));
++    assert.ok(hit, query);
++    hit.click();
++  }
++
++  const fromHome = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(fromHome.text()));
++  await searchAndOpen(fromHome, 'RMSNorm', /10\.4 RMSNorm/);
++  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromHome.text()));
++  assert.match(fromHome.location.hash, /modern-llm/);
++  assert.match(fromHome.text(), /10\.4 RMSNorm：更简单的归一化/);
++  assert.doesNotMatch(fromHome.text(), /GRPO-TOKEN transformer/);
++
++  const fromChapter = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(fromChapter.text()));
++  const start = fromChapter.content.querySelector('a.btn.primary');
++  fromChapter.go(start.getAttribute('href'));
++  await harness.waitFor(() => /必要教材 · 1 \/ 6/.test(fromChapter.text()));
++  assert.match(fromChapter.location.hash, /transformer/);
++  await searchAndOpen(fromChapter, 'RMSNorm', /10\.4 RMSNorm/);
++  await harness.waitFor(() => /RMSNorm-TOKEN/.test(fromChapter.text()));
++  assert.match(fromChapter.location.hash, /modern-llm/);
++  assert.match(fromChapter.text(), /10\.4 RMSNorm：更简单的归一化/);
++  assert.doesNotMatch(fromChapter.text(), /GRPO-TOKEN transformer/);
++  assert.doesNotMatch(fromChapter.text(), /必要教材 · 1 \/ 6 · 7\.4/);
++});
++
+ test('task heading scroll offset uses the measured sticky bar height', () => {
+   const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
+   assert.match(css, /scroll-margin-top:\s*calc\(var\(--topbar-h\) \+ var\(--task-context-h/);
