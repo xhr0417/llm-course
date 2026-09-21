@@ -13,7 +13,8 @@
       stuck: function () { return ""; },
       failedHistory: function () { return []; },
       passBlocked: function () { return ""; },
-      nextTask: function () { return null; }
+      nextTask: function () { return null; },
+      dueReviews: function () { return []; }
     };
     function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
     function referenceFor(chapterId) { return references.find(function (item) { return item.chapter === chapterId; }) || null; }
@@ -222,6 +223,22 @@
               "> " + dim[1] + "</label>";
           }).join("") + "</div></li>";
       }
+      function dueQueue() {
+        var items = learning.dueReviews ? learning.dueReviews(options.now) : [];
+        if (!items || !items.length) return "";
+        return '<section class="task-panel review-queue" aria-label="到期复习">' +
+          '<span class="page-label">到期复习</span>' +
+          '<p class="page-note">只列出已经到期的知识点，不会更换当前练习。</p>' +
+          '<ul class="task-list">' + items.map(function (item) {
+            var concept = conceptsById[item.conceptId];
+            var name = concept && concept.name ? concept.name : "未命名概念";
+            return "<li>" + escape(name) +
+              (item.weak ? '<span class="page-note">上次未通过</span>' : "") +
+              "</li>";
+          }).join("") + "</ul>" +
+          '<p class="page-note">可用解释、闭卷回忆或复写核心函数来复习。本页还不记录通过或失败。</p>' +
+          "</section>";
+      }
       var notes = fold("短记录",
         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
         '<label class="note-field">做了什么<textarea data-note="what" rows="3">' + escape(learning.note(task.id, "what")) + "</textarea></label>" +
@@ -257,6 +274,7 @@
         weekButtons(plan, stage, task) +
         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
         '</section>' +
+        dueQueue() +
         advance +
         fold("必要教材",
           '<ol class="task-list">' +

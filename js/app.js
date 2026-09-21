@@ -278,8 +278,15 @@
     if (!task) return;
     var form = readCriterionForm(id);
     var ok = learning.recordCriterion(task.id, id, form.result, form.evidence);
-    if (ok) delete criterionDrafts[draftKey(task.id, id)];
-    else criterionDrafts[draftKey(task.id, id)] = form;
+    if (ok) {
+      delete criterionDrafts[draftKey(task.id, id)];
+      if (form.result === "user_passed" && learning.armReview) {
+        var item = (task.criteria || []).find(function (entry) { return entry.id === id; });
+        if (item && item.conceptId) learning.armReview(item.conceptId);
+      }
+    } else {
+      criterionDrafts[draftKey(task.id, id)] = form;
+    }
     paintHome();
   }
   function bindHome() {

@@ -364,6 +364,7 @@ function loadPages(plan, planError, extra) {
     plan,
     planError,
     selectedTaskId: extra.selectedTaskId,
+    now: extra.now,
     learning: extra.learning,
     references,
     progress: { isRead: () => false },
@@ -475,9 +476,12 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /3b-1/);
   assert.match(impl, /不开始阶段 4/);
   assert.doesNotMatch(impl, /阶段 3 整体尚未完成/);
-  assert.doesNotMatch(impl, /不开始 3b/);
+  assert.doesNotMatch(impl, /不开始 3b(?!-)/);
   assert.match(os, /任务证据与复习状态/);
   assert.match(os, /只展示已到期项/);
+  assert.match(impl, /3b-2/);
+  assert.match(impl, /已封板/);
+  assert.match(impl, /不开始 3b-3/);
 });
 
 test('home keeps the current goal visible and folds detailed checks', () => {
@@ -495,6 +499,53 @@ test('home keeps the current goal visible and folds detailed checks', () => {
   assert.match(home, /保存本条记录/);
   assert.match(css, /\.home-fold:not\(\[open\]\)\s*>\s*\.fold-body\s*\{\s*display:\s*none/);
   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+  assert.doesNotMatch(home, /到期复习/);
+});
+
+test('home lists due review concepts without replacing the current exercise', () => {
+  const plan = require('../content/learning-plan.json');
+  const t0 = 1700000000000;
+  const DAY = 24 * 60 * 60 * 1000;
+  const storage = memoryStorage({
+    [learningModule.KEY]: JSON.stringify({
+      version: 1,
+      reviews: {
+        attention: {
+          dueAt: t0 + DAY,
+          intervalIndex: 0,
+          weak: true,
+          current: { result: 'failed', form: 'recall', at: t0 },
+          history: []
+        },
+        'causal-mask': {
+          dueAt: t0 + 10 * DAY,
+          intervalIndex: 0,
+          weak: false,
+          current: null,
+          history: []
+        }
+      }
+    })
+  });
+  const learning = learningModule.create({ storage });
+  learning.load();
+  const none = loadPages(plan, null, { learning, now: t0 }).home(null);
+  assert.match(none, /手写因果多头注意力/);
+  assert.doesNotMatch(none, /到期复习/);
+  const home = loadPages(plan, null, { learning, now: t0 + DAY }).home(null);
+  const primaryAt = home.indexOf('打开必要教材');
+  const dueAt = home.indexOf('review-queue');
+  const foldAt = home.indexOf('class="home-fold"');
+  assert.ok(primaryAt >= 0 && dueAt > primaryAt && foldAt > dueAt);
+  assert.match(home, /手写因果多头注意力/);
+  const queue = home.slice(dueAt, foldAt);
+  assert.match(queue, /缩放点积注意力/);
+  assert.match(queue, /上次未通过/);
+  assert.match(queue, /不会更换当前练习/);
+  assert.match(queue, /还不记录通过或失败/);
+  assert.doesNotMatch(queue, /因果掩码/);
+  assert.doesNotMatch(queue, /保存本条记录|data-save-review|重练|进入下一任务/);
+  assert.doesNotMatch(queue, /<input /);
 });
 
 test('textbook chapters show the current task and the next related section', () => {
@@ -696,6 +747,53 @@ test('home week picker switches the current exercise and remembers it', async ()
   });
   await harness.waitFor(() => /拼最小 decoder/.test(restored.text()));
   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+});
+
+test('home due queue stays off the current exercise and has no review form', async () => {
+  const later = Date.now() + 20 * 24 * 60 * 60 * 1000;
+  const app = harness.bootApp({
+    hash: '#/',
+    storage: {
+      [learningModule.KEY]: JSON.stringify({
+        version: 1,
+        reviews: {
+          attention: { dueAt: 1, intervalIndex: 0, weak: false, current: null, history: [] },
+          'causal-mask': { dueAt: later, intervalIndex: 0, weak: false, current: null, history: [] }
+        }
+      })
+    }
+  });
+  await harness.waitFor(() => /到期复习/.test(app.text()));
+  assert.match(app.text(), /手写因果多头注意力/);
+  const queue = app.content.querySelector('.review-queue');
+  assert.ok(queue);
+  assert.match(queue.textContent, /缩放点积注意力/);
+  assert.doesNotMatch(queue.textContent, /因果掩码/);
+  assert.equal(queue.querySelector('input'), null);
+  assert.equal(queue.querySelector('button'), null);
+  assert.equal(queue.querySelector('[data-save-review]'), null);
+  const week2 = app.content.querySelector('[data-week="2"]');
+  week2.click();
+  await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
+  assert.match(app.text(), /到期复习/);
+  assert.match(app.content.querySelector('.review-queue').textContent, /缩放点积注意力/);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.decoder.min-lm');
+});
+
+test('saving a passed check arms a review that is not due yet', async () => {
+  const app = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /保存本条记录/.test(app.text()));
+  fillEvidence(app, 'rewrite', '对照通过');
+  clickChoice(app, 'rewrite', 'user_passed');
+  saveCheck(app, 'rewrite');
+  await harness.waitFor(() => {
+    const raw = app.localStorage.getItem(learningModule.KEY);
+    return !!(raw && JSON.parse(raw).reviews && JSON.parse(raw).reviews.attention);
+  });
+  const saved = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.ok(saved.reviews.attention.dueAt > Date.now());
+  assert.doesNotMatch(app.text(), /到期复习/);
+  assert.equal(saved.criteria['lab.attention.causal-mha::rewrite'].current.result, 'user_passed');
 });
 
 test('opening required material from home keeps task context on the chapter', async () => {
