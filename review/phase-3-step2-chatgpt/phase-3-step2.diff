@@ -1,5 +1,5 @@
 diff --git a/DESIGN.md b/DESIGN.md
-index 0d120f4..b058d13 100644
+index 0d120f4..1e4a3f3 100644
 --- a/DESIGN.md
 +++ b/DESIGN.md
 @@ -16,16 +16,16 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
@@ -7,7 +7,7 @@ index 0d120f4..b058d13 100644
  - Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links.
  - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
 -- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
-+- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
++- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Marking 用户自报通过 requires a short evidence note for that check. Previous failed results keep their evidence. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
  - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
  - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
  - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
@@ -56,7 +56,7 @@ index db93d46..e15c9d7 100644
    "stages": [
      {
 diff --git a/css/course.css b/css/course.css
-index 288ff4a..f9f4f97 100644
+index 288ff4a..2d3e0a2 100644
 --- a/css/course.css
 +++ b/css/course.css
 @@ -5,7 +5,7 @@
@@ -68,7 +68,7 @@ index 288ff4a..f9f4f97 100644
  :where(button, .btn):active { transform: translateY(1px); }
  .skip-link { position: fixed; top: var(--space-2); left: var(--space-4); z-index: 100; transform: translateY(-200%); padding: var(--space-3); background: var(--bg-panel); color: var(--accent-text); }
  .skip-link:focus { transform: translateY(0); }
-@@ -39,6 +39,48 @@
+@@ -39,6 +39,49 @@
  }
  .task-list, .concept-list { margin: 0; padding-left: 1.25em; max-width: 46em; }
  .task-list li, .concept-list li { margin: 0 0 var(--space-3); }
@@ -114,11 +114,12 @@ index 288ff4a..f9f4f97 100644
 +  color: var(--text);
 +  font: inherit;
 +}
++.check-record .note-field textarea { min-height: 64px; }
  .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
  .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
  .task-spec { margin: 0; max-width: 46em; }
 diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
-index 1660cd9..4512586 100644
+index 1660cd9..316a6ca 100644
 --- a/docs/IMPLEMENTATION_PLAN.md
 +++ b/docs/IMPLEMENTATION_PLAN.md
 @@ -105,7 +105,7 @@
@@ -126,12 +127,12 @@ index 1660cd9..4512586 100644
  **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
  
 -**本轮（issue #4）：** 阶段 3 第一步收尾。前八周任务写入与手动选周已完成；本轮只补齐第 3 周 next-token 对齐、第 2 周组装后因果性、第 8 周真实 A/B 预测。`evidenceSystemImplemented` 仍为 `false`。**不实现**记录表单、卡点存储、任务上下文导航。第 0／24 章遗留修改仍单独处理。
-+**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过；拓展不挡；概念历史不自动完成新任务；失败历史保留；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
++**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过，且每条有简短依据；更新结果时旧结果与当时依据一并保留；无依据不能算通过。拓展不挡；概念历史不自动完成新任务；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
  
  **开工后的实现顺序（可验收小步，不扩大功能）：**
  
 diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
-index cebda49..59051e1 100644
+index cebda49..3ec0185 100644
 --- a/docs/PERSONAL_LEARNING_OS.md
 +++ b/docs/PERSONAL_LEARNING_OS.md
 @@ -61,7 +61,7 @@
@@ -143,7 +144,7 @@ index cebda49..59051e1 100644
  
  ### 3.3 验收与证据
  
-@@ -166,7 +166,7 @@
+@@ -166,17 +166,18 @@
  
  这四条都是 `lab.attention.causal-mha` 的**必需**验收。完成与否读取任务定义里的全部必需项，不因为一共有四条就写死「必须四条」，也不因为 `causal-mask` 曾经有过阅读记录就自动完成。**首页只显示中文条文，不显示这些 id。**
  
@@ -151,8 +152,21 @@ index cebda49..59051e1 100644
 +**用户可记录（第二机制层；最小表单已实现）**
  
  - 每条必需验收：未检查 / 未通过 / 用户自报通过，来源默认为 `user_reported`
- - 失败记录保留；修好后追加新结果；当前结果决定是否完成
-@@ -191,11 +191,11 @@
+-- 失败记录保留；修好后追加新结果；当前结果决定是否完成
++- 用户自报通过必须写下该条的简短依据（检查结果、代码位置或一句解释）；无依据不算完成
++- 失败记录保留当时依据；修好后追加新结果，不覆盖旧依据；当前结果决定是否完成
+ - 证据键：`taskId + criterionId`，可选 `conceptId`
+ - 知识点 `causal-mask` 的四个独立维度可被第 2 周 decoder 任务看到；第 2 周任务仍要自己的必需验收，不得因概念历史自动完成
+ - 不要求给 `tensor-shape` 另造「实现」作业才能推进
+ 
+ **建议进入下一任务（例如 embedding + 最小 decoder）当且仅当**
+ 
+-- 本任务全部必需验收项的**当前**结果为用户自报通过。
++- 本任务全部必需验收项的**当前**结果为用户自报通过，且每条都有非空的简短依据。
+ 
+ 满足后提示用户确认切换，不自动跳走。概念层不必再勾一套「自己实现／能解释」才能推进。未满足时仍显示本任务为当前主要任务。用户仍可打开第 9 章或第 2 周教材。日历到了第 2 周也不自动切换当前任务。
+ 
+@@ -191,11 +192,11 @@
  | 验证通过 | 按任务声明做过检查，且**当前**结果为通过（shape、因果 mask、手算 scorer、小样本过拟合等） | 做过检查但未通过不是验证通过；不能把手动勾选写成「自动测试通过」 |
  | 能解释 | 能口述输入输出、失败原因或对照差异 | 不能由「已读」或 starter 全绿自动勾上 |
  
@@ -166,7 +180,7 @@ index cebda49..59051e1 100644
  
  ## 6. 工程约束
  
-@@ -229,7 +229,7 @@
+@@ -229,7 +230,7 @@
  
  ## 10. DESIGN.md 随第一功能阶段更新的条目
  
@@ -188,7 +202,7 @@ index 725f65c..41a1695 100644
    <script src="js/search.js"></script>
    <script src="js/app.js"></script>
 diff --git a/js/app.js b/js/app.js
-index d4c42eb..eb3aaf5 100644
+index d4c42eb..2afc022 100644
 --- a/js/app.js
 +++ b/js/app.js
 @@ -12,6 +12,14 @@
@@ -259,7 +273,7 @@ index d4c42eb..eb3aaf5 100644
        return;
      }
      if (path === "catalog") return entry(pages.catalog(), "全部章节");
-@@ -164,6 +175,75 @@
+@@ -164,6 +175,77 @@
        byId("retryChapter").addEventListener("click", route);
      });
    }
@@ -296,7 +310,9 @@ index d4c42eb..eb3aaf5 100644
 +        if (!input.checked) return;
 +        var task = currentPlanTask();
 +        if (!task) return;
-+        learning.recordCriterion(task.id, input.getAttribute("data-check"), input.value);
++        var id = input.getAttribute("data-check");
++        var area = root.querySelector('textarea[data-evidence="' + id + '"]');
++        learning.recordCriterion(task.id, id, input.value, area ? area.value : "");
 +        paintHome();
 +      });
 +    });
@@ -335,7 +351,7 @@ index d4c42eb..eb3aaf5 100644
    function initShell() {
      document.querySelector(".skip-link").addEventListener("click", function (event) {
        event.preventDefault(); root.focus(); window.scrollTo({ top: 0 });
-@@ -187,7 +267,7 @@
+@@ -187,7 +269,7 @@
      byId("backTop").addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
      document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeSidebar(); });
    }
@@ -344,7 +360,7 @@ index d4c42eb..eb3aaf5 100644
    function startRoutingAndSearch() {
      if (search) return;
      window.addEventListener("hashchange", route);
-@@ -208,8 +288,7 @@
+@@ -208,8 +290,7 @@
      if (plan && selectedTaskId && !plan.tasks.some(function (item) { return item.id === selectedTaskId; })) {
        selectedTaskId = null;
      }
@@ -354,7 +370,7 @@ index d4c42eb..eb3aaf5 100644
      startRoutingAndSearch();
      if (currentPath === "home") route();
    }
-@@ -223,8 +302,7 @@
+@@ -223,8 +304,7 @@
    Promise.all([fetchJson("content/manifest.json"), fetchJson("content/tracks.json"), fetchJson("content/references.json")]).then(function (data) {
      chapters = data[0].chapters; tracks = data[1].tracks; references = data[2].references;
      renderer.setCatalog({ chapters: chapters, tracks: tracks });
@@ -364,27 +380,260 @@ index d4c42eb..eb3aaf5 100644
      startRoutingAndSearch();
      route();
      return loadLearningPlan();
+diff --git a/js/learning.js b/js/learning.js
+new file mode 100644
+index 0000000..8b12421
+--- /dev/null
++++ b/js/learning.js
+@@ -0,0 +1,225 @@
++(function (root, factory) {
++  if (typeof module === "object" && module.exports) module.exports = factory(root);
++  else root.CourseLearning = factory(root);
++})(typeof globalThis !== "undefined" ? globalThis : this, function (root) {
++  "use strict";
++
++  var KEY = "llm-course-learning";
++  var RESULTS = { unchecked: "unchecked", failed: "failed", user_passed: "user_passed" };
++  var SOURCE = "user_reported";
++  var DIMS = { read: true, implemented: true, verified: true, explained: true };
++
++  function emptyState() {
++    return { version: 1, criteria: {}, concepts: {}, notes: {}, stuck: {} };
++  }
++
++  function criterionKey(taskId, criterionId) {
++    return String(taskId || "") + "::" + String(criterionId || "");
++  }
++
++  function asObject(value) {
++    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
++  }
++
++  function create(options) {
++    options = options || {};
++    var storage = options.storage;
++    if (storage === undefined) {
++      try { storage = root && root.localStorage; } catch (error) { storage = null; }
++    }
++    var state = emptyState();
++    var persistent = !!storage;
++    var blockedPassId = "";
++    var onChange = typeof options.onChange === "function" ? options.onChange : function () {};
++
++    function hasEvidence(text) {
++      return String(text || "").replace(/\s+/g, " ").trim().length > 0;
++    }
++
++    function persist() {
++      if (!storage) {
++        persistent = false;
++        onChange();
++        return false;
++      }
++      try {
++        storage.setItem(KEY, JSON.stringify(state));
++        persistent = true;
++        onChange();
++        return true;
++      } catch (error) {
++        persistent = false;
++        onChange();
++        return false;
++      }
++    }
++
++    function load() {
++      if (!storage) {
++        persistent = false;
++        state = emptyState();
++        return;
++      }
++      try {
++        var raw = storage.getItem(KEY);
++        persistent = true;
++        if (!raw) {
++          state = emptyState();
++          return;
++        }
++        var parsed = JSON.parse(raw);
++        state = {
++          version: 1,
++          criteria: asObject(parsed && parsed.criteria),
++          concepts: asObject(parsed && parsed.concepts),
++          notes: asObject(parsed && parsed.notes),
++          stuck: asObject(parsed && parsed.stuck)
++        };
++      } catch (error) {
++        persistent = false;
++        state = emptyState();
++      }
++    }
++
++    function recordOf(taskId, criterionId) {
++      return state.criteria[criterionKey(taskId, criterionId)] || null;
++    }
++
++    function currentResult(taskId, criterionId) {
++      var record = recordOf(taskId, criterionId);
++      var result = record && record.current && record.current.result;
++      if (result === RESULTS.failed || result === RESULTS.user_passed) return result;
++      return RESULTS.unchecked;
++    }
++
++    function currentEvidence(taskId, criterionId) {
++      var record = recordOf(taskId, criterionId);
++      return record && record.current && record.current.evidence ? String(record.current.evidence) : "";
++    }
++
++    function failedHistory(taskId, criterionId) {
++      var record = recordOf(taskId, criterionId);
++      var history = record && Array.isArray(record.history) ? record.history : [];
++      return history.filter(function (item) { return item && item.result === RESULTS.failed; });
++    }
++
++    function recordCriterion(taskId, criterionId, result, evidence) {
++      if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return false;
++      var note = String(evidence == null ? "" : evidence).replace(/\s+/g, " ").trim();
++      if (result === RESULTS.user_passed && !hasEvidence(note)) {
++        blockedPassId = String(criterionId || "");
++        onChange();
++        return false;
++      }
++      blockedPassId = "";
++      var key = criterionKey(taskId, criterionId);
++      var record = recordOf(taskId, criterionId) || { current: null, history: [] };
++      var history = Array.isArray(record.history) ? record.history.slice() : [];
++      if (record.current && record.current.result && record.current.result !== result) {
++        history.push({
++          result: record.current.result,
++          source: record.current.source || SOURCE,
++          evidence: record.current.evidence || "",
++          at: record.current.at || Date.now()
++        });
++      }
++      state.criteria[key] = {
++        current: { result: result, source: SOURCE, evidence: note, at: Date.now() },
++        history: history
++      };
++      persist();
++      return true;
++    }
++
++    function requiredCriteria(task) {
++      return (task && task.criteria || []).filter(function (item) { return item.required !== false; });
++    }
++
++    function isTaskComplete(task) {
++      var required = requiredCriteria(task);
++      if (!required.length) return false;
++      return required.every(function (item) {
++        return currentResult(task.id, item.id) === RESULTS.user_passed && hasEvidence(currentEvidence(task.id, item.id));
++      });
++    }
++
++    function conceptDim(conceptId, dim) {
++      var row = state.concepts[conceptId];
++      return !!(row && row[dim]);
++    }
++
++    function setConceptDim(conceptId, dim, on) {
++      if (!DIMS[dim]) return;
++      var row = state.concepts[conceptId] || {};
++      row[dim] = !!on;
++      state.concepts[conceptId] = row;
++      persist();
++    }
++
++    function note(taskId, field) {
++      var row = state.notes[taskId] || {};
++      return row[field] || "";
++    }
++
++    function setNote(taskId, field, value) {
++      var row = state.notes[taskId] || {};
++      row[field] = String(value || "");
++      state.notes[taskId] = row;
++      persist();
++    }
++
++    function stuck(taskId) {
++      return state.stuck[taskId] || "";
++    }
++
++    function setStuck(taskId, value) {
++      state.stuck[taskId] = String(value || "");
++      persist();
++    }
++
++    function nextTask(plan, task) {
++      if (!plan || !task) return null;
++      var weeks = (plan.tasks || []).filter(function (item) {
++        return item.stageId === task.stageId;
++      }).slice().sort(function (a, b) {
++        return (a.weekBudget || 0) - (b.weekBudget || 0);
++      });
++      var index = -1;
++      weeks.forEach(function (item, i) { if (item.id === task.id) index = i; });
++      if (index < 0) return null;
++      return weeks[index + 1] || null;
++    }
++
++    function reset() {
++      state = emptyState();
++      persist();
++    }
++
++    function storageStatus() {
++      return persistent
++        ? { persistent: true, message: "" }
++        : { persistent: false, message: "学习记录无法保存到此浏览器，本次会话仍可继续填写。" };
++    }
++
++    return {
++      load: load,
++      recordCriterion: recordCriterion,
++      currentResult: currentResult,
++      currentEvidence: currentEvidence,
++      failedHistory: failedHistory,
++      passBlocked: function () { return blockedPassId; },
++      isTaskComplete: isTaskComplete,
++      conceptDim: conceptDim,
++      setConceptDim: setConceptDim,
++      note: note,
++      setNote: setNote,
++      stuck: stuck,
++      setStuck: setStuck,
++      nextTask: nextTask,
++      reset: reset,
++      storageStatus: storageStatus
++    };
++  }
++
++  return { create: create, KEY: KEY, RESULTS: RESULTS };
++});
 diff --git a/js/pages.js b/js/pages.js
-index 340ba99..f9cebec 100644
+index 340ba99..8091a08 100644
 --- a/js/pages.js
 +++ b/js/pages.js
-@@ -4,6 +4,15 @@
+@@ -4,6 +4,17 @@
      var chapters = options.chapters, tracks = options.tracks, references = options.references || [];
      var plan = options.plan;
      var escape = options.escapeHtml, progress = options.progress, routes = window.CourseRoutes;
 +    var learning = options.learning || {
 +      currentResult: function () { return "unchecked"; },
++      currentEvidence: function () { return ""; },
 +      isTaskComplete: function () { return false; },
 +      conceptDim: function () { return false; },
 +      note: function () { return ""; },
 +      stuck: function () { return ""; },
 +      failedHistory: function () { return []; },
++      passBlocked: function () { return ""; },
 +      nextTask: function () { return null; }
 +    };
      function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
      function referenceFor(chapterId) { return references.find(function (item) { return item.chapter === chapterId; }) || null; }
      function name(item) { return item.shortTitle || item.title; }
-@@ -87,6 +96,58 @@
+@@ -87,6 +98,70 @@
        var resume = previous ? '<section class="resume-panel"><span class="page-label">上次打开的教材</span><h2>' +
          escape(name(previous)) + '</h2><p>这是阅读位置，不是练习完成，也不表示已掌握。</p>' +
          action("继续阅读", routes.href(previous.id, lastTrack)) + '</section>' : "";
@@ -395,17 +644,29 @@ index 340ba99..f9cebec 100644
 +      }
 +      function criterionRecord(item, stretch) {
 +        var current = learning.currentResult(task.id, item.id);
++        var evidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
 +        var radios = ["unchecked", "failed", "user_passed"].map(function (result) {
 +          return '<label class="check-choice"><input type="radio" name="c-' + escape(item.id) +
 +            '" data-check="' + escape(item.id) + '" value="' + result + '"' +
 +            (current === result ? " checked" : "") + "> " + resultLabel(result) + "</label>";
 +        }).join("");
 +        var history = learning.failedHistory(task.id, item.id);
++        var historyHtml = history.map(function (entry) {
++          var note = String(entry && entry.evidence || "").trim();
++          return '<p class="page-note">曾经未通过' + (note ? "，当时依据：" + escape(note) : "") +
++            "。完成只看当前结果。</p>";
++        }).join("");
++        var blocked = learning.passBlocked && learning.passBlocked() === item.id
++          ? '<p class="page-note" role="alert">用户自报通过需要写下简短依据，例如检查结果或代码位置。</p>'
++          : "";
 +        return '<fieldset class="check-record"><legend>这条验收的当前结果</legend>' +
 +          '<div class="check-choices">' + radios + "</div>" +
-+          '<p class="page-note">这是自己填写的结果，不是本站跑过的自动检查。' +
++          '<label class="note-field">简短依据<textarea data-evidence="' + escape(item.id) +
++          '" rows="2">' + escape(evidence) + "</textarea></label>" +
++          blocked +
++          '<p class="page-note">用户自报通过时必填。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
 +          (stretch ? "拓展未完成不阻挡核心任务。" : "") + "</p>" +
-+          (history.length ? '<p class="page-note">曾经未通过的记录仍保留，完成只看当前结果。</p>' : "") +
++          historyHtml +
 +          "</fieldset>";
 +      }
 +      function criterionItem(item, stretch) {
@@ -443,7 +704,7 @@ index 340ba99..f9cebec 100644
        return header(stage.title + "—" + (task.shortTitle || task.title),
          "当前练习：" + task.title + "。先看写什么、怎么检查、必需做到哪里。",
          "我的学习") +
-@@ -112,20 +173,15 @@
+@@ -112,20 +187,15 @@
          "</ol>" : "") +
          '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
          '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
@@ -548,7 +809,7 @@ index d00e2aa..2ba08fa 100644
      "js/search.js",
      "js/app.js"
 diff --git a/tools/test-course.js b/tools/test-course.js
-index 2dee794..24df958 100644
+index 2dee794..4823203 100644
 --- a/tools/test-course.js
 +++ b/tools/test-course.js
 @@ -5,6 +5,7 @@ const path = require('node:path');
@@ -576,7 +837,7 @@ index 2dee794..24df958 100644
      references,
      progress: { isRead: () => false },
      escapeHtml: value => String(value)
-@@ -392,6 +394,12 @@ test('primary entry shows the Attention lab and retires homework projects from m
+@@ -392,6 +394,13 @@ test('primary entry shows the Attention lab and retires homework projects from m
    assert.match(home, /第 8 周/);
    assert.match(home, /data-week="2"/);
    assert.doesNotMatch(home, /自动测试通过/);
@@ -585,11 +846,12 @@ index 2dee794..24df958 100644
 +  assert.match(home, /自己填写/);
 +  assert.match(home, /不是本站跑过的自动检查/);
 +  assert.match(home, /短记录/);
++  assert.match(home, /简短依据/);
 +  assert.doesNotMatch(home, /进入下一任务/);
    assert.match(home, /分层求助/);
    assert.match(home, /小变式/);
    assert.doesNotMatch(home, /拓展（不挡完成）/);
-@@ -434,7 +442,7 @@ test('home can show another week without treating that as earlier completion', (
+@@ -434,7 +443,7 @@ test('home can show another week without treating that as earlier completion', (
    assert.doesNotMatch(week8, /自动测试通过/);
  });
  
@@ -598,7 +860,7 @@ index 2dee794..24df958 100644
    const os = fs.readFileSync(path.resolve(__dirname, '..', 'docs/PERSONAL_LEARNING_OS.md'), 'utf8');
    const year = fs.readFileSync(path.resolve(__dirname, '..', 'docs/LEARNING_PLAN.md'), 'utf8');
    const impl = fs.readFileSync(path.resolve(__dirname, '..', 'docs/IMPLEMENTATION_PLAN.md'), 'utf8');
-@@ -445,6 +453,7 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
+@@ -445,6 +454,7 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
    assert.match(os, /未检查/);
    assert.match(os, /未通过/);
    assert.match(os, /重新实现关键部分/);
@@ -606,7 +868,7 @@ index 2dee794..24df958 100644
    assert.doesNotMatch(os, /本任务三条 criterion/);
    assert.doesNotMatch(os, /至少有「自己实现」或「能解释」的用户记录/);
    assert.match(year, /GQA 是拓展项/);
-@@ -453,7 +462,8 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
+@@ -453,7 +463,8 @@ test('phase 3 design docs agree on completion, help, and GQA stretch without cla
    assert.match(impl, /issue #4/);
    assert.match(impl, /前八周任务写入/);
    assert.match(impl, /GQA 为拓展项/);
@@ -616,7 +878,7 @@ index 2dee794..24df958 100644
    assert.match(impl, /组装后整模型因果性|组装后因果性/);
    assert.match(impl, /next-token 对齐/);
    assert.match(impl, /真实 A\/B/);
-@@ -622,3 +632,144 @@ test('home week picker switches the current exercise and remembers it', async ()
+@@ -622,3 +633,172 @@ test('home week picker switches the current exercise and remembers it', async ()
    await harness.waitFor(() => /拼最小 decoder/.test(restored.text()));
    assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
  });
@@ -630,6 +892,12 @@ index 2dee794..24df958 100644
 +  };
 +}
 +
++function fillEvidence(app, id, text) {
++  const area = app.content.querySelector('textarea[data-evidence="' + id + '"]');
++  assert.ok(area, id);
++  area.value = text;
++}
++
 +function clickChoice(app, check, value) {
 +  const input = app.content.querySelector('input[data-check="' + check + '"][value="' + value + '"]');
 +  assert.ok(input, check + '=' + value);
@@ -637,7 +905,10 @@ index 2dee794..24df958 100644
 +}
 +
 +function passRequired(app, ids) {
-+  ids.forEach(id => clickChoice(app, id, 'user_passed'));
++  ids.forEach(id => {
++    fillEvidence(app, id, '依据 ' + id);
++    clickChoice(app, id, 'user_passed');
++  });
 +}
 +
 +test('learning completes a task only when every required item is currently user-passed', () => {
@@ -648,16 +919,25 @@ index 2dee794..24df958 100644
 +  const week1 = plan.tasks.find(item => item.weekBudget === 1);
 +  const week2 = plan.tasks.find(item => item.weekBudget === 2);
 +  assert.equal(learning.isTaskComplete(week1), false);
-+  learning.recordCriterion(week1.id, 'rewrite', 'failed');
++  assert.equal(learning.recordCriterion(week1.id, 'numeric', 'user_passed', ''), false);
++  assert.equal(learning.currentResult(week1.id, 'numeric'), 'unchecked');
 +  assert.equal(learning.isTaskComplete(week1), false);
-+  ['rewrite', 'shapes', 'causal'].forEach(id => learning.recordCriterion(week1.id, id, 'user_passed'));
++  learning.recordCriterion(week1.id, 'rewrite', 'failed', '数值对照失败，位置 attn.py');
++  assert.equal(learning.isTaskComplete(week1), false);
++  ['rewrite', 'shapes', 'causal'].forEach(id => learning.recordCriterion(week1.id, id, 'user_passed', '依据 ' + id));
++  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '依据 rewrite');
++  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '数值对照失败，位置 attn.py');
 +  assert.equal(learning.isTaskComplete(week1), false);
 +  learning.recordCriterion(week1.id, 'numeric', 'user_passed');
++  assert.equal(learning.isTaskComplete(week1), false);
++  learning.recordCriterion(week1.id, 'numeric', 'user_passed', '   ');
++  assert.equal(learning.isTaskComplete(week1), false);
++  learning.recordCriterion(week1.id, 'numeric', 'user_passed', '固定输入对照通过');
 +  assert.equal(learning.isTaskComplete(week1), true);
-+  assert.ok(learning.failedHistory(week1.id, 'rewrite').length);
 +  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
 +  const saved = JSON.parse(storage.getItem(learningModule.KEY));
 +  assert.equal(saved.criteria[week1.id + '::rewrite'].current.source, 'user_reported');
++  assert.equal(saved.criteria[week1.id + '::rewrite'].history[0].evidence, '数值对照失败，位置 attn.py');
 +
 +  ['read', 'implemented', 'verified', 'explained'].forEach(dim => {
 +    learning.setConceptDim('causal-mask', dim, true);
@@ -665,7 +945,7 @@ index 2dee794..24df958 100644
 +  assert.equal(learning.isTaskComplete(week2), false);
 +  assert.equal(learning.currentResult(week2.id, 'assembled-causal'), 'unchecked');
 +  ['forward-btv', 'residual-head', 'assembled-causal'].forEach(id => {
-+    learning.recordCriterion(week2.id, id, 'user_passed');
++    learning.recordCriterion(week2.id, id, 'user_passed', '依据 ' + id);
 +  });
 +  assert.equal(learning.isTaskComplete(week2), true);
 +  assert.equal(learning.currentResult(week2.id, 'norm-rope-read'), 'unchecked');
@@ -674,6 +954,7 @@ index 2dee794..24df958 100644
 +  const done = pages.home(null);
 +  assert.match(done, /进入下一任务/);
 +  assert.match(done, /不会自动跳转/);
++  assert.match(done, /数值对照失败，位置 attn.py/);
 +  assert.doesNotMatch(done, /自动测试通过/);
 +  assert.doesNotMatch(done, /taskId|criterionId|lab\.attention|<code>/);
 +});
@@ -689,11 +970,18 @@ index 2dee794..24df958 100644
 +  assert.doesNotMatch(app.html(), /自动测试通过/);
 +  assert.doesNotMatch(app.html(), /taskId|criterionId|lab\.attention|<code>/);
 +
-+  clickChoice(app, 'rewrite', 'failed');
-+  await harness.waitFor(() => /曾经未通过/.test(app.text()));
++  clickChoice(app, 'rewrite', 'user_passed');
++  await harness.waitFor(() => /需要写下简短依据/.test(app.text()));
++  assert.equal(app.content.querySelector('input[data-check="rewrite"][value="unchecked"]').checked, true);
 +  assert.doesNotMatch(app.text(), /进入下一任务/);
++
++  fillEvidence(app, 'rewrite', '数值对照失败，位置 attn.py');
++  clickChoice(app, 'rewrite', 'failed');
++  fillEvidence(app, 'rewrite', '修复后对照通过');
 +  clickChoice(app, 'rewrite', 'user_passed');
 +  await harness.waitFor(() => /曾经未通过/.test(app.text()));
++  assert.match(app.text(), /数值对照失败，位置 attn.py/);
++  assert.match(app.text(), /修复后对照通过/);
 +  assert.match(app.text(), /用户自报通过/);
 +  assert.doesNotMatch(app.text(), /进入下一任务/);
 +
@@ -741,6 +1029,7 @@ index 2dee794..24df958 100644
 +  });
 +  await harness.waitFor(() => /手写因果多头注意力/.test(week1Again.text()));
 +  assert.match(week1Again.text(), /曾经未通过/);
++  assert.match(week1Again.text(), /数值对照失败，位置 attn.py/);
 +  assert.match(week1Again.text(), /进入下一任务/);
 +});
 +
@@ -750,6 +1039,7 @@ index 2dee794..24df958 100644
 +    failKeys: ['llm-course-learning']
 +  });
 +  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
++  fillEvidence(app, 'rewrite', '依据 rewrite');
 +  clickChoice(app, 'rewrite', 'user_passed');
 +  await harness.waitFor(() => /学习记录无法保存/.test(app.byId('storageNotice').textContent || ''));
 +  assert.equal(app.byId('storageNotice').hidden, false);
@@ -760,213 +1050,4 @@ index 2dee794..24df958 100644
 +  await harness.waitFor(() => app.byId('advanceTask'));
 +  assert.match(app.text(), /小模型学习实验室—Attention/);
 +  assert.equal(app.localStorage.getItem('llm-course-learning'), null);
-+});
-
-diff --git a/js/learning.js b/js/learning.js
-new file mode 100644
-index 0000000..1111111
---- /dev/null	2026-09-20 13:38:04
-+++ b/js/learning.js	2026-09-20 13:32:07
-@@ -0,0 +1,202 @@
-+(function (root, factory) {
-+  if (typeof module === "object" && module.exports) module.exports = factory(root);
-+  else root.CourseLearning = factory(root);
-+})(typeof globalThis !== "undefined" ? globalThis : this, function (root) {
-+  "use strict";
-+
-+  var KEY = "llm-course-learning";
-+  var RESULTS = { unchecked: "unchecked", failed: "failed", user_passed: "user_passed" };
-+  var SOURCE = "user_reported";
-+  var DIMS = { read: true, implemented: true, verified: true, explained: true };
-+
-+  function emptyState() {
-+    return { version: 1, criteria: {}, concepts: {}, notes: {}, stuck: {} };
-+  }
-+
-+  function criterionKey(taskId, criterionId) {
-+    return String(taskId || "") + "::" + String(criterionId || "");
-+  }
-+
-+  function asObject(value) {
-+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-+  }
-+
-+  function create(options) {
-+    options = options || {};
-+    var storage = options.storage;
-+    if (storage === undefined) {
-+      try { storage = root && root.localStorage; } catch (error) { storage = null; }
-+    }
-+    var state = emptyState();
-+    var persistent = !!storage;
-+    var onChange = typeof options.onChange === "function" ? options.onChange : function () {};
-+
-+    function persist() {
-+      if (!storage) {
-+        persistent = false;
-+        onChange();
-+        return false;
-+      }
-+      try {
-+        storage.setItem(KEY, JSON.stringify(state));
-+        persistent = true;
-+        onChange();
-+        return true;
-+      } catch (error) {
-+        persistent = false;
-+        onChange();
-+        return false;
-+      }
-+    }
-+
-+    function load() {
-+      if (!storage) {
-+        persistent = false;
-+        state = emptyState();
-+        return;
-+      }
-+      try {
-+        var raw = storage.getItem(KEY);
-+        persistent = true;
-+        if (!raw) {
-+          state = emptyState();
-+          return;
-+        }
-+        var parsed = JSON.parse(raw);
-+        state = {
-+          version: 1,
-+          criteria: asObject(parsed && parsed.criteria),
-+          concepts: asObject(parsed && parsed.concepts),
-+          notes: asObject(parsed && parsed.notes),
-+          stuck: asObject(parsed && parsed.stuck)
-+        };
-+      } catch (error) {
-+        persistent = false;
-+        state = emptyState();
-+      }
-+    }
-+
-+    function recordOf(taskId, criterionId) {
-+      return state.criteria[criterionKey(taskId, criterionId)] || null;
-+    }
-+
-+    function currentResult(taskId, criterionId) {
-+      var record = recordOf(taskId, criterionId);
-+      var result = record && record.current && record.current.result;
-+      if (result === RESULTS.failed || result === RESULTS.user_passed) return result;
-+      return RESULTS.unchecked;
-+    }
-+
-+    function failedHistory(taskId, criterionId) {
-+      var record = recordOf(taskId, criterionId);
-+      var history = record && Array.isArray(record.history) ? record.history : [];
-+      var out = history.filter(function (item) { return item && item.result === RESULTS.failed; });
-+      if (record && record.current && record.current.result === RESULTS.failed) out = out.concat([record.current]);
-+      return out;
-+    }
-+
-+    function recordCriterion(taskId, criterionId, result) {
-+      if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return;
-+      var key = criterionKey(taskId, criterionId);
-+      var record = recordOf(taskId, criterionId) || { current: null, history: [] };
-+      var history = Array.isArray(record.history) ? record.history.slice() : [];
-+      if (record.current && record.current.result && record.current.result !== result) {
-+        history.push(record.current);
-+      }
-+      state.criteria[key] = {
-+        current: { result: result, source: SOURCE, at: Date.now() },
-+        history: history
-+      };
-+      persist();
-+    }
-+
-+    function requiredCriteria(task) {
-+      return (task && task.criteria || []).filter(function (item) { return item.required !== false; });
-+    }
-+
-+    function isTaskComplete(task) {
-+      var required = requiredCriteria(task);
-+      if (!required.length) return false;
-+      return required.every(function (item) {
-+        return currentResult(task.id, item.id) === RESULTS.user_passed;
-+      });
-+    }
-+
-+    function conceptDim(conceptId, dim) {
-+      var row = state.concepts[conceptId];
-+      return !!(row && row[dim]);
-+    }
-+
-+    function setConceptDim(conceptId, dim, on) {
-+      if (!DIMS[dim]) return;
-+      var row = state.concepts[conceptId] || {};
-+      row[dim] = !!on;
-+      state.concepts[conceptId] = row;
-+      persist();
-+    }
-+
-+    function note(taskId, field) {
-+      var row = state.notes[taskId] || {};
-+      return row[field] || "";
-+    }
-+
-+    function setNote(taskId, field, value) {
-+      var row = state.notes[taskId] || {};
-+      row[field] = String(value || "");
-+      state.notes[taskId] = row;
-+      persist();
-+    }
-+
-+    function stuck(taskId) {
-+      return state.stuck[taskId] || "";
-+    }
-+
-+    function setStuck(taskId, value) {
-+      state.stuck[taskId] = String(value || "");
-+      persist();
-+    }
-+
-+    function nextTask(plan, task) {
-+      if (!plan || !task) return null;
-+      var weeks = (plan.tasks || []).filter(function (item) {
-+        return item.stageId === task.stageId;
-+      }).slice().sort(function (a, b) {
-+        return (a.weekBudget || 0) - (b.weekBudget || 0);
-+      });
-+      var index = -1;
-+      weeks.forEach(function (item, i) { if (item.id === task.id) index = i; });
-+      if (index < 0) return null;
-+      return weeks[index + 1] || null;
-+    }
-+
-+    function reset() {
-+      state = emptyState();
-+      persist();
-+    }
-+
-+    function storageStatus() {
-+      return persistent
-+        ? { persistent: true, message: "" }
-+        : { persistent: false, message: "学习记录无法保存到此浏览器，本次会话仍可继续填写。" };
-+    }
-+
-+    return {
-+      load: load,
-+      recordCriterion: recordCriterion,
-+      currentResult: currentResult,
-+      failedHistory: failedHistory,
-+      isTaskComplete: isTaskComplete,
-+      conceptDim: conceptDim,
-+      setConceptDim: setConceptDim,
-+      note: note,
-+      setNote: setNote,
-+      stuck: stuck,
-+      setStuck: setStuck,
-+      nextTask: nextTask,
-+      reset: reset,
-+      storageStatus: storageStatus
-+    };
-+  }
-+
-+  return { create: create, KEY: KEY, RESULTS: RESULTS };
 +});

@@ -29,7 +29,12 @@
     }
     var state = emptyState();
     var persistent = !!storage;
+    var blockedPassId = "";
     var onChange = typeof options.onChange === "function" ? options.onChange : function () {};
+
+    function hasEvidence(text) {
+      return String(text || "").replace(/\s+/g, " ").trim().length > 0;
+    }
 
     function persist() {
       if (!storage) {
@@ -87,27 +92,43 @@
       return RESULTS.unchecked;
     }
 
+    function currentEvidence(taskId, criterionId) {
+      var record = recordOf(taskId, criterionId);
+      return record && record.current && record.current.evidence ? String(record.current.evidence) : "";
+    }
+
     function failedHistory(taskId, criterionId) {
       var record = recordOf(taskId, criterionId);
       var history = record && Array.isArray(record.history) ? record.history : [];
-      var out = history.filter(function (item) { return item && item.result === RESULTS.failed; });
-      if (record && record.current && record.current.result === RESULTS.failed) out = out.concat([record.current]);
-      return out;
+      return history.filter(function (item) { return item && item.result === RESULTS.failed; });
     }
 
-    function recordCriterion(taskId, criterionId, result) {
-      if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return;
+    function recordCriterion(taskId, criterionId, result, evidence) {
+      if (result !== RESULTS.unchecked && result !== RESULTS.failed && result !== RESULTS.user_passed) return false;
+      var note = String(evidence == null ? "" : evidence).replace(/\s+/g, " ").trim();
+      if (result === RESULTS.user_passed && !hasEvidence(note)) {
+        blockedPassId = String(criterionId || "");
+        onChange();
+        return false;
+      }
+      blockedPassId = "";
       var key = criterionKey(taskId, criterionId);
       var record = recordOf(taskId, criterionId) || { current: null, history: [] };
       var history = Array.isArray(record.history) ? record.history.slice() : [];
       if (record.current && record.current.result && record.current.result !== result) {
-        history.push(record.current);
+        history.push({
+          result: record.current.result,
+          source: record.current.source || SOURCE,
+          evidence: record.current.evidence || "",
+          at: record.current.at || Date.now()
+        });
       }
       state.criteria[key] = {
-        current: { result: result, source: SOURCE, at: Date.now() },
+        current: { result: result, source: SOURCE, evidence: note, at: Date.now() },
         history: history
       };
       persist();
+      return true;
     }
 
     function requiredCriteria(task) {
@@ -118,7 +139,7 @@
       var required = requiredCriteria(task);
       if (!required.length) return false;
       return required.every(function (item) {
-        return currentResult(task.id, item.id) === RESULTS.user_passed;
+        return currentResult(task.id, item.id) === RESULTS.user_passed && hasEvidence(currentEvidence(task.id, item.id));
       });
     }
 
@@ -184,7 +205,9 @@
       load: load,
       recordCriterion: recordCriterion,
       currentResult: currentResult,
+      currentEvidence: currentEvidence,
       failedHistory: failedHistory,
+      passBlocked: function () { return blockedPassId; },
       isTaskComplete: isTaskComplete,
       conceptDim: conceptDim,
       setConceptDim: setConceptDim,

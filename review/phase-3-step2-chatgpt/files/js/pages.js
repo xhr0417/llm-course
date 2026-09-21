@@ -6,11 +6,13 @@
     var escape = options.escapeHtml, progress = options.progress, routes = window.CourseRoutes;
     var learning = options.learning || {
       currentResult: function () { return "unchecked"; },
+      currentEvidence: function () { return ""; },
       isTaskComplete: function () { return false; },
       conceptDim: function () { return false; },
       note: function () { return ""; },
       stuck: function () { return ""; },
       failedHistory: function () { return []; },
+      passBlocked: function () { return ""; },
       nextTask: function () { return null; }
     };
     function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
@@ -103,17 +105,29 @@
       }
       function criterionRecord(item, stretch) {
         var current = learning.currentResult(task.id, item.id);
+        var evidence = learning.currentEvidence ? learning.currentEvidence(task.id, item.id) : "";
         var radios = ["unchecked", "failed", "user_passed"].map(function (result) {
           return '<label class="check-choice"><input type="radio" name="c-' + escape(item.id) +
             '" data-check="' + escape(item.id) + '" value="' + result + '"' +
             (current === result ? " checked" : "") + "> " + resultLabel(result) + "</label>";
         }).join("");
         var history = learning.failedHistory(task.id, item.id);
+        var historyHtml = history.map(function (entry) {
+          var note = String(entry && entry.evidence || "").trim();
+          return '<p class="page-note">曾经未通过' + (note ? "，当时依据：" + escape(note) : "") +
+            "。完成只看当前结果。</p>";
+        }).join("");
+        var blocked = learning.passBlocked && learning.passBlocked() === item.id
+          ? '<p class="page-note" role="alert">用户自报通过需要写下简短依据，例如检查结果或代码位置。</p>'
+          : "";
         return '<fieldset class="check-record"><legend>这条验收的当前结果</legend>' +
           '<div class="check-choices">' + radios + "</div>" +
-          '<p class="page-note">这是自己填写的结果，不是本站跑过的自动检查。' +
+          '<label class="note-field">简短依据<textarea data-evidence="' + escape(item.id) +
+          '" rows="2">' + escape(evidence) + "</textarea></label>" +
+          blocked +
+          '<p class="page-note">用户自报通过时必填。可以写检查结果、代码位置或一句解释，不要求长报告。这是自己填写的结果，不是本站跑过的自动检查。' +
           (stretch ? "拓展未完成不阻挡核心任务。" : "") + "</p>" +
-          (history.length ? '<p class="page-note">曾经未通过的记录仍保留，完成只看当前结果。</p>' : "") +
+          historyHtml +
           "</fieldset>";
       }
       function criterionItem(item, stretch) {

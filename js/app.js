@@ -208,7 +208,9 @@
         if (!input.checked) return;
         var task = currentPlanTask();
         if (!task) return;
-        learning.recordCriterion(task.id, input.getAttribute("data-check"), input.value);
+        var id = input.getAttribute("data-check");
+        var area = root.querySelector('textarea[data-evidence="' + id + '"]');
+        learning.recordCriterion(task.id, id, input.value, area ? area.value : "");
         paintHome();
       });
     });
