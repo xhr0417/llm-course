@@ -1,0 +1,458 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index 6cf331b..76a18b3 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -14,9 +14,9 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
+ 
+ ## 5. Shared components
+ - Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+-- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links.
++- Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links. On a task textbook heading,「下一相关小节」is the forward action;「返回当前练习」is a secondary button.
+ - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
+-- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book.
++- Lesson list: the current task comes from `content/learning-plan.json`. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. The home page keeps the current goal, week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
+ - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+ - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+ - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
+@@ -28,4 +28,4 @@ Keep existing purposeful interactions and diagrams. New transitions only change
+ Use existing panel backgrounds with a single border. Route rows use dividers instead of nesting cards inside cards. Existing teaching callouts keep their semantic visual treatment. Entry pages use whitespace to separate decisions.
+ 
+ ## 8. Accessibility and verification
+-Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high, including record radios, concept checkboxes and short-record textareas. Verify「我的学习」, catalog, textbook chapters, search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Also verify learning-record save failure and confirm-next on home. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
++Keyboard navigation, labeled search, native disclosures and one page title are required. No clipped CJK text; mobile controls at least 44px high, including record radios, concept checkboxes and short-record textareas. Verify「我的学习」, catalog, textbook chapters (current-task context, return to the exercise, next related section), search, theme and storage-failure states at 375/768/1280, plus the retired `#/projects` explanation page. Also verify learning-record save failure and confirm-next on home, and that closed home disclosures still keep their content. If the learning plan file fails to load, the home page shows an understandable error and retry while catalog, chapter routes and search still start. A later plan success or failure must not re-route an open chapter, catalog or reference page; returning home shows the latest plan. Route-aware next/previous and reload/resume of read records remain required; do not treat read as mastery. Existing demonstration styling is retained; unrelated diagram redesign is outside this simplification. Do not claim performance scores without measuring them.
+diff --git a/README.md b/README.md
+index 9c93e64..5dd38e1 100644
+--- a/README.md
++++ b/README.md
+@@ -12,7 +12,7 @@
+ 
+ ## 从哪里开始
+ 
+-打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。每一周都写清写什么、怎么检查、必需做到哪里。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过），点「保存本条记录」才写入；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
++打开课程首页的 [我的学习](https://xhr0417.github.io/llm-course/#/)，默认练习是第 1 周 **小模型学习实验室—Attention**。同一页可以手动改到第 2–8 周：只更换练习说明，不表示前面已经完成。首页先给出当前目标和主按钮，详细验收、历史和参考按需展开。从练习打开教材时，章节页会显示当前练习、返回练习，以及下一相关小节。可以记下每条必需验收的当前结果（未检查／未通过／用户自报通过），点「保存本条记录」才写入；全部必需项当前自报通过后，由你确认才进入下一任务。本站不代写核心算法。
+ 
+ 教材、交互演示和搜索仍可用：
+ 
+diff --git a/css/course.css b/css/course.css
+index 1ae6337..0436015 100644
+--- a/css/course.css
++++ b/css/course.css
+@@ -84,6 +84,52 @@
+ .check-record .note-field textarea { min-height: 64px; }
+ .check-record .btn { margin-top: var(--space-3); }
+ .task-list a, .concept-list a { color: var(--accent-text); min-height: 44px; display: inline-flex; align-items: center; }
++.task-context {
++  position: sticky;
++  top: var(--topbar-h);
++  z-index: 5;
++  margin: 0 0 var(--space-6);
++  padding: var(--space-3) var(--space-4);
++  background: var(--bg-panel);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  box-shadow: var(--shadow);
++}
++.task-context p { margin: var(--space-2) 0; max-width: 46em; }
++.task-context-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: var(--space-3) 0; }
++.task-context-actions .btn { min-height: 44px; }
++.home-fold {
++  margin-top: var(--space-6);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  background: var(--bg-panel);
++  overflow: hidden;
++}
++.home-fold > summary {
++  cursor: pointer;
++  min-height: 44px;
++  padding: var(--space-3) var(--space-4);
++  font-weight: 600;
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  list-style: none;
++}
++.home-fold > summary::-webkit-details-marker { display: none; }
++.home-fold > summary::before {
++  content: "▸";
++  color: var(--text-faint);
++  transition: transform .15s;
++  font-size: 13px;
++}
++.home-fold[open] > summary::before { transform: rotate(90deg); }
++.home-fold[open] > summary { border-bottom: 1px solid var(--border); }
++.home-fold:not([open]) > .fold-body { display: none; }
++body:has(.task-context) .md :is(h2, h3, h4, h5, h6) {
++  scroll-margin-top: calc(var(--topbar-h) + 12rem);
++}
++.home-fold > .fold-body { padding: var(--space-3) var(--space-4) var(--space-4); }
++.home-fold h2 { font-size: var(--text-base); margin: 0 0 var(--space-3); }
+ .task-steps p { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); }
+ .task-spec { margin: 0; max-width: 46em; }
+ .task-spec dt { font-weight: 600; margin-top: var(--space-4); }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 86754ce..9b8aaa8 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -105,7 +105,7 @@
+ 
+ **进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+ 
+-**本轮（阶段 3 第二步）：** 最小记录层。前八周任务写入与手动选周已完成（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）；本轮只做验收记录、证据、卡点与本地保存。`js/learning.js` 使用 `llm-course-learning`。`evidenceSystemImplemented` 已为 `true`。完成只看全部必需项的当前用户自报通过，且每条有简短依据；每条用「保存本条记录」提交结果和依据；新提交有变化时保留旧快照，完全相同不重复追加；无依据不能算通过，也不改写已有有效记录。拓展不挡；概念历史不自动完成新任务；保存失败提示；自报不显示成自动检查；完成后需确认才进入下一任务。**不实现**教材任务上下文导航和首页进一步分层。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。
++**本轮（阶段 3 第三步）：** 教材任务上下文导航与首页信息分层。前八周任务写入与最小记录层已通过验收（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）。`evidenceSystemImplemented` 已为 `true`。本轮只做：从练习进入教材后显示当前任务、返回当前练习、下一相关小节；首页把当前目标和主操作放在前面，详细验收、历史与参考按需展开。沿用已验收记录规则：完成只看全部必需项的当前用户自报通过且每条有简短依据；「保存本条记录」；有变化才写入历史，完全相同不重复追加；无依据不能算通过。不增加复习队列、自动评分或新项目。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。阶段 3 整体尚未完成。
+ 
+ **开工后的实现顺序（可验收小步，不扩大功能）：**
+ 
+@@ -123,7 +123,7 @@
+ 
+ 进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页突出下一动作，详细 workspace / steps / criteria 可分层或折叠，但不要删掉新手所需说明。
+ 
+-**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。
++**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。从当前练习打开必要教材后，章节页显示当前练习、返回当前练习，以及该小节的下一相关小节；全书上一课/下一课仍在。首页当前目标与主按钮保持可见，详细验收、历史与参考在折叠块中仍可展开，记录规则不变。
+ 
+ **完成条件：** 前八周每条都有教材 + 实现 + 验收（含必需／拓展）；记录层可用；不指向已退出主线的六作业。
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index ff2912f..0c89b1d 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -231,7 +231,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页进一步分层仍未做。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/app.js b/js/app.js
+index 3c073cc..4b59d39 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -166,7 +166,7 @@
+     root.innerHTML = '<div class="loading" role="status">正在加载课程…</div>';
+     fetchChapter(chapter).then(function (text) {
+       if (token !== requestId) return;
+-      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id));
++      root.innerHTML = pages.lesson(chapter, activeTrack, renderer.renderMarkdown(text, chapter.id), pages.referenceFor(chapter.id), locationRoute.section);
+       byId("markRead").addEventListener("click", function () { progress.toggleRead(chapter.id); });
+       progress.initGuidedLabs(root, chapter.id);
+       reader.init(chapter.id);
+diff --git a/js/pages.js b/js/pages.js
+index a4c00f0..965c200 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -66,6 +66,74 @@
+         }).join("") +
+         '</div><p class="page-note">点某一周只更换练习说明。不会把前面的周标成完成，也不会按日期自动跳周。</p>';
+     }
++    function fold(title, inner, open) {
++      return '<details class="home-fold"' + (open ? " open" : "") + "><summary>" + escape(title) +
++        '</summary><div class="fold-body">' + inner + "</div></details>";
++    }
++    function roleLabel(role) {
++      if (role === "required") return "必要教材";
++      if (role === "check-after") return "写完后对照";
++      if (role === "parallel") return "并行补基础";
++      if (role === "reference") return "对照入口";
++      return "练习材料";
++    }
++    function spineMaterials(task) {
++      return (task && task.materials || []).filter(function (item) {
++        return item.chapterId && !item.external;
++      });
++    }
++    function findMaterial(task, chapterId, section) {
++      var list = spineMaterials(task);
++      var index = -1;
++      if (section) {
++        index = list.findIndex(function (item) {
++          return item.chapterId === chapterId && item.section === section;
++        });
++      } else {
++        index = list.findIndex(function (item) { return item.chapterId === chapterId; });
++      }
++      if (index < 0) return null;
++      return { list: list, index: index, item: list[index] };
++    }
++    function nextRelated(match) {
++      if (!match) return null;
++      var current = match.item;
++      var i;
++      for (i = match.index + 1; i < match.list.length; i++) {
++        if (match.list[i].role === current.role) return match.list[i];
++      }
++      if (current.role === "required") {
++        for (i = match.index + 1; i < match.list.length; i++) {
++          if (match.list[i].role === "check-after") return match.list[i];
++        }
++      }
++      return null;
++    }
++    function taskContext(item, section) {
++      var task = plan && resolveTask(plan);
++      if (!task) return "";
++      var match = findMaterial(task, item.id, section);
++      var html = '<aside class="task-context" aria-label="当前练习导航">' +
++        '<span class="page-label">当前练习</span><p>' + escape(task.title) + "</p>" +
++        '<div class="task-context-actions"><a class="btn" href="#/">返回当前练习</a>';
++      var next = nextRelated(match);
++      if (next) html += action("下一相关小节：" + next.label, materialHref(next));
++      html += "</div>";
++      if (match) {
++        var sameRole = match.list.filter(function (entry) { return entry.role === match.item.role; });
++        var roleIndex = sameRole.indexOf(match.item) + 1;
++        html += '<p class="page-note">' + escape(roleLabel(match.item.role)) + " · " +
++          String(roleIndex) + " / " + String(sameRole.length) + " · " +
++          escape(match.item.label) + "</p>";
++        if (match.item.role !== "check-after") {
++          var after = listByRole(task, "check-after").filter(function (entry) { return entry.chapterId; });
++          if (after[0]) {
++            html += '<p class="page-note">写完后对照：' + escape(after[0].label) + "</p>";
++          }
++        }
++      }
++      return html + "</aside>";
++    }
+     function home(last) {
+       if (options.planError) {
+         return header("我的学习", "当前练习暂时无法显示，教材仍可查阅。") +
+@@ -155,14 +223,13 @@
+               "> " + dim[1] + "</label>";
+           }).join("") + "</div></li>";
+       }
+-      var notes = '<section class="entry-section"><h2>短记录</h2>' +
++      var notes = fold("短记录",
+         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
+         '<label class="note-field">做了什么<textarea data-note="what" rows="3">' + escape(learning.note(task.id, "what")) + "</textarea></label>" +
+         '<label class="note-field">检查结果及代码位置<textarea data-note="check" rows="3">' + escape(learning.note(task.id, "check")) + "</textarea></label>" +
+         '<label class="note-field">下一步<textarea data-note="next" rows="3">' + escape(learning.note(task.id, "next")) + "</textarea></label>" +
+         '<label class="note-field">卡点（可选，不锁教材）<textarea data-stuck="1" rows="2">' + escape(learning.stuck(task.id)) + "</textarea></label>" +
+-        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : "") +
+-        "</section>";
++        (learning.stuck(task.id) ? '<p class="page-note">卡点已记下，不锁教材。</p>' : ""));
+       var complete = learning.isTaskComplete(task);
+       var next = learning.nextTask(plan, task);
+       var advance = complete
+@@ -173,6 +240,16 @@
+             : '<p class="page-note">这是本阶段最后一项练习。</p>') +
+           "</section>"
+         : "";
++      var criteriaOpen = !!(learning.passBlocked && learning.passBlocked()) ||
++        (task.criteria || []).some(function (item) {
++          return !!(options.criterionDraft && options.criterionDraft(task.id, item.id));
++        });
++      var requiredCount = requiredCriteria(task).filter(function (item) {
++        return learning.currentResult(task.id, item.id) === "user_passed" &&
++          learning.currentEvidence && learning.currentEvidence(task.id, item.id);
++      }).length;
++      var criteriaSummary = "验收与记录（必需 " + String(requiredCount) + " / " +
++        String(requiredCriteria(task).length) + " 条当前通过）";
+       return header(stage.title + "—" + (task.shortTitle || task.title),
+         "当前练习：" + task.title + "。先看写什么、怎么检查、必需做到哪里。",
+         "我的学习") +
+@@ -181,38 +258,43 @@
+         weekButtons(plan, stage, task) +
+         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
+         '</section>' +
+-        '<section class="entry-section"><h2>必要教材</h2><ol class="task-list">' +
+-        required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p></section>' +
+-        '<section class="entry-section"><h2>在哪里写、输入输出是什么</h2>' +
+-        '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
+-        '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
+-        '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl></section>' +
+-        '<section class="entry-section"><h2>实现步骤</h2><ol class="task-list task-steps">' +
+-        task.steps.map(function (step) {
+-          return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
+-        }).join("") + "</ol></section>" +
+-        '<section class="entry-section"><h2>如何检查结果</h2>' +
+-        (after.length ? '<ol class="task-list">' +
+-        after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        "</ol>" : "") +
+-        '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p></section>' +
+-        '<section class="entry-section"><h2>验收条件</h2><ol class="task-list">' +
+-        requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
+-        '</ol>' +
+-        (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
+-          stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : "") +
+-        '</section>' +
+-        '<section class="entry-section"><h2>相关概念</h2><ul class="concept-list">' +
+-        task.conceptIds.map(conceptRow).join("") + "</ul></section>" +
+-        notes +
+         advance +
+-        (parallel.length ? '<section class="entry-section"><h2>并行补基础</h2><ul class="task-list">' +
+-        parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-        '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p></section>' : "") +
+-        (reference.length ? '<section class="entry-section"><h2>对照入口</h2><ul class="task-list">' +
++        fold("必要教材",
++          '<ol class="task-list">' +
++          required.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          '</ol><p class="page-note">先读这些小节再动手。章内交互演示可建立直觉，但不能代替自己写函数。</p>') +
++        fold("在哪里写、输入输出是什么",
++          '<dl class="task-spec"><dt>写在哪里</dt><dd>' + escape(task.workspace.where) + '</dd>' +
++          '<dt>输入</dt><dd>' + escape(task.workspace.inputs) + '</dd>' +
++          '<dt>输出</dt><dd>' + escape(task.workspace.outputs) + '</dd></dl>') +
++        fold("实现步骤",
++          '<ol class="task-list task-steps">' +
++          task.steps.map(function (step) {
++            return "<li><strong>" + escape(step.title) + "</strong><p>" + escape(step.body) + "</p></li>";
++          }).join("") + "</ol>") +
++        fold("如何检查结果",
++          (after.length ? '<ol class="task-list">' +
++          after.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          "</ol>" : "") +
++          '<p class="page-note">本页不代写核心算法，也不在浏览器里运行 Python。先留下一次自己的实现尝试再检查；卡住时可以分层求助，看过参考后重写关键部分并换输入验证。</p>') +
++        fold(criteriaSummary,
++          '<h2>验收条件</h2><ol class="task-list">' +
++          requiredCriteria(task).map(function (item) { return criterionItem(item, false); }).join("") +
++          "</ol>" +
++          (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
++            stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : ""),
++          criteriaOpen) +
++        fold("相关概念",
++          '<ul class="concept-list">' + task.conceptIds.map(conceptRow).join("") + "</ul>") +
++        notes +
++        (parallel.length ? fold("并行补基础",
++          '<ul class="task-list">' +
++          parallel.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
++          '</ul><p class="page-note">卡在 class、reshape 或 broadcasting 时，打开对应小节即可。</p>') : "") +
++        (reference.length ? fold("对照入口",
++          '<ul class="task-list">' +
+           reference.map(function (item) { return "<li>" + materialLink(item) + "</li>"; }).join("") +
+-          "</ul></section>" : "") +
++          "</ul>") : "") +
+         resume +
+         '<p class="page-note">侧栏「阅读进度」只统计已读教材。已读不是已掌握。想查其他内容，使用顶部搜索或浏览<a href="#/catalog">全部章节</a>。</p>';
+     }
+@@ -244,25 +326,29 @@
+         action("回到我的学习", "#/") + '</section>' +
+         '<p class="page-note">第 25–31 章仍可当教材阅读。其中的历史仓库链接已标明可选参考，不是当前作业。</p>';
+     }
+-    function footer(item, track) {
++    function footer(item, track, bookNav) {
+       var adjacent = routes.neighbors(chapters, track, item.id);
++      var prevLabel = bookNav ? "全书上一课" : "上一课";
++      var nextLabel = bookNav ? "全书下一课" : "下一课";
+       function link(id, label, cls) {
+         return '<a class="footer-link ' + cls + '" href="' + routes.href(id, track) + '"><span class="fl-label">' + label +
+           '</span><span class="fl-title">' + escape(name(chapter(id))) + '</span></a>';
+       }
+-      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, "上一课", "") : '<span></span>') +
+-        (adjacent.next ? link(adjacent.next, "下一课", "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
++      return '<nav class="chapter-footer" aria-label="课程翻页">' + (adjacent.previous ? link(adjacent.previous, prevLabel, "") : '<span></span>') +
++        (adjacent.next ? link(adjacent.next, nextLabel, "next") : '<a class="footer-link next" href="' + (track ? '#/track/' + track.id : '#/catalog') +
+           '"><span class="fl-label">已到最后一课</span><span class="fl-title">返回' + (track ? "查阅分组" : "章节目录") + '</span></a>') + '</nav>';
+     }
+-    function lesson(item, track, body, reference) {
++    function lesson(item, track, body, reference, section) {
+       var read = progress.isRead(item.id);
+       var routeLink = track ? '<a href="#/track/' + track.id + '">' + escape(track.title) + '</a>' : '<a href="#/catalog">全部章节</a>';
+-      return '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
++      var context = taskContext(item, section);
++      return context +
++        '<div class="lesson-context">' + routeLink + '<span> / 第 ' + escape(item.num) + ' 章</span></div>' +
+         header(item.title, item.desc, "课程") + '<div class="chapter-actions"><button class="btn' + (read ? " done" : "") +
+         '" id="markRead" aria-pressed="' + read + '">' + (read ? "已读完 · 点击取消" : "标记已读") + '</button>' +
+         '<span class="page-note">已读只保存在此浏览器，不是已掌握</span>' +
+         (reference ? '<a class="reference-link" href="#/reference/' + reference.id + '">按需查阅本章参考手册 →</a>' : "") +
+-        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track);
++        '</div><div class="md" id="mdBody">' + body + '</div>' + footer(item, track, !!context);
+     }
+     function referencePage(reference, item, body) {
+       return '<div class="lesson-context"><a href="#/' + item.id + '">返回第 ' + escape(item.num) + ' 章</a>' +
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 19b4681..4ec9a6b 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -466,12 +466,63 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
+   assert.match(impl, /GQA 为拓展项/);
+   assert.match(impl, /evidenceSystemImplemented.*true|已为 `true`/);
+   assert.match(impl, /最小记录层|最小验收记录/);
++  assert.match(impl, /阶段 3 第三步|教材任务上下文/);
+   assert.match(impl, /组装后整模型因果性|组装后因果性/);
+   assert.match(impl, /next-token 对齐/);
+   assert.match(impl, /真实 A\/B/);
+   assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
+ });
+ 
++test('home keeps the current goal visible and folds detailed checks', () => {
++  const plan = require('../content/learning-plan.json');
++  const home = loadPages(plan).home(null);
++  const css = fs.readFileSync(path.resolve(__dirname, '..', 'css/course.css'), 'utf8');
++  const primaryAt = home.indexOf('打开必要教材');
++  const foldAt = home.indexOf('class="home-fold"');
++  const criteriaAt = home.indexOf('验收条件');
++  assert.ok(primaryAt >= 0 && foldAt > primaryAt);
++  assert.ok(criteriaAt > foldAt);
++  assert.match(home, /<details class="home-fold"><summary>必要教材<\/summary>/);
++  assert.match(home, /<details class="home-fold"><summary>短记录<\/summary>/);
++  assert.match(home, /验收与记录（必需 0 \/ \d+ 条当前通过）/);
++  assert.match(home, /保存本条记录/);
++  assert.match(css, /\.home-fold:not\(\[open\]\)\s*>\s*\.fold-body\s*\{\s*display:\s*none/);
++  assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
++});
++
++test('textbook chapters show the current task and the next related section', () => {
++  const plan = require('../content/learning-plan.json');
++  const pages = loadPages(plan);
++  const transformer = chapters.find(item => item.id === 'transformer');
++  const map = chapters.find(item => item.id === 'map');
++  const first = pages.lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
++  assert.match(first, /class="task-context"/);
++  assert.match(first, /手写因果多头注意力/);
++  assert.match(first, /返回当前练习/);
++  assert.match(first, /下一相关小节：7\.5 Q、K、V：三个投影/);
++  assert.match(first, /写完后对照：7\.12/);
++  assert.match(first, /全书下一课/);
++  assert.doesNotMatch(first, /lab\.attention|<code>/);
++  assert.doesNotMatch(first, /自动测试通过/);
++  const lastRequired = pages.lesson(transformer, null, '<p>body</p>', null, '7.14 Multi-Head Attention ★');
++  assert.match(lastRequired, /下一相关小节：7\.12/);
++  assert.match(lastRequired, /写完后对照：7\.12/);
++  const lastCheck = pages.lesson(transformer, null, '<p>body</p>', null, '7.13 公式 ↔ 代码逐行对应 ★');
++  assert.match(lastCheck, /返回当前练习/);
++  assert.doesNotMatch(lastCheck, /下一相关小节/);
++  assert.doesNotMatch(lastCheck, /写完后对照：/);
++  const unrelated = pages.lesson(map, null, '<p>body</p>', null);
++  assert.match(unrelated, /手写因果多头注意力/);
++  assert.match(unrelated, /返回当前练习/);
++  assert.doesNotMatch(unrelated, /下一相关小节/);
++  assert.doesNotMatch(unrelated, /写完后对照/);
++  const week2 = loadPages(plan, null, { selectedTaskId: 'lab.decoder.min-lm' })
++    .lesson(transformer, null, '<p>body</p>', null, '7.4 Self-Attention 是什么 ★');
++  assert.match(week2, /拼最小 decoder/);
++  assert.match(week2, /返回当前练习/);
++  assert.doesNotMatch(week2, /下一相关小节/);
++});
++
+ function softmaxRows(matrix) {
+   return matrix.map(row => {
+     const max = Math.max(...row);
+@@ -635,6 +686,26 @@ test('home week picker switches the current exercise and remembers it', async ()
+   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+ });
+ 
++test('opening required material from home keeps task context on the chapter', async () => {
++  const app = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /打开必要教材/.test(app.text()));
++  assert.match(app.html(), /class="home-fold"/);
++  const start = app.content.querySelector('a.btn.primary');
++  assert.ok(start);
++  assert.match(start.getAttribute('href'), /transformer\?section=/);
++  app.go(start.getAttribute('href'));
++  await harness.waitFor(() => /返回当前练习/.test(app.text()));
++  assert.match(app.text(), /手写因果多头注意力/);
++  assert.match(app.text(), /下一相关小节/);
++  assert.match(app.text(), /全书下一课|全书上一课/);
++  const back = app.content.querySelector('.task-context a.btn');
++  assert.equal(back.getAttribute('href'), '#/');
++  app.go('#/');
++  await harness.waitFor(() => /打开必要教材/.test(app.text()));
++  assert.match(app.html(), /class="home-fold"/);
++  assert.match(app.text(), /保存本条记录/);
++});
++
+ function memoryStorage(seed) {
+   const data = Object.assign(Object.create(null), seed || {});
+   return {
