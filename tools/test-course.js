@@ -471,6 +471,13 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /next-token 对齐/);
   assert.match(impl, /真实 A\/B/);
   assert.doesNotMatch(impl, /本轮实现阶段 3 功能/);
+  assert.match(impl, /阶段 3 已完成/);
+  assert.match(impl, /3b-1/);
+  assert.match(impl, /不开始阶段 4/);
+  assert.doesNotMatch(impl, /阶段 3 整体尚未完成/);
+  assert.doesNotMatch(impl, /不开始 3b/);
+  assert.match(os, /任务证据与复习状态/);
+  assert.match(os, /只展示已到期项/);
 });
 
 test('home keeps the current goal visible and folds detailed checks', () => {
@@ -1055,3 +1062,85 @@ test('saving a check keeps evidence-only edits and consecutive fail snapshots', 
   assert.doesNotMatch(afterEvidenceEdit.text(), /进入下一任务/);
   assert.doesNotMatch(afterEvidenceEdit.html(), /自动测试通过/);
 });
+
+test('review state is separate from task evidence and only lists due concepts', () => {
+  const plan = require('../content/learning-plan.json');
+  const day = learningModule.INTERVAL_DAYS;
+  assert.deepEqual(day, [1, 3, 7, 21]);
+  const t0 = 1700000000000;
+  const DAY = 24 * 60 * 60 * 1000;
+  const week1 = plan.tasks.find(item => item.weekBudget === 1);
+  const storage = memoryStorage({
+    'llm-course-current-task': week1.id,
+    [learningModule.KEY]: JSON.stringify({
+      version: 1,
+      criteria: {
+        [week1.id + '::rewrite']: {
+          current: { result: 'user_passed', source: 'user_reported', evidence: '对照通过', at: t0 },
+          history: [{ result: 'failed', source: 'user_reported', evidence: '第一次失败', at: t0 - 1 }]
+        }
+      },
+      concepts: { attention: { implemented: true, explained: true } }
+    })
+  });
+  const learning = learningModule.create({ storage });
+  learning.load();
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
+  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '对照通过');
+  assert.equal(learning.failedHistory(week1.id, 'rewrite').length, 1);
+  assert.equal(learning.conceptDim('attention', 'implemented'), true);
+  assert.equal(learning.dueReviews(t0).length, 0);
+  ['shapes', 'causal', 'numeric'].forEach(id => {
+    learning.recordCriterion(week1.id, id, 'user_passed', '依据 ' + id);
+  });
+  assert.equal(learning.isTaskComplete(week1), true);
+  assert.equal(learning.nextTask(plan, week1).weekBudget, 2);
+
+  assert.equal(learning.armReview('attention', t0), true);
+  assert.equal(learning.armReview('causal-mask', t0), true);
+  assert.equal(learning.dueReviews(t0).length, 0);
+  assert.equal(learning.dueReviews(t0 + DAY - 1).length, 0);
+  const due = learning.dueReviews(t0 + DAY);
+  assert.deepEqual(due.map(item => item.conceptId).sort(), ['attention', 'causal-mask']);
+  assert.equal(learning.dueReviews(t0 + DAY).some(item => item.conceptId === 'tensor-shape'), false);
+
+  const criteriaBefore = JSON.parse(storage.getItem(learningModule.KEY)).criteria;
+  const conceptsBefore = JSON.parse(storage.getItem(learningModule.KEY)).concepts;
+  assert.equal(learning.recordReview('attention', 'failed', 'explain', t0 + DAY), true);
+  assert.equal(learning.recordReview('attention', 'user_passed', 'explain', t0 + DAY), false);
+  assert.equal(learning.recordReview('attention', 'failed', 'quiz', t0 + DAY), false);
+  const afterFail = JSON.parse(storage.getItem(learningModule.KEY));
+  assert.deepEqual(afterFail.criteria, criteriaBefore);
+  assert.deepEqual(afterFail.concepts, conceptsBefore);
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
+  assert.equal(learning.currentEvidence(week1.id, 'rewrite'), '对照通过');
+  assert.equal(learning.failedHistory(week1.id, 'rewrite')[0].evidence, '第一次失败');
+  assert.equal(learning.conceptDim('attention', 'implemented'), true);
+  assert.equal(storage.getItem('llm-course-current-task'), week1.id);
+  assert.deepEqual(learning.weakConcepts(), ['attention']);
+  assert.equal(learning.isTaskComplete(week1), true);
+  assert.equal(learning.nextTask(plan, week1).weekBudget, 2);
+  const failedDue = learning.dueReviews(t0 + DAY);
+  assert.equal(failedDue.some(item => item.conceptId === 'attention'), false);
+  const retry = learning.dueReviews(t0 + 2 * DAY).find(item => item.conceptId === 'attention');
+  assert.equal(retry.intervalDays, 1);
+  assert.equal(retry.weak, true);
+
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + 2 * DAY), true);
+  assert.deepEqual(learning.weakConcepts(), []);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 1);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 2 * DAY + 3 * DAY);
+  assert.equal(learning.dueReviews(t0 + 2 * DAY + 3 * DAY - 1).some(item => item.conceptId === 'attention'), false);
+
+  assert.equal(learning.recordReview('attention', 'passed', 'rewrite', t0 + 5 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 2);
+  assert.equal(learning.recordReview('attention', 'passed', 'explain', t0 + 12 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 3);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 12 * DAY + 21 * DAY);
+  assert.equal(learning.recordReview('attention', 'passed', 'recall', t0 + 33 * DAY), true);
+  assert.equal(learning.reviewOf('attention').intervalIndex, 3);
+  assert.equal(learning.reviewOf('attention').dueAt, t0 + 33 * DAY + 21 * DAY);
+  assert.equal(learning.currentResult(week1.id, 'rewrite'), 'user_passed');
+  assert.equal(storage.getItem('llm-course-current-task'), week1.id);
+});
+

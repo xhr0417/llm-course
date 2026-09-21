@@ -8,9 +8,13 @@
   var RESULTS = { unchecked: "unchecked", failed: "failed", user_passed: "user_passed" };
   var SOURCE = "user_reported";
   var DIMS = { read: true, implemented: true, verified: true, explained: true };
+  var DAY_MS = 24 * 60 * 60 * 1000;
+  var INTERVAL_DAYS = [1, 3, 7, 21];
+  var FORMS = { explain: true, recall: true, rewrite: true };
+  var REVIEW = { passed: "passed", failed: "failed" };
 
   function emptyState() {
-    return { version: 1, criteria: {}, concepts: {}, notes: {}, stuck: {} };
+    return { version: 1, criteria: {}, concepts: {}, notes: {}, stuck: {}, reviews: {} };
   }
 
   function criterionKey(taskId, criterionId) {
@@ -90,7 +94,8 @@
           criteria: asObject(parsed && parsed.criteria),
           concepts: asObject(parsed && parsed.concepts),
           notes: asObject(parsed && parsed.notes),
-          stuck: asObject(parsed && parsed.stuck)
+          stuck: asObject(parsed && parsed.stuck),
+          reviews: asObject(parsed && parsed.reviews)
         };
       } catch (error) {
         persistent = false;
@@ -192,6 +197,122 @@
       persist();
     }
 
+    function intervalDays() {
+      var raw = options.intervalDays;
+      if (Array.isArray(raw) && raw.length) {
+        var days = raw.map(function (n) { return Number(n); }).filter(function (n) { return n > 0 && isFinite(n); });
+        if (days.length) return days;
+      }
+      return INTERVAL_DAYS.slice();
+    }
+
+    function dayMs() {
+      var value = Number(options.dayMs);
+      return value > 0 && isFinite(value) ? value : DAY_MS;
+    }
+
+    function nowMs(now) {
+      return typeof now === "number" && isFinite(now) ? now : Date.now();
+    }
+
+    function emptyReview(now, days) {
+      return {
+        dueAt: now + days[0] * dayMs(),
+        intervalIndex: 0,
+        weak: false,
+        current: null,
+        history: []
+      };
+    }
+
+    function reviewOf(conceptId) {
+      return state.reviews[conceptId] || null;
+    }
+
+    function clampIndex(index, days) {
+      var value = typeof index === "number" && isFinite(index) ? Math.floor(index) : 0;
+      if (value < 0) return 0;
+      if (value > days.length - 1) return days.length - 1;
+      return value;
+    }
+
+    function armReview(conceptId, now) {
+      var id = String(conceptId || "");
+      if (!id) return false;
+      if (state.reviews[id]) return true;
+      state.reviews[id] = emptyReview(nowMs(now), intervalDays());
+      persist();
+      return true;
+    }
+
+    function cloneReviewEntry(item) {
+      return {
+        result: item.result,
+        form: item.form,
+        at: item.at || Date.now()
+      };
+    }
+
+    function sameReview(a, b) {
+      return !!(a && b && a.result === b.result && a.form === b.form);
+    }
+
+    function recordReview(conceptId, result, form, now) {
+      var id = String(conceptId || "");
+      if (!id) return false;
+      if (result !== REVIEW.passed && result !== REVIEW.failed) return false;
+      if (!FORMS[form]) return false;
+      var ts = nowMs(now);
+      var days = intervalDays();
+      var record = state.reviews[id] || emptyReview(ts, days);
+      var history = Array.isArray(record.history) ? record.history.slice() : [];
+      var next = { result: result, form: form, at: ts };
+      if (record.current && record.current.result) {
+        var prev = cloneReviewEntry(record.current);
+        if (sameReview(prev, next)) return true;
+        history.push(prev);
+      }
+      var index = clampIndex(record.intervalIndex, days);
+      if (result === REVIEW.passed) index = Math.min(index + 1, days.length - 1);
+      else index = 0;
+      state.reviews[id] = {
+        dueAt: ts + days[index] * dayMs(),
+        intervalIndex: index,
+        weak: result === REVIEW.failed,
+        current: next,
+        history: history
+      };
+      persist();
+      return true;
+    }
+
+    function dueReviews(now) {
+      var ts = nowMs(now);
+      var days = intervalDays();
+      var items = [];
+      Object.keys(state.reviews).forEach(function (id) {
+        var row = state.reviews[id];
+        if (!row || typeof row.dueAt !== "number" || row.dueAt > ts) return;
+        items.push({
+          conceptId: id,
+          dueAt: row.dueAt,
+          intervalIndex: clampIndex(row.intervalIndex, days),
+          intervalDays: days[clampIndex(row.intervalIndex, days)],
+          weak: !!row.weak,
+          lastResult: row.current && row.current.result ? row.current.result : null,
+          lastForm: row.current && row.current.form ? row.current.form : null
+        });
+      });
+      items.sort(function (a, b) { return a.dueAt - b.dueAt; });
+      return items;
+    }
+
+    function weakConcepts() {
+      return Object.keys(state.reviews).filter(function (id) {
+        return !!(state.reviews[id] && state.reviews[id].weak);
+      });
+    }
+
     function nextTask(plan, task) {
       if (!plan || !task) return null;
       var weeks = (plan.tasks || []).filter(function (item) {
@@ -231,10 +352,22 @@
       stuck: stuck,
       setStuck: setStuck,
       nextTask: nextTask,
+      armReview: armReview,
+      recordReview: recordReview,
+      reviewOf: reviewOf,
+      dueReviews: dueReviews,
+      weakConcepts: weakConcepts,
       reset: reset,
       storageStatus: storageStatus
     };
   }
 
-  return { create: create, KEY: KEY, RESULTS: RESULTS };
+  return {
+    create: create,
+    KEY: KEY,
+    RESULTS: RESULTS,
+    INTERVAL_DAYS: INTERVAL_DAYS,
+    FORMS: FORMS,
+    REVIEW: REVIEW
+  };
 });
