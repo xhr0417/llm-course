@@ -1,0 +1,413 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index d85731d..dc99124 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -16,7 +16,7 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
+ - Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+ - Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links. On a task textbook heading,「下一相关小节」is the forward action;「返回当前练习」is a secondary button.
+ - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
+-- Lesson list: the current task comes from `content/learning-plan.json`. Review state is stored by concept, separate from task evidence; recording a review must not rewrite `user_reported` checks, concept dimensions, or the current exercise. When review items are due,「我的学习」lists their names after the current-task action and before detailed folds; items that are not due stay off that list. Each due item can record 解释 / 闭卷回忆 / 复写 and 通过 / 未通过 with「保存本次复习」. A save that is not due, or that lacks a form or result, must say it was not written. Weak concepts get a retry entry for the current or a smaller same-spine task that lists the concept in `conceptIds` or `criteria[].conceptId`. The retry control does not change the current exercise until it is clicked, and it must not open a later mainline task. Stretch criteria still do not block completion. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. The home page keeps the current goal, week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. In-chapter table of contents and search jumps update that bar to the heading now in view; a heading that is not on the current exercise does not keep a stale next-section action. The sticky bar is compact, and heading scroll offset uses the measured bar height so the target title is not covered. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
++- Lesson list: the current task comes from `content/learning-plan.json`. Review state is stored by concept, separate from task evidence; recording a review must not rewrite `user_reported` checks, concept dimensions, or the current exercise. When review items are due,「我的学习」lists their names after the current-task action and before detailed folds; items that are not due stay off that list. Each due item can record 解释 / 闭卷回忆 / 复写 and 通过 / 未通过 with「保存本次复习」. A save that is not due, or that lacks a form or result, must say it was not written. Weak concepts get a retry entry for the current or a smaller same-spine task that lists the concept in `conceptIds` or `criteria[].conceptId`. The retry control does not change the current exercise until it is clicked, and it must not open a later mainline task. Stretch criteria still do not block completion. On「我的学习」, the reader can manually pick another stage of the same spine, or another week of the current stage; this only changes which exercise is shown and does not mark earlier stages or weeks complete. The home page keeps the current goal, stage/week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. In-chapter table of contents and search jumps update that bar to the heading now in view; a heading that is not on the current exercise does not keep a stale next-section action. The sticky bar is compact, and heading scroll offset uses the measured bar height so the target title is not covered. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
+ - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+ - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+ - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index e15c9d7..e3593e1 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -97,6 +97,18 @@
+     {
+       "id": "kv-cache",
+       "name": "KV Cache 生成对照"
++    },
++    {
++      "id": "claim-label",
++      "name": "声明标签与标注准则"
++    },
++    {
++      "id": "evidence-span",
++      "name": "证据位置"
++    },
++    {
++      "id": "insufficient-evidence",
++      "name": "证据不足时拒绝"
+     }
+   ],
+   "tasks": [
+@@ -1025,6 +1037,124 @@
+           "text": "拓展：有/无 KV cache 的生成输出对照。速度数字不是本周硬门槛。"
+         }
+       ]
++    },
++    {
++      "id": "claim.judge.given-evidence",
++      "stageId": "claim-agent",
++      "weekBudget": 1,
++      "shortTitle": "给定证据判定",
++      "title": "给定声明和证据，只做判定",
++      "goal": "在固定的少量「声明 + 一段证据」上，先写出标注准则，再给出支持／不支持／证据不足，并标出证据位置。本周不做检索，也不写 Agent 循环。CHEF 只用来理解任务形态，不能把自写样本混进去冒充 CHEF 分数。",
++      "conceptIds": ["claim-label", "evidence-span", "insufficient-evidence", "eval-scorer"],
++      "workspace": {
++        "where": "在本机新建空文件，例如 ~/llm-lab/claim_judge.jsonl。不要写进本站 projects/ 下的六个旧作业目录。本页只给练习说明，不代写标注。",
++        "inputs": "自己准备 8–12 条「一条声明 + 一段固定证据」。证据来自你正在读的官方文档、README 或实验记录的摘录；不要用实时网页搜索。若阅读 CHEF 论文/说明，只用来对照任务形态，不要把 CHEF 样本与自写样本混成一份官方分数。",
++        "outputs": "一份标注准则（标签含义、何时判证据不足）；每条样本的标签、证据起止位置、一句理由、准则版本。至少有一条判为证据不足。"
++      },
++      "materials": [
++        {
++          "role": "required",
++          "chapterId": "llm-eval",
++          "section": "23.17 Failure Case Analysis：分数之外",
++          "label": "23.17 失败样本分类"
++        },
++        {
++          "role": "required",
++          "chapterId": "llm-eval",
++          "section": "23.11 Human Evaluation：什么时候必须用人",
++          "label": "23.11 人工评估要有规则"
++        },
++        {
++          "role": "required",
++          "chapterId": "llm-eval",
++          "section": "23.9 LLM-as-a-Judge：开放式回答怎么评",
++          "label": "23.9 不要把 LLM 裁判当金标准"
++        },
++        {
++          "role": "check-after",
++          "chapterId": "llm-eval",
++          "section": "23.13 Contamination：与数据管线闭环",
++          "label": "23.13 数据泄漏与混集（写完后再对照）"
++        },
++        {
++          "role": "reference",
++          "href": "https://aclanthology.org/2022.naacl-main.246/",
++          "external": true,
++          "label": "CHEF 论文（任务形态对照，不是本周分数）"
++        },
++        {
++          "role": "reference",
++          "href": "https://github.com/THU-BPM/CHEF",
++          "external": true,
++          "label": "CHEF 上游仓库（对照用，不是本周作业仓库）"
++        },
++        {
++          "role": "reference",
++          "href": "https://github.com/datawhalechina/hello-agents",
++          "external": true,
++          "label": "Hello-Agents（可开始读循环主题，本周不实现 Agent）"
++        }
++      ],
++      "steps": [
++        {
++          "title": "先读判定所需教材",
++          "body": "打开第 23 章 23.17、23.11、23.9。先搞清失败类型为什么要分开记、人工评估为什么要有书面规则，以及 LLM 裁判有哪些偏差。不要用另一个模型的意见当作本周的金标准。"
++        },
++        {
++          "title": "写下标注准则",
++          "body": "在空文件里先写标签含义：支持、不支持、证据不足。写清证据不足的条件，例如证据没提到关键限定、版本对不上、或只能间接推测。先留下一次准则草稿，再去标样本。"
++        },
++        {
++          "title": "在固定证据上判定",
++          "body": "准备 8–12 条声明，每条只配一段已经给定的证据。为每条写下标签、证据起止（句子或行号）和一句理由。本周不要检索，也不要让模型替你找证据。"
++        },
++        {
++          "title": "检查拒绝和位置",
++          "body": "至少一条判为证据不足。抽两条支持／不支持，能指出证据里对应的句子。换一条把关键限定删掉，确认准则会改成证据不足，而不是硬判对或错。"
++        },
++        {
++          "title": "卡住时可以分层求助",
++          "body": "自检通过后再看 CHEF 说明是建议顺序，不是禁令。卡住时：先请人解释标签边界或给反例；仍卡住再对照 CHEF 如何定义证据。看过后合上参考，用自己的声明集重写准则并换两条样本再标。独立实现指最终能脱离答案完成标注，不是学习期间从未接受帮助。"
++        },
++        {
++          "title": "用一个小变式检查能否迁移",
++          "body": "任选一项即可，不是额外门槛：把证据里的版本号改掉，看标签是否应变成证据不足；或者故意把结论写进声明、把出处写进证据，说清哪一条检查会失败。下一次打开练习时，可用几分钟口述准则里「证据不足」的条件。"
++        },
++        {
++          "title": "对照而不是抄分数",
++          "body": "CHEF 用来理解「声明—证据—判断」，不能把自写样本混进 CHEF 后冒充官方分数。Hello-Agents 可开始读循环与工具主题，但本周不要改去做 Agent 循环，也不要走进六个旧作业项目。"
++        }
++      ],
++      "criteria": [
++        {
++          "id": "rubric",
++          "label": "标注准则",
++          "required": true,
++          "conceptId": "claim-label",
++          "text": "写下支持／不支持／证据不足的含义，以及何时必须判证据不足。准则在标注前就有一版，不是标完再补。"
++        },
++        {
++          "id": "spans",
++          "label": "判定与证据位置",
++          "required": true,
++          "conceptId": "evidence-span",
++          "text": "对固定的声明+证据给出标签，并能指出证据中的对应位置。本周不检索。不是自动评分。"
++        },
++        {
++          "id": "abstain",
++          "label": "证据不足时拒绝",
++          "required": true,
++          "conceptId": "insufficient-evidence",
++          "text": "至少一条判为证据不足，并能说明缺了什么。不能用另一个 LLM 的意见代替这条判断。"
++        },
++        {
++          "id": "agent-reading",
++          "label": "Agent 主题选读",
++          "required": false,
++          "conceptId": "claim-label",
++          "text": "拓展：开始读 Hello-Agents 的循环或工具主题。未完成不阻挡本周核心任务，本周也不要求写出 Agent。"
++        }
++      ]
+     }
+   ]
+ }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 5c09a19..85ab110 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -1,6 +1,6 @@
+ # 分阶段实施方案
+ 
+-需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。阶段 2 已落地。阶段 3 已完成。阶段 3b 已完成。** `main` 推送会触发 GitHub Pages；**未运行** `tools/publish.sh` 时自有服务器不会更新。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 4。未明确要求时不要再次推送或发布。
++需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。阶段 2 已落地。阶段 3 已完成。阶段 3b 已完成。阶段 4 已开始第一步。** `main` 推送会触发 GitHub Pages；**未运行** `tools/publish.sh` 时自有服务器不会更新。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 5。未明确要求时不要再次推送或发布。
+ 
+ 学习机制分三层，**不要并进阶段 1**：
+ 
+@@ -160,7 +160,11 @@
+ 
+ **范围：** 计划数据增加第 3–6 月任务。教材用第 23 / 28 章等；Hello-Agents 作主题阅读；CHEF 作任务设计参考。最小循环本人实现后再指向 mini-swe-agent。Pydantic AI / Inspect AI 仅在任务需要时引入。不为框架做主项目卡。不为 Study Agent 等机制仓库做项目卡。
+ 
+-**验证：** 主线当前阶段可手动切到核验助手；92 项与四个机制参考仓库仍只在文档中出现。未核验的 Atlas 机制继续按本站设计，不引入其代码。
++**本轮（阶段 4-1 手动切阶段 + 第一条判定任务）：** 阶段 3b 已完成。本轮只做两件事：首页可以手动切到「技术声明核验助手 / 单 Agent」；该阶段给出第一条可执行练习「给定声明和证据，只做判定」。默认当前练习仍是实验室 Attention，不按日历打开核验助手。点阶段只更换练习说明，不把实验室标成完成。本周不做检索、不写 Agent 循环、不用 LLM 裁判当金标准、不把自写样本混进 CHEF 冒充官方分数。92 项与四个机制参考仓库仍只在文档中出现。沿用已验收记录与复习规则。不开始阶段 5。**阶段 4 整段尚未完成。** 第 0／24 章遗留修改仍单独处理。
++
++**验证：** 主线当前阶段可手动切到核验助手；默认首页仍是 Attention；核验助手第一条练习指向真实教材小节；92 项与四个机制参考仓库仍只在文档中出现。未核验的 Atlas 机制继续按本站设计，不引入其代码。
++
++**本阶段仍不做：** 一次写完第 3–6 月全部周任务；检索作业；Agent 循环；MCP；92 项选修库 UI；拷贝 Hello-Agents / mini-swe-agent / CHEF 代码进主线；阶段 5。
+ 
+ ## 阶段 5 — 专项实验与物理删除
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index c3ccd57..ac11d4a 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -231,7 +231,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入并通过，匹配 `conceptIds` 和 `criteria[].conceptId`。阶段 3b 已完成。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入并通过，匹配 `conceptIds` 和 `criteria[].conceptId`。阶段 3b 已完成。阶段 4 第一步已写入：可手动切到核验助手，并给出第一条「给定证据判定」练习。阶段 4 整段尚未完成。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/app.js b/js/app.js
+index 0111fd9..1b224a7 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -330,11 +330,32 @@
+     updateStorageNotice();
+     var retryPlan = byId("retryPlan");
+     if (retryPlan) retryPlan.addEventListener("click", loadLearningPlan);
++    root.querySelectorAll("[data-stage]").forEach(function (button) {
++      button.addEventListener("click", function () {
++        if (!learningPlan) return;
++        var stageId = button.getAttribute("data-stage");
++        var task = learningPlan.tasks.filter(function (item) {
++          return item.stageId === stageId;
++        }).slice().sort(function (a, b) {
++          return (a.weekBudget || 0) - (b.weekBudget || 0);
++        })[0];
++        if (!task) return;
++        syncDraftsFromDom();
++        selectedTaskId = task.id;
++        remember("llm-course-current-task", task.id);
++        pages = CoursePages(pageOptions(learningPlan, planError));
++        route();
++      });
++    });
+     root.querySelectorAll("[data-week]").forEach(function (button) {
+       button.addEventListener("click", function () {
+         if (!learningPlan) return;
+         var week = Number(button.getAttribute("data-week"));
+-        var task = learningPlan.tasks.find(function (item) { return item.weekBudget === week; });
++        var current = currentPlanTask();
++        var stageId = current && current.stageId;
++        var task = learningPlan.tasks.find(function (item) {
++          return item.weekBudget === week && (!stageId || item.stageId === stageId);
++        });
+         if (!task) return;
+         syncDraftsFromDom();
+         selectedTaskId = task.id;
+diff --git a/js/pages.js b/js/pages.js
+index 5c6db17..9796870 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -54,6 +54,26 @@
+       var match = selected && plan.tasks.find(function (item) { return item.id === selected; });
+       return match || plan.tasks.find(function (item) { return item.id === plan.currentTaskId; });
+     }
++    function resolveStage(plan, task) {
++      if (task) {
++        var fromTask = plan.stages.find(function (item) { return item.id === task.stageId; });
++        if (fromTask) return fromTask;
++      }
++      return plan.stages.find(function (item) { return item.id === plan.currentStageId; });
++    }
++    function stageButtons(plan, stage) {
++      var stages = (plan.stages || []).filter(function (item) {
++        return (plan.tasks || []).some(function (task) { return task.stageId === item.id; });
++      }).slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
++      if (stages.length < 2) return "";
++      return '<div class="week-picker" data-stage-picker role="group" aria-label="选择当前阶段">' +
++        stages.map(function (item) {
++          var on = item.id === stage.id;
++          return '<button type="button" class="week-pick" data-stage="' + escape(item.id) +
++            '" aria-pressed="' + on + '">' + escape(item.title) + "</button>";
++        }).join("") +
++        '</div><p class="page-note">点某一阶段只更换练习说明。不会按日历打开新阶段，也不会把前面的阶段标成完成。</p>';
++    }
+     function weekButtons(plan, stage, task) {
+       var weeks = plan.tasks.filter(function (item) { return item.stageId === stage.id; })
+         .slice()
+@@ -144,8 +164,8 @@
+           '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
+           '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
+       }
+-      var stage = plan && plan.stages.find(function (item) { return item.id === plan.currentStageId; });
+       var task = plan && resolveTask(plan);
++      var stage = plan && resolveStage(plan, task);
+       var conceptsById = {};
+       (plan && plan.concepts || []).forEach(function (item) { conceptsById[item.id] = item; });
+       if (!stage || !task) {
+@@ -342,6 +362,7 @@
+         "我的学习") +
+         '<section class="task-panel"><span class="page-label">当前练习</span><h2>' + escape(task.title) + '</h2>' +
+         '<p>' + escape(task.goal) + '</p>' +
++        stageButtons(plan, stage) +
+         weekButtons(plan, stage, task) +
+         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
+         '</section>' +
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 88bba33..2302fe0 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -287,10 +287,26 @@ test('learning plan current task is executable Attention and points at real head
+     assert.ok(chapter, item.chapterId);
+     assert.ok(headingsFor(chapter.file).includes(item.section), `${item.chapterId} 缺少小节 ${item.section}`);
+   });
+-  assert.equal(plan.tasks.length, 8);
+-  assert.equal(new Set(plan.tasks.map(item => item.id)).size, 8);
+-  const weeks = plan.tasks.map(item => item.weekBudget).sort((a, b) => a - b);
+-  assert.deepEqual(weeks, [1, 2, 3, 4, 5, 6, 7, 8]);
++  assert.equal(plan.tasks.filter(item => item.stageId === 'lab').length, 8);
++  assert.equal(new Set(plan.tasks.map(item => item.id)).size, plan.tasks.length);
++  const labWeeks = plan.tasks.filter(item => item.stageId === 'lab').map(item => item.weekBudget).sort((a, b) => a - b);
++  assert.deepEqual(labWeeks, [1, 2, 3, 4, 5, 6, 7, 8]);
++  const claimTask = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
++  assert.ok(claimTask);
++  assert.equal(claimTask.stageId, 'claim-agent');
++  assert.equal(claimTask.weekBudget, 1);
++  assert.match(claimTask.title, /给定声明和证据，只做判定/);
++  assert.match(claimTask.goal, /不做检索/);
++  assert.match(claimTask.goal, /Agent 循环/);
++  assert.match(claimTask.goal, /CHEF/);
++  ['claim-label', 'evidence-span', 'insufficient-evidence'].forEach(id => {
++    assert.ok(claimTask.conceptIds.includes(id), id);
++  });
++  const claimRequired = claimTask.criteria.filter(item => item.required !== false);
++  assert.equal(claimRequired.length, 3);
++  const claimStretch = claimTask.criteria.find(item => item.id === 'agent-reading');
++  assert.equal(claimStretch.required, false);
++  assert.match(claimStretch.text, /不阻挡/);
+   const conceptIds = new Set(plan.concepts.map(item => item.id));
+   plan.tasks.forEach(item => {
+     assert.ok(item.workspace && item.workspace.where && item.workspace.inputs && item.workspace.outputs, item.id);
+@@ -314,7 +330,7 @@ test('learning plan current task is executable Attention and points at real head
+       assert.ok(headingsFor(chapter.file).includes(material.section), `${item.id} ${material.chapterId} 缺少小节 ${material.section}`);
+     });
+   });
+-  const week3 = plan.tasks.find(item => item.weekBudget === 3);
++  const week3 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 3);
+   const gqa = week3.criteria.find(item => item.id === 'gqa-heads');
+   assert.equal(gqa.required, false);
+   assert.match(gqa.text, /不能阻挡|不阻挡/);
+@@ -394,6 +410,9 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
+   assert.match(home, /第 8 周/);
+   assert.match(home, /data-week="2"/);
++  assert.match(home, /data-stage="lab"/);
++  assert.match(home, /data-stage="claim-agent"/);
++  assert.match(home, /选择当前阶段/);
+   assert.doesNotMatch(home, /自动测试通过/);
+   assert.match(home, /未检查/);
+   assert.match(home, /用户自报通过/);
+@@ -407,7 +426,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.match(home, /小变式/);
+   assert.doesNotMatch(home, /拓展（不挡完成）/);
+   assert.doesNotMatch(home, /project-start/);
+-  assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
++  assert.doesNotMatch(home, /projects\/(?:log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark)/);
++  assert.doesNotMatch(home, /给定声明和证据，只做判定/);
+   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+   assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
+   const retired = pages.projects();
+@@ -445,6 +465,26 @@ test('home can show another week without treating that as earlier completion', (
+   assert.doesNotMatch(week8, /自动测试通过/);
+ });
+ 
++test('home can switch to the claim-agent stage without advancing the lab', () => {
++  const plan = require('../content/learning-plan.json');
++  const home = loadPages(plan, null, { selectedTaskId: 'claim.judge.given-evidence' }).home(null);
++  assert.match(home, /技术声明核验助手/);
++  assert.match(home, /给定声明和证据，只做判定/);
++  assert.match(home, /23\.17/);
++  assert.match(home, /#\/llm-eval\?section=/);
++  assert.match(home, /data-stage="claim-agent"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-stage="claim-agent"/);
++  assert.match(home, /拓展（不挡完成）/);
++  assert.match(home, /不写 Agent|不实现 Agent|不要改去做 Agent/);
++  assert.doesNotMatch(home, /手写因果多头注意力/);
++  assert.doesNotMatch(home, /进入下一任务/);
++  assert.doesNotMatch(home, /mini-swe-agent|Pydantic AI|Inspect AI/);
++  assert.doesNotMatch(home, /taskId|criterionId|claim\.judge|<code>/);
++  assert.doesNotMatch(home, /自动测试通过/);
++  const lab = loadPages(plan).home(null);
++  assert.match(lab, /手写因果多头注意力/);
++  assert.doesNotMatch(lab, /给定声明和证据，只做判定/);
++});
++
+ test('phase 3 design docs keep completion rules after the record layer', () => {
+   const os = fs.readFileSync(path.resolve(__dirname, '..', 'docs/PERSONAL_LEARNING_OS.md'), 'utf8');
+   const year = fs.readFileSync(path.resolve(__dirname, '..', 'docs/LEARNING_PLAN.md'), 'utf8');
+@@ -490,6 +530,10 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
+   assert.match(impl, /阶段 3b 已完成/);
+   assert.doesNotMatch(impl, /3b-4 暂不收尾/);
+   assert.doesNotMatch(impl, /3b 整段尚未收尾/);
++  assert.match(impl, /4-1/);
++  assert.match(impl, /阶段 4 整段尚未完成/);
++  assert.match(impl, /不开始阶段 5/);
++  assert.doesNotMatch(impl, /不要自动进入阶段 4/);
+   assert.doesNotMatch(impl, /不开始 3b-4/);
+ });
+ 
+@@ -778,6 +822,24 @@ test('home week picker switches the current exercise and remembers it', async ()
+   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+ });
+ 
++test('home stage picker opens the claim-agent exercise and can return to lab', async () => {
++  const app = harness.bootApp({ hash: '#/' });
++  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
++  const toClaim = app.content.querySelector('[data-stage="claim-agent"]');
++  assert.ok(toClaim);
++  toClaim.click();
++  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
++  assert.match(app.text(), /技术声明核验助手/);
++  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.judge.given-evidence');
++  assert.equal(app.content.querySelector('[data-stage="claim-agent"]').getAttribute('aria-pressed'), 'true');
++  const toLab = app.content.querySelector('[data-stage="lab"]');
++  toLab.click();
++  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.attention.causal-mha');
++  assert.doesNotMatch(app.text(), /给定声明和证据，只做判定/);
++});
++
+ test('home due queue stays off the current exercise and can save a review', async () => {
+   const later = Date.now() + 20 * 24 * 60 * 60 * 1000;
+   const week1 = 'lab.attention.causal-mha';
