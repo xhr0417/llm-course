@@ -289,6 +289,43 @@
     }
     paintHome();
   }
+  function selectedReviewValue(attr, id) {
+    var nodes = root.querySelectorAll("input[" + attr + '="' + id + '"]');
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (nodes[i].checked) return nodes[i].value;
+    }
+    return "";
+  }
+  function saveReview(conceptId) {
+    var id = String(conceptId || "");
+    var form = selectedReviewValue("data-review-form", id);
+    var result = selectedReviewValue("data-review-result", id);
+    var notice = root.querySelector('[data-review-notice="' + id + '"]');
+    function showNotice(text) {
+      if (!notice) return;
+      notice.hidden = false;
+      notice.setAttribute("role", "alert");
+      notice.textContent = text;
+    }
+    if (!form || !result) {
+      showNotice("先选择复习形式和这次结果，再保存。");
+      return;
+    }
+    if (learning.canRecordReview && !learning.canRecordReview(id)) {
+      showNotice("还没到期，这次没有写入。");
+      return;
+    }
+    var before = learning.reviewOf ? learning.reviewOf(id) : null;
+    var ok = learning.recordReview ? learning.recordReview(id, result, form) : false;
+    var after = learning.reviewOf ? learning.reviewOf(id) : null;
+    var recorded = !!(ok && before && after && before.dueAt !== after.dueAt);
+    if (!recorded) {
+      showNotice(ok ? "还没到期，这次没有写入。" : "没有写入这次复习。");
+      return;
+    }
+    paintHome();
+  }
   function bindHome() {
     updateStorageNotice();
     var retryPlan = byId("retryPlan");
@@ -325,6 +362,11 @@
     root.querySelectorAll("[data-save-check]").forEach(function (button) {
       button.addEventListener("click", function () {
         saveCriterion(button.getAttribute("data-save-check"));
+      });
+    });
+    root.querySelectorAll("[data-save-review]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        saveReview(button.getAttribute("data-save-review"));
       });
     });
     root.querySelectorAll("input[data-concept]").forEach(function (input) {

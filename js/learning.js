@@ -303,6 +303,12 @@
       return items;
     }
 
+    function canRecordReview(conceptId, now) {
+      var record = reviewOf(String(conceptId || ""));
+      if (!record || typeof record.dueAt !== "number") return false;
+      return nowMs(now) >= record.dueAt;
+    }
+
     function weakConcepts() {
       return Object.keys(state.reviews).filter(function (id) {
         return !!(state.reviews[id] && state.reviews[id].weak);
@@ -352,6 +358,7 @@
       recordReview: recordReview,
       reviewOf: reviewOf,
       dueReviews: dueReviews,
+      canRecordReview: canRecordReview,
       weakConcepts: weakConcepts,
       reset: reset,
       storageStatus: storageStatus

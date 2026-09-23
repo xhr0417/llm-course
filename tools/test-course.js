@@ -481,7 +481,8 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(os, /只展示已到期项/);
   assert.match(impl, /3b-2/);
   assert.match(impl, /已封板/);
-  assert.match(impl, /不开始 3b-3/);
+  assert.match(impl, /3b-3/);
+  assert.match(impl, /不开始 3b-4/);
 });
 
 test('home keeps the current goal visible and folds detailed checks', () => {
@@ -542,10 +543,13 @@ test('home lists due review concepts without replacing the current exercise', ()
   assert.match(queue, /缩放点积注意力/);
   assert.match(queue, /上次未通过/);
   assert.match(queue, /不会更换当前练习/);
-  assert.match(queue, /还不记录通过或失败/);
+  assert.match(queue, /保存本次复习/);
+  assert.match(queue, /闭卷回忆/);
+  assert.match(queue, /data-save-review=/);
+  assert.match(queue, /不是自动评分/);
   assert.doesNotMatch(queue, /因果掩码/);
-  assert.doesNotMatch(queue, /保存本条记录|data-save-review|重练|进入下一任务/);
-  assert.doesNotMatch(queue, /<input /);
+  assert.doesNotMatch(queue, /保存本条记录|重练|进入下一任务/);
+  assert.doesNotMatch(home, /还不记录通过或失败/);
 });
 
 test('textbook chapters show the current task and the next related section', () => {
@@ -749,13 +753,22 @@ test('home week picker switches the current exercise and remembers it', async ()
   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
 });
 
-test('home due queue stays off the current exercise and has no review form', async () => {
+test('home due queue stays off the current exercise and can save a review', async () => {
   const later = Date.now() + 20 * 24 * 60 * 60 * 1000;
+  const week1 = 'lab.attention.causal-mha';
   const app = harness.bootApp({
     hash: '#/',
     storage: {
+      'llm-course-current-task': week1,
       [learningModule.KEY]: JSON.stringify({
         version: 1,
+        criteria: {
+          [week1 + '::rewrite']: {
+            current: { result: 'user_passed', source: 'user_reported', evidence: '对照通过', at: 1 },
+            history: [{ result: 'failed', source: 'user_reported', evidence: '第一次失败', at: 0 }]
+          }
+        },
+        concepts: { attention: { implemented: true, explained: true } },
         reviews: {
           attention: { dueAt: 1, intervalIndex: 0, weak: false, current: null, history: [] },
           'causal-mask': { dueAt: later, intervalIndex: 0, weak: false, current: null, history: [] }
@@ -769,14 +782,32 @@ test('home due queue stays off the current exercise and has no review form', asy
   assert.ok(queue);
   assert.match(queue.textContent, /缩放点积注意力/);
   assert.doesNotMatch(queue.textContent, /因果掩码/);
-  assert.equal(queue.querySelector('input'), null);
-  assert.equal(queue.querySelector('button'), null);
-  assert.equal(queue.querySelector('[data-save-review]'), null);
+  assert.ok(queue.querySelector('[data-save-review="attention"]'));
+  assert.equal(queue.querySelector('[data-retry]'), null);
+  assert.doesNotMatch(queue.textContent, /重练/);
+  queue.querySelector('[data-save-review="attention"]').click();
+  await harness.waitFor(() => /先选择复习形式/.test(app.text()));
+  const form = app.content.querySelector('input[data-review-form="attention"][value="recall"]');
+  const result = app.content.querySelector('input[data-review-result="attention"][value="failed"]');
+  form.click();
+  result.click();
+  app.content.querySelector('[data-save-review="attention"]').click();
+  await harness.waitFor(() => !app.content.querySelector('.review-queue'));
+  assert.match(app.text(), /手写因果多头注意力/);
+  assert.doesNotMatch(app.text(), /到期复习/);
+  const saved = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.equal(saved.criteria[week1 + '::rewrite'].current.result, 'user_passed');
+  assert.equal(saved.criteria[week1 + '::rewrite'].current.evidence, '对照通过');
+  assert.equal(saved.criteria[week1 + '::rewrite'].history[0].evidence, '第一次失败');
+  assert.equal(saved.concepts.attention.implemented, true);
+  assert.equal(saved.reviews.attention.current.result, 'failed');
+  assert.equal(saved.reviews.attention.current.form, 'recall');
+  assert.equal(saved.reviews.attention.weak, true);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), week1);
   const week2 = app.content.querySelector('[data-week="2"]');
   week2.click();
   await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
-  assert.match(app.text(), /到期复习/);
-  assert.match(app.content.querySelector('.review-queue').textContent, /缩放点积注意力/);
+  assert.doesNotMatch(app.text(), /到期复习/);
   assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.decoder.min-lm');
 });
 
@@ -1195,6 +1226,8 @@ test('review state is separate from task evidence and only lists due concepts', 
   assert.equal(learning.nextTask(plan, week1).weekBudget, 2);
 
   assert.equal(learning.armReview('attention', t0), true);
+  assert.equal(learning.canRecordReview('attention', t0), false);
+  assert.equal(learning.canRecordReview('attention', t0 + DAY), true);
   assert.equal(learning.armReview('causal-mask', t0), true);
   assert.equal(learning.dueReviews(t0).length, 0);
   assert.equal(learning.dueReviews(t0 + DAY - 1).length, 0);

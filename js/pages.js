@@ -230,14 +230,40 @@
           '<span class="page-label">到期复习</span>' +
           '<p class="page-note">只列出已经到期的知识点，不会更换当前练习。</p>' +
           '<ul class="task-list">' + items.map(function (item) {
-            var concept = conceptsById[item.conceptId];
+            var id = String(item.conceptId || "");
+            var concept = conceptsById[id];
             var name = concept && concept.name ? concept.name : "未命名概念";
-            return "<li>" + escape(name) +
-              (item.weak ? '<span class="page-note">上次未通过</span>' : "") +
+            var formName = "review-form-" + id;
+            var resultName = "review-result-" + id;
+            var forms = [
+              ["explain", "解释"],
+              ["recall", "闭卷回忆"],
+              ["rewrite", "复写核心函数"]
+            ].map(function (entry) {
+              return '<label class="check-choice"><input type="radio" name="' + escape(formName) +
+                '" data-review-form="' + escape(id) + '" value="' + entry[0] + '"> ' +
+                entry[1] + "</label>";
+            }).join("");
+            var results = [
+              ["passed", "通过"],
+              ["failed", "未通过"]
+            ].map(function (entry) {
+              return '<label class="check-choice"><input type="radio" name="' + escape(resultName) +
+                '" data-review-result="' + escape(id) + '" value="' + entry[0] + '"> ' +
+                entry[1] + "</label>";
+            }).join("");
+            return '<li><p class="review-name">' + escape(name) + "</p>" +
+              (item.weak ? '<p class="page-note">上次未通过</p>' : "") +
+              '<fieldset class="review-record"><legend>复习形式</legend>' +
+              '<div class="check-choices">' + forms + "</div></fieldset>" +
+              '<fieldset class="review-record"><legend>这次结果</legend>' +
+              '<div class="check-choices">' + results + "</div></fieldset>" +
+              '<p><button type="button" class="btn" data-save-review="' + escape(id) +
+              '">保存本次复习</button></p>' +
+              '<p class="page-note" data-review-notice="' + escape(id) + '" hidden></p>' +
+              '<p class="page-note">这是自己填写的复习结果，不是自动评分。不会改原来的实现记录，也不会更换当前练习。</p>' +
               "</li>";
-          }).join("") + "</ul>" +
-          '<p class="page-note">可用解释、闭卷回忆或复写核心函数来复习。本页还不记录通过或失败。</p>' +
-          "</section>";
+          }).join("") + "</ul></section>";
       }
       var notes = fold("短记录",
         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
