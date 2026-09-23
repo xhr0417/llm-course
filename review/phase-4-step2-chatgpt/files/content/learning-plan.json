@@ -1,0 +1,1416 @@
+{
+  "version": 1,
+  "dataBoundary": {
+    "conceptRecordsReusable": true,
+    "criterionEvidenceKey": ["taskId", "criterionId"],
+    "criterionMayReferenceConceptId": true,
+    "conceptEvidenceDoesNotCompleteTasks": true,
+    "taskCompletionUsesRequiredCriteriaOnly": true,
+    "conceptRecordsAreNotAdvancementGates": true,
+    "evidenceSourceIsNotOutcome": true,
+    "evidenceSystemImplemented": true
+  },
+  "stages": [
+    {
+      "id": "lab",
+      "title": "小模型学习实验室",
+      "order": 1
+    },
+    {
+      "id": "claim-agent",
+      "title": "技术声明核验助手 / 单 Agent",
+      "order": 2
+    },
+    {
+      "id": "specialization",
+      "title": "算法或 Infra 专项实验",
+      "order": 3
+    }
+  ],
+  "currentStageId": "lab",
+  "currentTaskId": "lab.attention.causal-mha",
+  "concepts": [
+    {
+      "id": "attention",
+      "name": "缩放点积注意力"
+    },
+    {
+      "id": "causal-mask",
+      "name": "因果掩码"
+    },
+    {
+      "id": "tensor-shape",
+      "name": "Q/K/V 与多头拆分的 shape"
+    },
+    {
+      "id": "python-index",
+      "name": "函数、索引、调试"
+    },
+    {
+      "id": "residual-ffn",
+      "name": "残差与前馈层"
+    },
+    {
+      "id": "lm-forward",
+      "name": "最小语言模型前向"
+    },
+    {
+      "id": "autograd-step",
+      "name": "loss、反向与参数更新"
+    },
+    {
+      "id": "modern-block",
+      "name": "RMSNorm / RoPE / SwiGLU"
+    },
+    {
+      "id": "gqa",
+      "name": "分组查询注意力"
+    },
+    {
+      "id": "label-shift",
+      "name": "next-token 与 label shift"
+    },
+    {
+      "id": "overfit-loop",
+      "name": "训练/验证循环与小样本过拟合"
+    },
+    {
+      "id": "tokenizer-bpe",
+      "name": "Tokenizer 与 BPE"
+    },
+    {
+      "id": "checkpoint",
+      "name": "学习率、日志与 checkpoint"
+    },
+    {
+      "id": "sft-mask",
+      "name": "Chat template 与 response-only loss"
+    },
+    {
+      "id": "eval-scorer",
+      "name": "简化评测与错误分类"
+    },
+    {
+      "id": "one-variable",
+      "name": "单变量实验"
+    },
+    {
+      "id": "kv-cache",
+      "name": "KV Cache 生成对照"
+    },
+    {
+      "id": "claim-label",
+      "name": "声明标签与标注准则"
+    },
+    {
+      "id": "evidence-span",
+      "name": "证据位置"
+    },
+    {
+      "id": "insufficient-evidence",
+      "name": "证据不足时拒绝"
+    },
+    {
+      "id": "bm25-vs-dense",
+      "name": "BM25 与向量检索对照"
+    },
+    {
+      "id": "retrieval-metrics",
+      "name": "检索指标与人工核对"
+    },
+    {
+      "id": "retrieve-read-judge",
+      "name": "检索—阅读—判定工作流"
+    },
+    {
+      "id": "citation-locate",
+      "name": "引用可定位"
+    },
+    {
+      "id": "stale-conflict",
+      "name": "过期与冲突证据"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "lab.attention.causal-mha",
+      "stageId": "lab",
+      "weekBudget": 1,
+      "shortTitle": "Attention",
+      "title": "手写因果多头注意力",
+      "goal": "在空文件里不看参考实现写出因果多头注意力；能讲清每一步 shape；改变未来 token 不改变之前位置的输出。",
+      "conceptIds": ["attention", "causal-mask", "tensor-shape", "python-index"],
+      "workspace": {
+        "where": "在本机任意目录新建空文件，例如 ~/llm-lab/attn.py。不要写进本站 projects/ 下的六个旧作业目录。本页只给练习说明，不提供核心算法答案。",
+        "inputs": "先做单头：输入已投影的 Q、K、V，形状 [B, T, D]（也可以从 x 自己做三个线性投影得到）。再做多头：同一组输入，按头数 H 拆成 [B, H, T, Dh]，其中 Dh = D / H。位置 t 只能使用 0…t 的键和值。",
+        "outputs": "与 Q 相同形状的上下文向量 [B, T, D]。注意力权重矩阵可选，只用于自查，不是必须交付物。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.4 Self-Attention 是什么 ★",
+          "label": "7.4 Self-Attention 是什么"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.5 Q、K、V：三个投影 ★",
+          "label": "7.5 Q、K、V：三个投影"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.9 为什么除 √d_k ★",
+          "label": "7.9 为什么除 √d_k"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.10 Softmax：对哪个维度做 ★",
+          "label": "7.10 Softmax：对哪个维度做"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.17 Causal Mask ★",
+          "label": "7.17 Causal Mask"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.14 Multi-Head Attention ★",
+          "label": "7.14 Multi-Head Attention"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "transformer",
+          "section": "7.12 完整手算：3 token × 2 维的 Attention ★",
+          "label": "7.12 完整手算（无掩码理解材料，不是因果数值标准）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "transformer",
+          "section": "7.13 公式 ↔ 代码逐行对应 ★",
+          "label": "7.13 公式与代码对应（写完后再看）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.2 Tensor：shape / dtype / device",
+          "label": "11.2 Tensor：shape / dtype / device"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.3 形状变换四件套（LLM 代码的重灾区）",
+          "label": "11.3 形状变换四件套"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.4 广播：不加循环做批量运算",
+          "label": "11.4 广播"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.6 nn.Module 与 Parameter：组织模型",
+          "label": "11.6 nn.Module 与 Parameter"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.13 调试清单：shape 断言与最小复现",
+          "label": "11.13 调试清单"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/Harris-Xie/SpongebobLite",
+          "external": true,
+          "label": "SpongebobLite（对照用，不是本周作业仓库）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读单头所需教材",
+          "body": "打开第 7 章 7.4、7.5、7.9、7.10、7.17。先搞清 Q/K/V、缩放、softmax 作用的维度，以及因果掩码要挡的是什么。章内演示可帮助建立直觉，但演示不能代替自己写函数。"
+        },
+        {
+          "title": "在空文件写单头因果注意力",
+          "body": "先自己写下输入输出和每一步 shape，并留下一次实现尝试。只写单头：给定 Q、K、V，得到与 Q 同形状的输出。需要查 PyTorch API 可以。不要一上来就打开 7.13 的完整实现，也不要让 AI 直接给出核心函数。"
+        },
+        {
+          "title": "检查单头结果",
+          "body": "关闭 dropout。打印每一步形状。用一组固定小张量。把未来某个位置的输入改掉，确认更早位置的输出不变。再与一份掩码、缩放、dtype 都一致的可信参考比较。先确认没有 NaN 或 Inf，再对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，用来理解计算过程，不能当作因果注意力的数值标准。不要先抄 7.13。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "自检通过后再看参考是建议顺序，不是禁令。卡住时：先请人解释报错、定位可疑步骤或给反例；仍卡住再看局部示例或 7.13。看过后合上参考，重新实现关键部分，并换一组输入再验证。独立实现指最终能脱离答案完成，不是学习期间从未接受帮助。可选记下「查 API／提示后完成／看过参考后重写」，这不是扣分。"
+        },
+        {
+          "title": "再读多头并扩展",
+          "body": "打开 7.14，把单头扩成多头：拆头、各头计算、再拼回 [B, T, D]。拆分后再次核对 Dh = D / H。关闭 dropout，用另一组固定输入单独检查多头。对照时拆头顺序和输出投影约定必须与参考一致（先按哪一维拆头、拼头之后有没有 W_O）。因果性仍成立。单头通过不能代替多头检查。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：换 batch 或序列长度，先预测 shape 再运行；换一个能整除的头数，检查拆头与拼头；或者故意改错 softmax 维度或 mask 方向，说清哪一条检查会失败。下一次打开练习时，可用几分钟口述或复写其中一个关键步骤。"
+        },
+        {
+          "title": "对照而不是抄袭",
+          "body": "关键部分应能在合上参考后重写。若卡在 class、reshape 或 broadcasting，并行打开第 11 章对应小节，补完当前函数，不要改去做六个旧作业项目。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "rewrite",
+          "label": "自己重写",
+          "required": true,
+          "conceptId": "attention",
+          "text": "在空文件中重写注意力核心计算（先单头，再多头）。最终能脱离答案完成；学习期间允许查 API，或看过局部参考后重写关键部分。"
+        },
+        {
+          "id": "shapes",
+          "label": "形状",
+          "required": true,
+          "conceptId": "tensor-shape",
+          "text": "能口述或写出每一步的形状：投影、拆头、打分矩阵、加权输出，以及拼回 [B, T, D]。不必另造「实现张量形状」作业。"
+        },
+        {
+          "id": "causal",
+          "label": "因果性",
+          "required": true,
+          "conceptId": "causal-mask",
+          "text": "改变未来 token 后，更早位置的输出不变。"
+        },
+        {
+          "id": "numeric",
+          "label": "数值正确性",
+          "required": true,
+          "conceptId": "attention",
+          "text": "关闭 dropout，用固定输入分别检查单头和多头。对照必须与你的实现使用同一套因果掩码、缩放和 dtype。多头还要事先约定拆头顺序，以及拼头之后有没有输出投影。先确认没有 NaN 或 Inf，再对每个有限数值检查 abs(实际值 - 参考值) <= atol + rtol * abs(参考值)；这是一条组合容差，不是 atol 和 rtol 分开各过一次。7.12 是无因果掩码的手算，只保留三位小数，不能当作因果注意力的数值标准。本站不运行 Python，也不提供核心算法答案。"
+        }
+      ]
+    },
+    {
+      "id": "lab.decoder.min-lm",
+      "stageId": "lab",
+      "weekBudget": 2,
+      "shortTitle": "最小语言模型",
+      "title": "拼最小 decoder，跑通 [B, T, V] 前向",
+      "goal": "用简单固定结构写出最小 decoder-only 前向：embedding、一层残差块、FFN、输出头。输入 token 得到 logits [B, T, V]。接线完成后检查整模型因果性。本周不把 RMSNorm / RoPE 当硬门槛，也不必重写上周已通过的 Attention。",
+      "conceptIds": ["lm-forward", "residual-ffn", "tensor-shape", "attention", "causal-mask"],
+      "workspace": {
+        "where": "在本机新建空文件，例如 ~/llm-lab/min_lm.py。不要写进本站 projects/ 下的六个旧作业目录。可以调用上周自己写的注意力，但本周要自己接线。",
+        "inputs": "整数 token 序列，形状 [B, T]；词表大小 V；模型宽度 D。先用固定的 nn.Embedding、一层 Pre-LN 或甚至先不用 Norm 的残差块、GELU/ReLU FFN、线性输出头。位置可以用学到的 position embedding，也可以先不加。",
+        "outputs": "logits，形状 [B, T, V]。不要求本周就接上采样循环。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "gpt",
+          "section": "9.1 GPT：Decoder-only Transformer ★",
+          "label": "9.1 GPT：Decoder-only Transformer"
+        },
+        {
+          "role": "required",
+          "chapterId": "gpt",
+          "section": "9.2 Next Token Prediction ★",
+          "label": "9.2 Next Token Prediction"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.19 残差连接（含 mask 泄露问题）★",
+          "label": "7.19 残差连接"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.21 FFN ★",
+          "label": "7.21 FFN"
+        },
+        {
+          "role": "required",
+          "chapterId": "transformer",
+          "section": "7.20 LayerNorm（为什么不用 BatchNorm）★",
+          "label": "7.20 LayerNorm（本周可用简单 LN，不必换成 RMSNorm）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-1",
+          "section": "Lab 6：组装 Transformer Block",
+          "label": "Lab 6 组装 Block（写完后再对照）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-1",
+          "section": "Lab 7：搭出完整的 Decoder-only LM",
+          "label": "Lab 7 最小 LM（写完后再对照）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.3 形状变换四件套（LLM 代码的重灾区）",
+          "label": "11.3 形状变换"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.6 nn.Module 与 Parameter：组织模型",
+          "label": "11.6 nn.Module"
+        },
+        {
+          "role": "reference",
+          "chapterId": "modern-llm",
+          "section": "10.3 RoPE：旋转位置编码 ★",
+          "label": "10.3 RoPE（可开始读，不是本周硬门槛）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "modern-llm",
+          "section": "10.4 RMSNorm：更简单的归一化 ★",
+          "label": "10.4 RMSNorm（可开始读，不是本周硬门槛）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先画数据流再写",
+          "body": "在纸上或注释里写出：[B, T] → embedding [B, T, D] → 一层 block → lm_head → [B, T, V]。先写输入输出和每一步 shape，再动手。注意力用上周通过的实现或等价的单层因果注意力。"
+        },
+        {
+          "title": "实现固定结构的一层 block",
+          "body": "最小块：残差 + FFN（ReLU 或 GELU 即可）。LayerNorm 可用、也可先做成「先加残差再输出」。不要本周同时改 RMSNorm、RoPE、SwiGLU。一次只接一条通路。"
+        },
+        {
+          "title": "接上 embedding 和输出头",
+          "body": "用 nn.Embedding 和线性层得到 logits。随机初始化即可。前向传入一小批整数 token，打印每一步 shape，确认最后是 [B, T, V]。"
+        },
+        {
+          "title": "检查形状和残差",
+          "body": "用固定 B=2、T=4、V 和 D 能整除的小数字跑一次。确认无 NaN/Inf，残差前后 shape 必须一致。能说明残差加的是什么、输出头为什么是 V 维。本站不运行 Python。"
+        },
+        {
+          "title": "检查组装后的整模型因果性",
+          "body": "关闭 dropout。固定模型参数和同一前缀，只改最后一个 token。比较的是完整模型输出的 logits [B, T, V]，不是只复跑 Attention 模块。更早位置的 logits 应在你写下的组合容差内不变：abs(改前 - 改后) <= atol + rtol * abs(改前)。上周 Attention 通过不能代替这次接线检查；本周不必重写 Attention。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次接线尝试。卡住时请人解释 shape 报错或残差该加在哪；仍卡住再看 Lab 6 / Lab 7 局部。合上参考后重写 block 的 forward，并换一组 B、T 再跑。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项：把 T 换成另一个长度，先预测 shape 再运行；或者把 FFN 隐藏维改成 4D，确认只有中间层变宽。这不是额外门槛。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "forward-btv",
+          "label": "前向形状",
+          "required": true,
+          "conceptId": "lm-forward",
+          "text": "输入 token [B, T]，输出 logits [B, T, V]。能指出 embedding、block、输出头各自的形状。"
+        },
+        {
+          "id": "residual-head",
+          "label": "残差与输出头",
+          "required": true,
+          "conceptId": "residual-ffn",
+          "text": "能说明残差加的是哪一路、输出头为什么映射到词表。与一份简单参考对照过 shape，不是只抄完整现代骨架。"
+        },
+        {
+          "id": "assembled-causal",
+          "label": "组装后因果性",
+          "required": true,
+          "conceptId": "causal-mask",
+          "text": "关闭 dropout，固定参数与前缀，只改末尾 token。完整模型更早位置的 logits 在声明的组合容差 atol + rtol * abs 内不变。这是接线后的集成检查，不是把上周 Attention 单测再跑一遍，也不要求重写 Attention。"
+        },
+        {
+          "id": "norm-rope-read",
+          "label": "归一化与位置",
+          "required": false,
+          "conceptId": "modern-block",
+          "text": "拓展：能解释本周没用 RMSNorm / RoPE 时，位置和尺度信息缺了什么。未完成不阻挡本周核心任务。"
+        }
+      ]
+    },
+    {
+      "id": "lab.train.step-update",
+      "stageId": "lab",
+      "weekBudget": 3,
+      "shortTitle": "一次参数更新",
+      "title": "先打通 loss 和参数更新，再逐个换现代组件",
+      "goal": "在最小模型上用正确的 next-token 对齐算出交叉熵，再 backward、optimizer.step，确认参数真的变了。不能用「参数在更新」代替目标正确。然后再逐个替换 RMSNorm / RoPE / SwiGLU。GQA 是拓展，不挡完成。",
+      "conceptIds": ["autograd-step", "label-shift", "modern-block", "gqa", "tensor-shape"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/train_step.py，接上周的最小 LM。不要写进六个旧作业目录。",
+        "inputs": "随机小 batch，例如 token [7, 4, 9]。位置 0 的 logits 预测 4，位置 1 预测 9；不要用位置 0 去预测 7。labels 可预先错位（logits[:, :-1] 对 labels[:, 1:]），或只在 loss 里做一次等价错位。两种选一种，shift 只做一次。不要假定自写模型会像某些封装接口那样自动 shift。学习率用很小的常数。本练习不启用梯度累积。",
+        "outputs": "标量 loss（对下一 token，不是对当前 token）；step 前后同一参数张量的数值有可见差异；无 NaN/Inf；注释里留下那条短序列的对齐说明。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "pytorch",
+          "section": "11.7 autograd：把第 1 章的手算交给框架",
+          "label": "11.7 autograd"
+        },
+        {
+          "role": "required",
+          "chapterId": "pytorch",
+          "section": "11.9 训练循环：标准骨架",
+          "label": "11.9 训练循环骨架"
+        },
+        {
+          "role": "required",
+          "chapterId": "basics",
+          "section": "1.8 交叉熵 ★",
+          "label": "1.8 交叉熵"
+        },
+        {
+          "role": "required",
+          "chapterId": "basics",
+          "section": "1.6 前向传播与反向传播 ★",
+          "label": "1.6 反向传播"
+        },
+        {
+          "role": "required",
+          "chapterId": "gpt",
+          "section": "9.2 Next Token Prediction ★",
+          "label": "9.2 Next Token Prediction（本周就要对齐，不等到完整训练循环）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "modern-llm",
+          "section": "10.4 RMSNorm：更简单的归一化 ★",
+          "label": "10.4 RMSNorm（更新打通后再换）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "modern-llm",
+          "section": "10.3 RoPE：旋转位置编码 ★",
+          "label": "10.3 RoPE（一次只换这一处）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "modern-llm",
+          "section": "10.6 SwiGLU：现代 FFN ★",
+          "label": "10.6 SwiGLU（一次只换这一处）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "modern-llm",
+          "section": "10.2 MHA → MQA → GQA ★",
+          "label": "10.2 GQA（拓展，不挡完成）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.13 调试清单：shape 断言与最小复现",
+          "label": "11.13 调试清单"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先写清下一 token 怎么对齐",
+          "body": "用上面那条短序列在注释里写出：哪个位置的 logits 预测哪个 token。选定一种做法：预先错位，或只在 loss 里错位。不要写 labels = input_ids 再用当前位置预测当前 token。自写模型不会自动 shift。"
+        },
+        {
+          "title": "按一步训练做更新",
+          "body": "反复执行时固定为：zero_grad → forward → loss → backward → step。打印 step 前后某一层 weight 的均值或一个元素。确认 requires_grad 的参数参与了更新。本练习不启用梯度累积。先不要改结构。"
+        },
+        {
+          "title": "检查梯度不是摆设",
+          "body": "关掉更新再 backward 一次，看 grad 是否存在且有限。学习率改成 0 时参数应几乎不变。出现 NaN 先减小学习率或检查 logits 是否爆炸，不要同时换三个模块。"
+        },
+        {
+          "title": "再逐个替换现代组件",
+          "body": "每次只换一件：先 RMSNorm，跑通更新；再 RoPE；再 SwiGLU。每换一次都重复「有限 loss、参数在动」。对齐方式不要改掉。不要一次改完再调试。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次 backward 尝试。优先问：loss 是否在预测下一 token、哪一个张量没有 grad。仍卡住再看 11.9 骨架或 9.2。合上后重写 step 函数，换一组随机输入再跑。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "把学习率乘 10 或除 10，描述参数变化变大还是变小。这不是额外门槛。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "next-token-align",
+          "label": "next-token 对齐",
+          "required": true,
+          "conceptId": "label-shift",
+          "text": "能用一个短序列说明输入、预测位置和下一 token 标签的对应关系。实现里只 shift 一次（预先错位或在 loss 中错位，选一种）。第一次更新就要这样对齐，不能先训练同位置 token 再下周纠正。"
+        },
+        {
+          "id": "loss-backward",
+          "label": "loss 与 backward",
+          "required": true,
+          "conceptId": "autograd-step",
+          "text": "在正确对齐的小输入上能算出有限 loss，backward 后参数有梯度。"
+        },
+        {
+          "id": "params-move",
+          "label": "参数确实更新",
+          "required": true,
+          "conceptId": "autograd-step",
+          "text": "每一步都经过 zero_grad。optimizer.step 之后至少一层权重与 step 前不同。学习率为 0 时不再发生同样变化。本练习不启用梯度累积。"
+        },
+        {
+          "id": "gqa-heads",
+          "label": "GQA 头数关系",
+          "required": false,
+          "conceptId": "gqa",
+          "text": "拓展：能解释 GQA 里查询头与 KV 头的分组关系。延期可先读 10.2 对照，未完成不能阻挡本周核心任务。"
+        }
+      ]
+    },
+    {
+      "id": "lab.train.overfit-loop",
+      "stageId": "lab",
+      "weekBudget": 4,
+      "shortTitle": "过拟合小样本",
+      "title": "写出训练/验证循环，过拟合很小的数据",
+      "goal": "做出最小 next-token 训练循环：训练集 loss 能降到很小，并留一份不参与训练的验证样本。第 3 周已经核对过的对齐在循环里保持只 shift 一次。",
+      "conceptIds": ["overfit-loop", "label-shift", "lm-forward"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/overfit.py。数据用自己写的几条短文本或整数序列，不要依赖六个旧作业的数据目录。",
+        "inputs": "很小的训练集（几条到几十条序列）+ 独立验证样本；DataLoader 或手动 batch 均可。",
+        "outputs": "训练曲线（至少记下若干 step 的 train loss）；验证样本上的 loss；一份说明 label 如何与输入对齐。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "gpt",
+          "section": "9.2 Next Token Prediction ★",
+          "label": "9.2 Next Token Prediction"
+        },
+        {
+          "role": "required",
+          "chapterId": "gpt",
+          "section": "9.3 训练时为什么能并行 ★",
+          "label": "9.3 训练时并行"
+        },
+        {
+          "role": "required",
+          "chapterId": "pytorch",
+          "section": "11.8 Dataset / DataLoader：喂数据",
+          "label": "11.8 Dataset / DataLoader"
+        },
+        {
+          "role": "required",
+          "chapterId": "pytorch",
+          "section": "11.9 训练循环：标准骨架",
+          "label": "11.9 训练循环"
+        },
+        {
+          "role": "required",
+          "chapterId": "evaluation",
+          "section": "3.5 欠拟合与过拟合",
+          "label": "3.5 欠拟合与过拟合"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-2",
+          "section": "Lab 8：准备数据集",
+          "label": "Lab 8 数据集（写完后再对照）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-2",
+          "section": "必须理解：next-token 对齐 + Shift",
+          "label": "next-token 对齐与 Shift（写完后核对）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "evaluation",
+          "section": "3.2 数据划分",
+          "label": "3.2 数据划分"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先写清 label 怎么对齐",
+          "body": "沿用第 3 周已核对的对齐：输入 x[:, :-1] 预测 y[:, 1:]，或等价地只 shift 一次。在注释里写明不要 shift 两次。用 3 个 token 的手写例子核对后，再把它放进完整循环。不要把首次正确对齐推迟到本周才做。"
+        },
+        {
+          "title": "接上循环和验证样本",
+          "body": "写 train loop：zero_grad → forward → loss → backward → step。每 N step 在留出的验证样本上算 loss。验证样本不得进入训练。"
+        },
+        {
+          "title": "过拟合很小的数据",
+          "body": "把模型容量相对数据调大或把数据极小，确认 train loss 明显下降。若完全不降，先查 label 对齐和 learning rate，不要加 DDP 或混合精度。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次循环尝试。优先问 loss 是否在对 PAD 或错误位置监督。仍卡住再看 Lab 8 或 Shift 小节。合上后重写 shift 与一步 train，换一条序列再跑。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "把验证样本换成另一条从未训练的序列，看 val loss 是否高于近乎为零的 train loss。能解释这为什么合理。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "shift-once",
+          "label": "label shift 一次",
+          "required": true,
+          "conceptId": "label-shift",
+          "text": "循环里仍只 shift 一次，并能用短例子说明输入与标签如何对齐。这是把第 3 周的对齐放进完整训练/验证，不是本周才第一次对齐。"
+        },
+        {
+          "id": "overfit-small",
+          "label": "小样本过拟合",
+          "required": true,
+          "conceptId": "overfit-loop",
+          "text": "训练集 loss 明显下降；保留了不参与训练的验证样本并记录其 loss。"
+        }
+      ]
+    },
+    {
+      "id": "lab.pretrain.short-run",
+      "stageId": "lab",
+      "weekBudget": 5,
+      "shortTitle": "短程预训练",
+      "title": "跑一次可复现的短程预训练并会恢复 checkpoint",
+      "goal": "用自己的小数据和固定种子跑一段可从头复现的训练；会保存并恢复模型、optimizer、scheduler 和步数；报告验证 loss。",
+      "conceptIds": ["checkpoint", "tokenizer-bpe", "overfit-loop"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/pretrain_run.py 与一个本地数据文件。不要写进六个旧作业目录。",
+        "inputs": "一份小语料（自己的 txt/jsonl 即可）；固定种子；简单学习率（常数或带 warmup 的衰减）。",
+        "outputs": "可再次运行得到相近曲线的命令记录；一个 checkpoint 文件；验证 loss 数字；简短日志。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "nlp",
+          "section": "6.3 BPE：字节对编码 ★",
+          "label": "6.3 BPE"
+        },
+        {
+          "role": "required",
+          "chapterId": "nlp",
+          "section": "6.4 BPE Training 与 Encoding 必须分开理解 ★",
+          "label": "6.4 训练与编码分开"
+        },
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.7 Warmup + Learning Rate Decay ★",
+          "label": "21.7 学习率调度"
+        },
+        {
+          "role": "required",
+          "chapterId": "pytorch",
+          "section": "11.12 state_dict / checkpoint：保存与续训",
+          "label": "11.12 checkpoint"
+        },
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.8 为什么看 Loss 还不够",
+          "label": "21.8 为什么看 Loss 还不够"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-2",
+          "section": "Lab 9：预训练",
+          "label": "Lab 9 预训练（写完后对照流程，不要整段复制）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "evaluation",
+          "section": "3.2 数据划分",
+          "label": "3.2 数据划分"
+        }
+      ],
+      "steps": [
+        {
+          "title": "固定种子和数据切分",
+          "body": "写下如何划分训练/验证、随机种子、命令行如何启动。Tokenizer 可以用现成小词表或自己在很小语料上练 BPE；要能说明 train 与 encode 的差别。"
+        },
+        {
+          "title": "保存和恢复四样东西",
+          "body": "checkpoint 至少包含 model、optimizer、scheduler（若有）、step。中断后从该文件恢复，下一步的 step 编号接上，而不是从 0 假装续训。"
+        },
+        {
+          "title": "报告验证 loss",
+          "body": "短程即可，不求把模型训好。记录最终验证 loss。不要引入 DDP、FlashAttention 或大规模集群配置。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次保存/加载尝试。优先问 state_dict 缺了什么。仍卡住再看 11.12。合上后重写 save/load，换一个 step 数再试。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "加载 checkpoint 后再训几步，确认 step 计数增加且没有把验证集误写入训练。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "repro-run",
+          "label": "可复现短跑",
+          "required": true,
+          "conceptId": "checkpoint",
+          "text": "用记录下来的命令能从头跑完这一段；种子和数据切分写得清楚。"
+        },
+        {
+          "id": "resume-ckpt",
+          "label": "恢复训练状态",
+          "required": true,
+          "conceptId": "checkpoint",
+          "text": "能恢复模型、optimizer、scheduler（若使用）和步数，而不是只保存权重。"
+        },
+        {
+          "id": "report-val",
+          "label": "报告验证 loss",
+          "required": true,
+          "conceptId": "overfit-loop",
+          "text": "写下本次短跑的验证 loss，并说明它不是训练集数字的复制。"
+        }
+      ]
+    },
+    {
+      "id": "lab.sft.response-mask",
+      "stageId": "lab",
+      "weekBudget": 6,
+      "shortTitle": "SFT 监督范围",
+      "title": "打印逐 token 监督范围，确认 prompt 不进 loss",
+      "goal": "实现一条 SFT 样本的 chat template 与 response-only loss：prompt 和 padding 使用 ignore index（如 -100），只在助手回答上算交叉熵。",
+      "conceptIds": ["sft-mask", "label-shift", "tokenizer-bpe"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/sft_mask.py。用假对话数据即可。不要去做旧 sft-lora 作业仓库。",
+        "inputs": "至少一条 {user, assistant} 样本；tokenizer（可用很小的占位分词）。",
+        "outputs": "打印每个 token 是 prompt / 回答 / padding，以及是否计入 loss；一条能讲清特殊 token 的说明。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.10 Pretrain 与 SFT ★",
+          "label": "21.10 Pretrain 与 SFT"
+        },
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.11 Chat Template",
+          "label": "21.11 Chat Template"
+        },
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.12 SFT 的 Loss Mask ★",
+          "label": "21.12 SFT 的 Loss Mask"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-2",
+          "section": "Lab 13：SFT（让模型学会「回答问题」）",
+          "label": "Lab 13 SFT（写完后对照，不要整段复制）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "huggingface",
+          "section": "26.1 工作流地图（先建立心智模型）",
+          "label": "26.1 HF 工作流（查阅 API，不是本周作业）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "pytorch",
+          "section": "11.8 Dataset / DataLoader：喂数据",
+          "label": "11.8 组 batch 与 padding"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先拼一条模板再 mask",
+          "body": "把 user/assistant 拼成模型看到的字符串，标出特殊 token。先打印 token 列表，再写 labels。"
+        },
+        {
+          "title": "只在回答上算 loss",
+          "body": "prompt 与 padding 的 label 设为 -100 或等价 ignore index。用一个 8–20 个 token 的短样本，逐个核对。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次 mask 尝试。优先问为什么某个 token 不该进 loss。仍卡住再看 21.12 数字算例。合上后重写 labels，换一条更长的 prompt 再印一遍。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "加长 padding 或插入第二轮对话，确认新的 pad 仍不计 loss，回答区间仍然计。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "print-mask",
+          "label": "打印监督范围",
+          "required": true,
+          "conceptId": "sft-mask",
+          "text": "能打印一条样本里每个 token 是否计入预期 loss。"
+        },
+        {
+          "id": "prompt-ignored",
+          "label": "prompt/padding 不计 loss",
+          "required": true,
+          "conceptId": "sft-mask",
+          "text": "确认 prompt 与 padding 不进入交叉熵；能解释用到的特殊 token。"
+        }
+      ]
+    },
+    {
+      "id": "lab.eval.simple-scorer",
+      "stageId": "lab",
+      "weekBudget": 7,
+      "shortTitle": "简化评测",
+      "title": "选一套选择题协议，手写 scorer 并分开错误与零分",
+      "goal": "在 C3 或 XCOPA 一类协议上做简化 evaluator：用手算样例和假输出检查计分；模型异常与真实零分分开记；记下 prompt、选项计分方式和模型版本。假输出只用于测 scorer。真实 A/B 模型预测放到第 8 周。不要去做旧 llm-eval 作业仓库。",
+      "conceptIds": ["eval-scorer"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/tiny_eval.py。用几条手工样例即可，不必下载全量榜。",
+        "inputs": "冻结的几条题目（题干、选项、标准答案）。本周可用假输出或手写输出专门测 scorer；不要把假输出当成训练实验结果。",
+        "outputs": "逐样本记录：题目 id、模型输出、得分、是否异常；与手算一致的 scorer。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.1 Evaluation Pipeline：评估也是一条流水线",
+          "label": "23.1 评估流水线"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.5 选择题准确率与随机基线",
+          "label": "23.5 选择题与随机基线"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.3 Exact Match：解析器决定分数",
+          "label": "23.3 解析器决定分数"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败案例分析"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "build-llm-2",
+          "section": "Lab 10：评估",
+          "label": "Lab 10 评估（对照流程，不是旧作业仓库）"
+        },
+        {
+          "role": "parallel",
+          "chapterId": "evaluation",
+          "section": "3.4 Accuracy、Precision、Recall、F1",
+          "label": "3.4 分类指标（查阅）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先手算再写 scorer",
+          "body": "选 3 条题：一条应得满分、一条应得 0、一条输出格式坏掉。先在纸上给出分数，再写函数。"
+        },
+        {
+          "title": "异常与零分分开",
+          "body": "解析失败、超时、空输出记为异常，不要直接当成答错的 0 分混进准确率分母时不加说明。准确率分母写清楚。"
+        },
+        {
+          "title": "记下协议",
+          "body": "记录 prompt 模板、选项如何计分、模型名称与版本。假输出只用于检查 scorer。不把旧 llm-eval 项目当作本周交付物。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下 scorer 草稿。优先问某条坏输出该进哪一类。仍卡住再看 23.3。合上后重写解析分支，再加一条新的坏输出。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "把正确答案的表面字符串改成大小写或前后空格不同，看你的解析是否仍稳定；若不稳定，写明限制。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "hand-scorer",
+          "label": "手算核对 scorer",
+          "required": true,
+          "conceptId": "eval-scorer",
+          "text": "至少三条样例上，函数输出与手算一致。"
+        },
+        {
+          "id": "error-vs-zero",
+          "label": "异常与零分分开",
+          "required": true,
+          "conceptId": "eval-scorer",
+          "text": "格式失败等异常不与真正答错的零分混成一类而不加说明。"
+        },
+        {
+          "id": "protocol-note",
+          "label": "记录协议与版本",
+          "required": true,
+          "conceptId": "eval-scorer",
+          "text": "写下 prompt、选项计分方式和模型版本。"
+        }
+      ]
+    },
+    {
+      "id": "lab.experiment.one-variable",
+      "stageId": "lab",
+      "weekBudget": 8,
+      "shortTitle": "单变量实验",
+      "title": "只改一个变量，用同一套评测比较并解释局限",
+      "goal": "在已有小模型上做一次控制变量实验：只改数据量或学习率等一个因素。分别加载 A、B 两份真实权重，用同一输入和同一选项计分协议取得预测，再交给第 7 周已核对的 scorer。假输出只用于评分器测试，不得当作本周实验结果。没有提升也如实记录。缓存加速是拓展，不是硬门槛。",
+      "conceptIds": ["one-variable", "kv-cache", "eval-scorer"],
+      "workspace": {
+        "where": "例如 ~/llm-lab/experiment.md 加两次训练命令和两份权重路径。不要新开旧 inference-benchmark 作业。",
+        "inputs": "基线配置 A 的真实 checkpoint；只改一个旋钮后得到的配置 B 的真实 checkpoint；同一测试题；第 7 周同一套解析与 scorer。不要用假输出填实验结果。",
+        "outputs": "A/B 的权重或 checkpoint 标识；协议说明；逐样本真实预测、解析结果与分数；结果表、种子、bad case、局限说明；可选：有/无 KV cache 的生成结果对照（不要求速度数字）。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "pretrain-sft",
+          "section": "21.8 为什么看 Loss 还不够",
+          "label": "21.8 为什么看 Loss 还不够"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败案例"
+        },
+        {
+          "role": "required",
+          "chapterId": "evaluation",
+          "section": "3.2 数据划分",
+          "label": "3.2 数据划分（测试集不要用来调参）"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "gpt",
+          "section": "9.4 推理循环：自回归生成",
+          "label": "9.4 生成循环（输出对照）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "modern-llm",
+          "section": "10.1 KV Cache：推理加速的关键 ★",
+          "label": "10.1 KV Cache（拓展：输出对照即可）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "build-llm-2",
+          "section": "Lab 12：KV Cache（把生成提速一个数量级）",
+          "label": "Lab 12 KV Cache（拓展，速度分析可留到后面）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先写清只改什么",
+          "body": "一句话写出自变量、不变量、评测集。种子写进表。不要同时改结构、数据和学习率。"
+        },
+        {
+          "title": "从真实权重取出预测再交给 scorer",
+          "body": "分别加载 A、B 两份真实模型权重。用同一输入、同一输出/选项计分协议得到预测（生成文本或选项分数），再交给第 7 周已经用手算和假输出核对过的 scorer。记下 checkpoint 标识。模型预测 → 解析 → 计分的数据流要写清楚。假输出不能当作本实验结果。"
+        },
+        {
+          "title": "比较并解释局限",
+          "body": "A/B 用同一套题目和同一 scorer。异常与真实零分仍分开记。没有提升也留下数字和 1–2 条 bad case。解释可能的局限（数据太小、评测太窄）。不必下载全量榜，也不要求分数提高。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下实验记录草稿。优先问两个配置是否其实改了两处。合上参考后重写对照表。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "把同一结论用另一条 bad case 复述一遍：失败是模型不会，还是评测题本身含糊。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "one-knob",
+          "label": "只改一个变量",
+          "required": true,
+          "conceptId": "one-variable",
+          "text": "实验记录里能看出只改了数据量或学习率等一个因素，其它保持不变。"
+        },
+        {
+          "id": "real-ab-preds",
+          "label": "真实 A/B 预测",
+          "required": true,
+          "conceptId": "eval-scorer",
+          "text": "分别加载 A、B 真实权重，用同一输入和同一协议取得预测后再交给已核对的 scorer。记下 checkpoint 标识和逐样本真实结果。假输出只用于第 7 周测 scorer，不能当作本实验结果。"
+        },
+        {
+          "id": "same-eval",
+          "label": "同一评测比较",
+          "required": true,
+          "conceptId": "eval-scorer",
+          "text": "用同一套题目、同一解析和同一 scorer 比较；异常与真实零分分开；没有提升也如实记录并解释局限。"
+        },
+        {
+          "id": "cache-speed",
+          "label": "缓存速度分析",
+          "required": false,
+          "conceptId": "kv-cache",
+          "text": "拓展：有/无 KV cache 的生成输出对照。速度数字不是本周硬门槛。"
+        }
+      ]
+    },
+    {
+      "id": "claim.judge.given-evidence",
+      "stageId": "claim-agent",
+      "weekBudget": 1,
+      "shortTitle": "给定证据判定",
+      "title": "给定声明和证据，只做判定",
+      "goal": "在固定的少量「声明 + 一段证据」上，先写出标注准则，再给出支持／不支持／证据不足，并标出证据位置。本周不做检索，也不写 Agent 循环。CHEF 只用来理解任务形态，不能把自写样本混进去冒充 CHEF 分数。",
+      "conceptIds": ["claim-label", "evidence-span", "insufficient-evidence", "eval-scorer"],
+      "workspace": {
+        "where": "在本机新建空文件，例如 ~/llm-lab/claim_judge.jsonl。不要写进本站 projects/ 下的六个旧作业目录。本页只给练习说明，不代写标注。",
+        "inputs": "自己准备 8–12 条「一条声明 + 一段固定证据」。证据来自你正在读的官方文档、README 或实验记录的摘录；不要用实时网页搜索。若阅读 CHEF 论文/说明，只用来对照任务形态，不要把 CHEF 样本与自写样本混成一份官方分数。",
+        "outputs": "一份标注准则（标签含义、何时判证据不足）；每条样本的标签、证据起止位置、一句理由、准则版本。至少有一条判为证据不足。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败样本分类"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.11 Human Evaluation：什么时候必须用人",
+          "label": "23.11 人工评估要有规则"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.9 LLM-as-a-Judge：开放式回答怎么评",
+          "label": "23.9 不要把 LLM 裁判当金标准"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "llm-eval",
+          "section": "23.13 Contamination：与数据管线闭环",
+          "label": "23.13 数据泄漏与混集（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "href": "https://aclanthology.org/2022.naacl-main.246/",
+          "external": true,
+          "label": "CHEF 论文（任务形态对照，不是本周分数）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/THU-BPM/CHEF",
+          "external": true,
+          "label": "CHEF 上游仓库（对照用，不是本周作业仓库）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/datawhalechina/hello-agents",
+          "external": true,
+          "label": "Hello-Agents（可开始读循环主题，本周不实现 Agent）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读判定所需教材",
+          "body": "打开第 23 章 23.17、23.11、23.9。先搞清失败类型为什么要分开记、人工评估为什么要有书面规则，以及 LLM 裁判有哪些偏差。不要用另一个模型的意见当作本周的金标准。"
+        },
+        {
+          "title": "写下标注准则",
+          "body": "在空文件里先写标签含义：支持、不支持、证据不足。写清证据不足的条件，例如证据没提到关键限定、版本对不上、或只能间接推测。先留下一次准则草稿，再去标样本。"
+        },
+        {
+          "title": "在固定证据上判定",
+          "body": "准备 8–12 条声明，每条只配一段已经给定的证据。为每条写下标签、证据起止（句子或行号）和一句理由。本周不要检索，也不要让模型替你找证据。"
+        },
+        {
+          "title": "检查拒绝和位置",
+          "body": "至少一条判为证据不足。抽两条支持／不支持，能指出证据里对应的句子。换一条把关键限定删掉，确认准则会改成证据不足，而不是硬判对或错。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "自检通过后再看 CHEF 说明是建议顺序，不是禁令。卡住时：先请人解释标签边界或给反例；仍卡住再对照 CHEF 如何定义证据。看过后合上参考，用自己的声明集重写准则并换两条样本再标。独立实现指最终能脱离答案完成标注，不是学习期间从未接受帮助。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把证据里的版本号改掉，看标签是否应变成证据不足；或者故意把结论写进声明、把出处写进证据，说清哪一条检查会失败。下一次打开练习时，可用几分钟口述准则里「证据不足」的条件。"
+        },
+        {
+          "title": "对照而不是抄分数",
+          "body": "CHEF 用来理解「声明—证据—判断」，不能把自写样本混进 CHEF 后冒充官方分数。Hello-Agents 可开始读循环与工具主题，但本周不要改去做 Agent 循环，也不要走进六个旧作业项目。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "rubric",
+          "label": "标注准则",
+          "required": true,
+          "conceptId": "claim-label",
+          "text": "写下支持／不支持／证据不足的含义，以及何时必须判证据不足。准则在标注前就有一版，不是标完再补。"
+        },
+        {
+          "id": "spans",
+          "label": "判定与证据位置",
+          "required": true,
+          "conceptId": "evidence-span",
+          "text": "对固定的声明+证据给出标签，并能指出证据中的对应位置。本周不检索。不是自动评分。"
+        },
+        {
+          "id": "abstain",
+          "label": "证据不足时拒绝",
+          "required": true,
+          "conceptId": "insufficient-evidence",
+          "text": "至少一条判为证据不足，并能说明缺了什么。不能用另一个 LLM 的意见代替这条判断。"
+        },
+        {
+          "id": "agent-reading",
+          "label": "Agent 主题选读",
+          "required": false,
+          "conceptId": "claim-label",
+          "text": "拓展：开始读 Hello-Agents 的循环或工具主题。未完成不阻挡本周核心任务，本周也不要求写出 Agent。"
+        }
+      ]
+    },
+    {
+      "id": "claim.retrieve.fixed-corpus",
+      "stageId": "claim-agent",
+      "weekBudget": 2,
+      "shortTitle": "固定语料检索",
+      "title": "在冻结语料里检索证据，对照两种方法",
+      "goal": "在一份冻结的本地语料上，对同一批查询同时跑关键词/BM25 和向量检索。报告 Recall@k 或 MRR，并人工核对这些命中是否真能支持声明。检索命中不是结论正确。本周不写判定工作流，也不写 Agent 循环。",
+      "conceptIds": ["bm25-vs-dense", "retrieval-metrics"],
+      "workspace": {
+        "where": "在本机新建目录，例如 ~/llm-lab/claim_retrieve/。不要写进本站 projects/ 下的六个旧作业目录，也不要去改 rag-service。本页只给练习说明，不代写检索代码。",
+        "inputs": "冻结 20–40 个文档块（官方文档、README 或实验记录摘录），每块记下文件名、版本或日期。准备 8–12 条查询，尽量接上第 1 周的声明。不要用实时网页搜索，也不要把 CHEF 样本混进这份语料后冒充官方分数。",
+        "outputs": "两套排序结果（BM25 与向量）；每个方法的 Hit@k / Recall@k 或 MRR；对 top-k 的人工相关判断。至少一条：检索命中相关，但仍不能支持声明。向量检索可用现成库或 numpy，不要求 FAISS。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.5 BM25：关键词检索不是落后技术",
+          "label": "28.5 BM25 不是落后技术"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.3 Embedding：把语义变成几何",
+          "label": "28.3 向量检索在比什么"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
+          "label": "28.8 检索和生成分开评"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "rag-engineering",
+          "section": "28.2 Chunking：最不起眼、最影响上限的一步",
+          "label": "28.2 切块（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "rag-engineering",
+          "section": "28.4 向量检索：FAISS 最小实现",
+          "label": "28.4 FAISS 最小实现（可对照，不要求）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "rag-engineering",
+          "section": "28.6 Hybrid Retrieval：小孩子才做选择",
+          "label": "28.6 混合检索（可开始读）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/THU-BPM/CHEF",
+          "external": true,
+          "label": "CHEF 上游仓库（对照任务形态，不是本周语料）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读检索所需教材",
+          "body": "打开第 28 章 28.5、28.3、28.8。先搞清 BM25 何时更强、向量在比什么几何，以及为什么必须把检索指标和最终判定拆开。章内表格是课程旧实验，不能当成你这周的分数。"
+        },
+        {
+          "title": "冻结语料和查询",
+          "body": "先留下一份语料清单：每块的来源、版本或日期、切块边界。查询写清楚，并标出你认为相关的文档。切块可先用固定长度；写完后再对照 28.2。"
+        },
+        {
+          "title": "对照两种检索",
+          "body": "对同一批查询分别跑 BM25（或等价关键词检索）和向量检索。记下每条查询的 top-k。本周不要接生成，也不要让模型替你找网页。"
+        },
+        {
+          "title": "报告指标并人工核对",
+          "body": "至少报告一种 k 下的 Hit/Recall 或 MRR。对 top-k 做人工相关判断。单独标出：相关但并不能支持声明的命中。不要把检索命中写成「结论正确」。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次自己的对照表。卡住时请人解释 BM25 打分、切块边界或指标公式；仍卡住再看 28.4 / 28.6 局部。合上参考后重跑对照，并换两条查询再算。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把某块的版本号改掉再查；或者把查询里的精确术语改成同义说法，看 BM25 与向量谁掉得更狠。这不是额外门槛。"
+        },
+        {
+          "title": "对照而不是抄旧分数",
+          "body": "第 28 章的 22 条查询表只说明「dense 不一定更好」。不要复制那张表当作本周结果，也不要走进 rag-service 或六个旧作业。Hello-Agents 仍可阅读，本周不要改去做 Agent。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "frozen-corpus",
+          "label": "冻结本地语料",
+          "required": true,
+          "conceptId": "retrieval-metrics",
+          "text": "语料来自冻结的本地文档块，带版本或日期。没有实时网页搜索。不是自动评分。"
+        },
+        {
+          "id": "two-retrievers",
+          "label": "两种检索对照",
+          "required": true,
+          "conceptId": "bm25-vs-dense",
+          "text": "同一批查询同时有关键词/BM25 和向量检索的排序结果。能说明哪类查询上谁更强。不要求 FAISS。"
+        },
+        {
+          "id": "metrics-human",
+          "label": "指标与人工核对",
+          "required": true,
+          "conceptId": "retrieval-metrics",
+          "text": "报告 Hit@k / Recall@k 或 MRR，并对 top-k 做人工相关判断。至少一条命中相关但不能支持声明。检索命中不是结论正确。"
+        },
+        {
+          "id": "rerank-read",
+          "label": "精排选读",
+          "required": false,
+          "conceptId": "bm25-vs-dense",
+          "text": "拓展：读 28.6 / 28.7，能解释混合或精排会改什么。未完成不阻挡本周核心任务，本周也不要求接上生成或 Agent。"
+        }
+      ]
+    },
+    {
+      "id": "claim.workflow.retrieve-read-judge",
+      "stageId": "claim-agent",
+      "weekBudget": 3,
+      "shortTitle": "检索阅读判定",
+      "title": "按固定顺序做检索、阅读和判定",
+      "goal": "用固定工作流处理声明：先检索冻结语料，再阅读命中段落，再沿用第 1 周准则给出支持／不支持／证据不足，并标出可定位引用。能处理过期或冲突证据。检索失败和判定失败要分开记。本周不让模型自己决定下一步工具，也不写 Agent 循环。",
+      "conceptIds": ["retrieve-read-judge", "citation-locate", "stale-conflict", "claim-label", "insufficient-evidence", "retrieval-metrics"],
+      "workspace": {
+        "where": "在本机新建空文件，例如 ~/llm-lab/claim_workflow.jsonl。沿用 ~/llm-lab/claim_retrieve/ 的冻结语料和第 1 周准则。不要写进六个旧作业目录，也不要去做 FastAPI 服务。",
+        "inputs": "第 2 周的冻结语料与检索结果（或对同一语料重跑一次检索）；第 1 周的标注准则。查询仍是技术声明，不要实时联网。",
+        "outputs": "每条样本的固定轨迹：检索到的文档、读过的段落、标签、可定位引用、错误类型（检索未命中／证据不足／过期或冲突／判定问题）。至少一条证据不足，至少一条过期或冲突。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
+          "label": "28.8 检索失败还是判定失败"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.10 失败案例：四类，各有各的修法",
+          "label": "28.10 失败类型分开修"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败样本分类"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "llm-eval",
+          "section": "23.13 Contamination：与数据管线闭环",
+          "label": "23.13 数据泄漏与混集（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "capstone-rag",
+          "section": "29.2 Pipeline 架构与实测数字",
+          "label": "29.2 管线顺序（对照用，不是本周服务作业）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "capstone-rag",
+          "section": "29.1 从「跑通检索」到「能对外服务」",
+          "label": "29.1 服务化原理（可开始读，本周不交服务）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/datawhalechina/hello-agents",
+          "external": true,
+          "label": "Hello-Agents（可读循环主题，本周不实现 Agent）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读工作流所需教材",
+          "body": "打开 28.8、28.10、23.17。先搞清检索命中、阅读之后仍不足、以及胡编之间的差别。第 29 章可以对照管线顺序，但本周不要改去做 FastAPI 服务。"
+        },
+        {
+          "title": "固定三步顺序",
+          "body": "对每条声明只按检索 → 阅读 → 判定走。先留下检索到的文档 id，再摘出你真正读过的句子，最后才写标签。不要跳过阅读，也不要让模型自己决定要不要再搜。"
+        },
+        {
+          "title": "沿用准则并给出引用",
+          "body": "判定必须沿用第 1 周的支持／不支持／证据不足准则，需要改准则时记下版本。每条给出可定位引用（文件名 + 句子或行号）。至少一条判为证据不足。"
+        },
+        {
+          "title": "分开记失败，处理过期和冲突",
+          "body": "检索没找到、找到了但不能支持、版本过期、两段证据冲突，要分开记。至少构造一条过期或冲突样本，说明准则如何处理，而不是硬判对或错。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一条完整轨迹。卡住时请人解释失败该记在哪一步；仍卡住再对照 28.10 的类型。合上参考后换两条声明重走三步。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把检索 k 缩小到 1，看证据不足是否增加；或者故意加入一段过期 README，看冲突规则会不会被触发。"
+        },
+        {
+          "title": "对照而不是改去做 Agent",
+          "body": "Hello-Agents 和第 29 章只说明以后会碰到循环与服务。本周不要实现 Agent 循环、MCP 或 rag-service。也不要把自写轨迹混进 CHEF 冒充官方分数。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "fixed-pipeline",
+          "label": "固定三步顺序",
+          "required": true,
+          "conceptId": "retrieve-read-judge",
+          "text": "每条样本能看出先检索、再阅读、再判定。没有跳过阅读，也没有让模型自选下一步工具。本周不写 Agent。"
+        },
+        {
+          "id": "cite-and-judge",
+          "label": "判定与可定位引用",
+          "required": true,
+          "conceptId": "citation-locate",
+          "text": "沿用第 1 周准则给出标签，并能指出引用位置。至少一条证据不足。不是自动评分。"
+        },
+        {
+          "id": "split-stale",
+          "label": "失败分类与过期冲突",
+          "required": true,
+          "conceptId": "stale-conflict",
+          "text": "检索未命中与判定问题分开记。至少一条过期或冲突证据，并能说明准则如何处理。"
+        },
+        {
+          "id": "service-reading",
+          "label": "服务化选读",
+          "required": false,
+          "conceptId": "retrieve-read-judge",
+          "text": "拓展：开始读第 29 章管线或超时原理。未完成不阻挡本周核心任务，本周也不要求写出 FastAPI 服务或 Agent。"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,583 @@
+diff --git a/content/learning-plan.json b/content/learning-plan.json
+index e3593e1..897eca4 100644
+--- a/content/learning-plan.json
++++ b/content/learning-plan.json
+@@ -109,6 +109,26 @@
+     {
+       "id": "insufficient-evidence",
+       "name": "证据不足时拒绝"
++    },
++    {
++      "id": "bm25-vs-dense",
++      "name": "BM25 与向量检索对照"
++    },
++    {
++      "id": "retrieval-metrics",
++      "name": "检索指标与人工核对"
++    },
++    {
++      "id": "retrieve-read-judge",
++      "name": "检索—阅读—判定工作流"
++    },
++    {
++      "id": "citation-locate",
++      "name": "引用可定位"
++    },
++    {
++      "id": "stale-conflict",
++      "name": "过期与冲突证据"
+     }
+   ],
+   "tasks": [
+@@ -1155,6 +1175,242 @@
+           "text": "拓展：开始读 Hello-Agents 的循环或工具主题。未完成不阻挡本周核心任务，本周也不要求写出 Agent。"
+         }
+       ]
++    },
++    {
++      "id": "claim.retrieve.fixed-corpus",
++      "stageId": "claim-agent",
++      "weekBudget": 2,
++      "shortTitle": "固定语料检索",
++      "title": "在冻结语料里检索证据，对照两种方法",
++      "goal": "在一份冻结的本地语料上，对同一批查询同时跑关键词/BM25 和向量检索。报告 Recall@k 或 MRR，并人工核对这些命中是否真能支持声明。检索命中不是结论正确。本周不写判定工作流，也不写 Agent 循环。",
++      "conceptIds": ["bm25-vs-dense", "retrieval-metrics"],
++      "workspace": {
++        "where": "在本机新建目录，例如 ~/llm-lab/claim_retrieve/。不要写进本站 projects/ 下的六个旧作业目录，也不要去改 rag-service。本页只给练习说明，不代写检索代码。",
++        "inputs": "冻结 20–40 个文档块（官方文档、README 或实验记录摘录），每块记下文件名、版本或日期。准备 8–12 条查询，尽量接上第 1 周的声明。不要用实时网页搜索，也不要把 CHEF 样本混进这份语料后冒充官方分数。",
++        "outputs": "两套排序结果（BM25 与向量）；每个方法的 Hit@k / Recall@k 或 MRR；对 top-k 的人工相关判断。至少一条：检索命中相关，但仍不能支持声明。向量检索可用现成库或 numpy，不要求 FAISS。"
++      },
++      "materials": [
++        {
++          "role": "required",
++          "chapterId": "rag-engineering",
++          "section": "28.5 BM25：关键词检索不是落后技术",
++          "label": "28.5 BM25 不是落后技术"
++        },
++        {
++          "role": "required",
++          "chapterId": "rag-engineering",
++          "section": "28.3 Embedding：把语义变成几何",
++          "label": "28.3 向量检索在比什么"
++        },
++        {
++          "role": "required",
++          "chapterId": "rag-engineering",
++          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
++          "label": "28.8 检索和生成分开评"
++        },
++        {
++          "role": "check-after",
++          "chapterId": "rag-engineering",
++          "section": "28.2 Chunking：最不起眼、最影响上限的一步",
++          "label": "28.2 切块（写完后再对照）"
++        },
++        {
++          "role": "reference",
++          "chapterId": "rag-engineering",
++          "section": "28.4 向量检索：FAISS 最小实现",
++          "label": "28.4 FAISS 最小实现（可对照，不要求）"
++        },
++        {
++          "role": "reference",
++          "chapterId": "rag-engineering",
++          "section": "28.6 Hybrid Retrieval：小孩子才做选择",
++          "label": "28.6 混合检索（可开始读）"
++        },
++        {
++          "role": "reference",
++          "href": "https://github.com/THU-BPM/CHEF",
++          "external": true,
++          "label": "CHEF 上游仓库（对照任务形态，不是本周语料）"
++        }
++      ],
++      "steps": [
++        {
++          "title": "先读检索所需教材",
++          "body": "打开第 28 章 28.5、28.3、28.8。先搞清 BM25 何时更强、向量在比什么几何，以及为什么必须把检索指标和最终判定拆开。章内表格是课程旧实验，不能当成你这周的分数。"
++        },
++        {
++          "title": "冻结语料和查询",
++          "body": "先留下一份语料清单：每块的来源、版本或日期、切块边界。查询写清楚，并标出你认为相关的文档。切块可先用固定长度；写完后再对照 28.2。"
++        },
++        {
++          "title": "对照两种检索",
++          "body": "对同一批查询分别跑 BM25（或等价关键词检索）和向量检索。记下每条查询的 top-k。本周不要接生成，也不要让模型替你找网页。"
++        },
++        {
++          "title": "报告指标并人工核对",
++          "body": "至少报告一种 k 下的 Hit/Recall 或 MRR。对 top-k 做人工相关判断。单独标出：相关但并不能支持声明的命中。不要把检索命中写成「结论正确」。"
++        },
++        {
++          "title": "卡住时可以分层求助",
++          "body": "先留下一次自己的对照表。卡住时请人解释 BM25 打分、切块边界或指标公式；仍卡住再看 28.4 / 28.6 局部。合上参考后重跑对照，并换两条查询再算。"
++        },
++        {
++          "title": "用一个小变式检查能否迁移",
++          "body": "任选一项即可，不是额外门槛：把某块的版本号改掉再查；或者把查询里的精确术语改成同义说法，看 BM25 与向量谁掉得更狠。这不是额外门槛。"
++        },
++        {
++          "title": "对照而不是抄旧分数",
++          "body": "第 28 章的 22 条查询表只说明「dense 不一定更好」。不要复制那张表当作本周结果，也不要走进 rag-service 或六个旧作业。Hello-Agents 仍可阅读，本周不要改去做 Agent。"
++        }
++      ],
++      "criteria": [
++        {
++          "id": "frozen-corpus",
++          "label": "冻结本地语料",
++          "required": true,
++          "conceptId": "retrieval-metrics",
++          "text": "语料来自冻结的本地文档块，带版本或日期。没有实时网页搜索。不是自动评分。"
++        },
++        {
++          "id": "two-retrievers",
++          "label": "两种检索对照",
++          "required": true,
++          "conceptId": "bm25-vs-dense",
++          "text": "同一批查询同时有关键词/BM25 和向量检索的排序结果。能说明哪类查询上谁更强。不要求 FAISS。"
++        },
++        {
++          "id": "metrics-human",
++          "label": "指标与人工核对",
++          "required": true,
++          "conceptId": "retrieval-metrics",
++          "text": "报告 Hit@k / Recall@k 或 MRR，并对 top-k 做人工相关判断。至少一条命中相关但不能支持声明。检索命中不是结论正确。"
++        },
++        {
++          "id": "rerank-read",
++          "label": "精排选读",
++          "required": false,
++          "conceptId": "bm25-vs-dense",
++          "text": "拓展：读 28.6 / 28.7，能解释混合或精排会改什么。未完成不阻挡本周核心任务，本周也不要求接上生成或 Agent。"
++        }
++      ]
++    },
++    {
++      "id": "claim.workflow.retrieve-read-judge",
++      "stageId": "claim-agent",
++      "weekBudget": 3,
++      "shortTitle": "检索阅读判定",
++      "title": "按固定顺序做检索、阅读和判定",
++      "goal": "用固定工作流处理声明：先检索冻结语料，再阅读命中段落，再沿用第 1 周准则给出支持／不支持／证据不足，并标出可定位引用。能处理过期或冲突证据。检索失败和判定失败要分开记。本周不让模型自己决定下一步工具，也不写 Agent 循环。",
++      "conceptIds": ["retrieve-read-judge", "citation-locate", "stale-conflict", "claim-label", "insufficient-evidence", "retrieval-metrics"],
++      "workspace": {
++        "where": "在本机新建空文件，例如 ~/llm-lab/claim_workflow.jsonl。沿用 ~/llm-lab/claim_retrieve/ 的冻结语料和第 1 周准则。不要写进六个旧作业目录，也不要去做 FastAPI 服务。",
++        "inputs": "第 2 周的冻结语料与检索结果（或对同一语料重跑一次检索）；第 1 周的标注准则。查询仍是技术声明，不要实时联网。",
++        "outputs": "每条样本的固定轨迹：检索到的文档、读过的段落、标签、可定位引用、错误类型（检索未命中／证据不足／过期或冲突／判定问题）。至少一条证据不足，至少一条过期或冲突。"
++      },
++      "materials": [
++        {
++          "role": "required",
++          "chapterId": "rag-engineering",
++          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
++          "label": "28.8 检索失败还是判定失败"
++        },
++        {
++          "role": "required",
++          "chapterId": "rag-engineering",
++          "section": "28.10 失败案例：四类，各有各的修法",
++          "label": "28.10 失败类型分开修"
++        },
++        {
++          "role": "required",
++          "chapterId": "llm-eval",
++          "section": "23.17 Failure Case Analysis：分数之外",
++          "label": "23.17 失败样本分类"
++        },
++        {
++          "role": "check-after",
++          "chapterId": "llm-eval",
++          "section": "23.13 Contamination：与数据管线闭环",
++          "label": "23.13 数据泄漏与混集（写完后再对照）"
++        },
++        {
++          "role": "reference",
++          "chapterId": "capstone-rag",
++          "section": "29.2 Pipeline 架构与实测数字",
++          "label": "29.2 管线顺序（对照用，不是本周服务作业）"
++        },
++        {
++          "role": "reference",
++          "chapterId": "capstone-rag",
++          "section": "29.1 从「跑通检索」到「能对外服务」",
++          "label": "29.1 服务化原理（可开始读，本周不交服务）"
++        },
++        {
++          "role": "reference",
++          "href": "https://github.com/datawhalechina/hello-agents",
++          "external": true,
++          "label": "Hello-Agents（可读循环主题，本周不实现 Agent）"
++        }
++      ],
++      "steps": [
++        {
++          "title": "先读工作流所需教材",
++          "body": "打开 28.8、28.10、23.17。先搞清检索命中、阅读之后仍不足、以及胡编之间的差别。第 29 章可以对照管线顺序，但本周不要改去做 FastAPI 服务。"
++        },
++        {
++          "title": "固定三步顺序",
++          "body": "对每条声明只按检索 → 阅读 → 判定走。先留下检索到的文档 id，再摘出你真正读过的句子，最后才写标签。不要跳过阅读，也不要让模型自己决定要不要再搜。"
++        },
++        {
++          "title": "沿用准则并给出引用",
++          "body": "判定必须沿用第 1 周的支持／不支持／证据不足准则，需要改准则时记下版本。每条给出可定位引用（文件名 + 句子或行号）。至少一条判为证据不足。"
++        },
++        {
++          "title": "分开记失败，处理过期和冲突",
++          "body": "检索没找到、找到了但不能支持、版本过期、两段证据冲突，要分开记。至少构造一条过期或冲突样本，说明准则如何处理，而不是硬判对或错。"
++        },
++        {
++          "title": "卡住时可以分层求助",
++          "body": "先留下一条完整轨迹。卡住时请人解释失败该记在哪一步；仍卡住再对照 28.10 的类型。合上参考后换两条声明重走三步。"
++        },
++        {
++          "title": "用一个小变式检查能否迁移",
++          "body": "任选一项即可，不是额外门槛：把检索 k 缩小到 1，看证据不足是否增加；或者故意加入一段过期 README，看冲突规则会不会被触发。"
++        },
++        {
++          "title": "对照而不是改去做 Agent",
++          "body": "Hello-Agents 和第 29 章只说明以后会碰到循环与服务。本周不要实现 Agent 循环、MCP 或 rag-service。也不要把自写轨迹混进 CHEF 冒充官方分数。"
++        }
++      ],
++      "criteria": [
++        {
++          "id": "fixed-pipeline",
++          "label": "固定三步顺序",
++          "required": true,
++          "conceptId": "retrieve-read-judge",
++          "text": "每条样本能看出先检索、再阅读、再判定。没有跳过阅读，也没有让模型自选下一步工具。本周不写 Agent。"
++        },
++        {
++          "id": "cite-and-judge",
++          "label": "判定与可定位引用",
++          "required": true,
++          "conceptId": "citation-locate",
++          "text": "沿用第 1 周准则给出标签，并能指出引用位置。至少一条证据不足。不是自动评分。"
++        },
++        {
++          "id": "split-stale",
++          "label": "失败分类与过期冲突",
++          "required": true,
++          "conceptId": "stale-conflict",
++          "text": "检索未命中与判定问题分开记。至少一条过期或冲突证据，并能说明准则如何处理。"
++        },
++        {
++          "id": "service-reading",
++          "label": "服务化选读",
++          "required": false,
++          "conceptId": "retrieve-read-judge",
++          "text": "拓展：开始读第 29 章管线或超时原理。未完成不阻挡本周核心任务，本周也不要求写出 FastAPI 服务或 Agent。"
++        }
++      ]
+     }
+   ]
+ }
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index b8cb446..94dee97 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -1,6 +1,6 @@
+ # 分阶段实施方案
+ 
+-需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。阶段 2 已落地。阶段 3 已完成。阶段 3b 已完成。阶段 4-1 已通过。阶段 4 整段尚未完成。** `main` 推送会触发 GitHub Pages；**未运行** `tools/publish.sh` 时自有服务器不会更新。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 5。未明确要求时不要再次推送或发布。
++需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。阶段 2 已落地。阶段 3 已完成。阶段 3b 已完成。阶段 4-1 已通过。阶段 4 已写入检索与固定工作流。阶段 4 整段尚未完成。** `main` 推送会触发 GitHub Pages；**未运行** `tools/publish.sh` 时自有服务器不会更新。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 5。未明确要求时不要再次推送或发布。
+ 
+ 学习机制分三层，**不要并进阶段 1**：
+ 
+@@ -164,9 +164,13 @@
+ 
+ **验证：** 主线当前阶段可手动切到核验助手；默认首页仍是 Attention；核验助手第一条练习指向真实教材小节；92 项与四个机制参考仓库仍只在文档中出现。未核验的 Atlas 机制继续按本站设计，不引入其代码。
+ 
+-**本步（4-1）不做：** 一次写完第 3–6 月全部周任务；检索作业；Agent 循环；MCP。后续步骤仍按「先判定、再检索、再 Agent」加入。
++**本轮（阶段 4-2 固定语料检索 + 检索—阅读—判定）：** 阶段 4-1 已通过。本轮写入核验助手第 2 周「在冻结语料里检索证据，对照两种方法」，以及第 3 周「按固定顺序做检索、阅读和判定」。默认当前练习仍是实验室 Attention。点周只更换练习说明，不把前面的周标成完成。第 2 周把检索与判定拆开评，检索命中不是结论正确。第 3 周沿用第 1 周准则，引用可定位，过期或冲突分开处理；不让模型自选下一步工具。不写 Agent 循环、MCP 或 FastAPI 服务作业。不把自写样本混进 CHEF 冒充官方分数。不拷贝 rag-service / Hello-Agents / mini-swe-agent 代码进主线。沿用已验收记录与复习规则。完成第 3 周不自动打开 Agent。不开始阶段 5。**阶段 4 整段尚未完成。** 第 0／24 章遗留修改仍单独处理。
+ 
+-**本阶段仍不做：** 92 项选修库 UI；拷贝 Hello-Agents / mini-swe-agent / CHEF 代码进主线；阶段 5。
++**验证：** 核验助手出现第 2、3 周按钮；第 2 周指向第 28 章真实小节；第 3 周指向 28.8／28.10／23.17；两种检索对照与固定三步都是必需项；精排与服务化是拓展。默认首页仍是 Attention。实验室记录不受核验助手换周影响。
++
++**本步（4-2）不做：** 一次写完第 3–6 月全部周任务；Agent 循环；MCP；FastAPI 服务作业。后续仍按「先判定、再检索、再 Agent」加入 Agent。
++
++**本阶段仍不做：** 92 项选修库 UI；拷贝 Hello-Agents / mini-swe-agent / CHEF / rag-service 代码进主线；阶段 5。
+ 
+ ## 阶段 5 — 专项实验与物理删除
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index 8df176d..3c64da1 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -231,7 +231,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入并通过，匹配 `conceptIds` 和 `criteria[].conceptId`。阶段 3b 已完成。阶段 4-1 已通过：可手动切到核验助手，并给出第一条「给定证据判定」练习。阶段 4 整段尚未完成。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入并通过，匹配 `conceptIds` 和 `criteria[].conceptId`。阶段 3b 已完成。阶段 4-1 已通过：可手动切到核验助手，并给出第一条「给定证据判定」练习。阶段 4-2 已写入固定语料检索与检索—阅读—判定工作流。阶段 4 整段尚未完成。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/pages.js b/js/pages.js
+index 9796870..e7eaa8b 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -344,7 +344,7 @@
+           (next
+             ? '<p><button class="btn primary" id="advanceTask" type="button">进入下一任务</button></p>' +
+               '<p class="page-note">需要你确认才会更换练习，不会自动跳转。</p>'
+-            : '<p class="page-note">这是本阶段最后一项练习。</p>') +
++            : '<p class="page-note">目前计划里这一阶段还没有下一项已写入的练习。不会自动打开 Agent 或新阶段。</p>') +
+           "</section>"
+         : "";
+       var criteriaOpen = !!(learning.passBlocked && learning.passBlocked()) ||
+diff --git a/tools/test-course.js b/tools/test-course.js
+index a20b721..b68d7a7 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -291,6 +291,8 @@ test('learning plan current task is executable Attention and points at real head
+   assert.equal(new Set(plan.tasks.map(item => item.id)).size, plan.tasks.length);
+   const labWeeks = plan.tasks.filter(item => item.stageId === 'lab').map(item => item.weekBudget).sort((a, b) => a - b);
+   assert.deepEqual(labWeeks, [1, 2, 3, 4, 5, 6, 7, 8]);
++  const claimWeeks = plan.tasks.filter(item => item.stageId === 'claim-agent').map(item => item.weekBudget).sort((a, b) => a - b);
++  assert.deepEqual(claimWeeks, [1, 2, 3]);
+   const claimTask = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
+   assert.ok(claimTask);
+   assert.equal(claimTask.stageId, 'claim-agent');
+@@ -307,6 +309,37 @@ test('learning plan current task is executable Attention and points at real head
+   const claimStretch = claimTask.criteria.find(item => item.id === 'agent-reading');
+   assert.equal(claimStretch.required, false);
+   assert.match(claimStretch.text, /不阻挡/);
++  const retrieveTask = plan.tasks.find(item => item.id === 'claim.retrieve.fixed-corpus');
++  assert.ok(retrieveTask);
++  assert.equal(retrieveTask.stageId, 'claim-agent');
++  assert.equal(retrieveTask.weekBudget, 2);
++  assert.match(retrieveTask.title, /在冻结语料里检索证据，对照两种方法/);
++  assert.match(retrieveTask.goal, /检索命中不是结论正确/);
++  assert.match(retrieveTask.goal, /Agent 循环/);
++  assert.match(retrieveTask.workspace.where, /rag-service/);
++  assert.match(retrieveTask.workspace.inputs, /不要用实时网页搜索/);
++  ['bm25-vs-dense', 'retrieval-metrics'].forEach(id => {
++    assert.ok(retrieveTask.conceptIds.includes(id), id);
++  });
++  assert.equal(retrieveTask.criteria.filter(item => item.required !== false).length, 3);
++  assert.equal(retrieveTask.criteria.find(item => item.id === 'rerank-read').required, false);
++  assert.ok(retrieveTask.materials.some(item => item.chapterId === 'rag-engineering' && item.section.startsWith('28.5')));
++  const workflowTask = plan.tasks.find(item => item.id === 'claim.workflow.retrieve-read-judge');
++  assert.ok(workflowTask);
++  assert.equal(workflowTask.stageId, 'claim-agent');
++  assert.equal(workflowTask.weekBudget, 3);
++  assert.match(workflowTask.title, /按固定顺序做检索、阅读和判定/);
++  assert.match(workflowTask.goal, /Agent 循环/);
++  assert.match(workflowTask.workspace.where, /FastAPI/);
++  ['retrieve-read-judge', 'citation-locate', 'stale-conflict'].forEach(id => {
++    assert.ok(workflowTask.conceptIds.includes(id), id);
++  });
++  assert.equal(workflowTask.criteria.filter(item => item.required !== false).length, 3);
++  assert.equal(workflowTask.criteria.find(item => item.id === 'service-reading').required, false);
++  assert.match(workflowTask.criteria.find(item => item.id === 'cite-and-judge').text, /第 1 周/);
++  assert.match(workflowTask.criteria.find(item => item.id === 'split-stale').text, /过期或冲突/);
++  assert.ok(workflowTask.materials.some(item => item.chapterId === 'rag-engineering' && item.section.startsWith('28.10')));
++  assert.ok(workflowTask.materials.some(item => item.chapterId === 'llm-eval' && item.section.startsWith('23.17')));
+   const conceptIds = new Set(plan.concepts.map(item => item.id));
+   plan.tasks.forEach(item => {
+     assert.ok(item.workspace && item.workspace.where && item.workspace.inputs && item.workspace.outputs, item.id);
+@@ -345,7 +378,7 @@ test('learning plan current task is executable Attention and points at real head
+   assert.match(week3Text, /不启用梯度累积/);
+   assert.match(week3Text, /下一 token|下一 token 标签/);
+   assert.doesNotMatch(week3Text, /细节放到下周|先用同一序列做 next-token/);
+-  const week2 = plan.tasks.find(item => item.weekBudget === 2);
++  const week2 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 2);
+   assert.match(week2.workspace.outputs, /\[B, T, V\]/);
+   assert.equal(week2.criteria.find(item => item.id === 'norm-rope-read').required, false);
+   const assembled = week2.criteria.find(item => item.id === 'assembled-causal');
+@@ -356,14 +389,14 @@ test('learning plan current task is executable Attention and points at real head
+   const week2Text = week2.steps.map(step => step.title + step.body).concat(week2.criteria.map(row => row.text)).join('\n');
+   assert.doesNotMatch(week2Text, /因果已在上周验|不要求本周再验因果|本周不用再验因果/);
+   assert.match(week2Text, /不必重写 Attention|不要求重写 Attention/);
+-  const week8 = plan.tasks.find(item => item.weekBudget === 8);
++  const week8 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 8);
+   assert.equal(week8.criteria.find(item => item.id === 'cache-speed').required, false);
+   const realAb = week8.criteria.find(item => item.id === 'real-ab-preds');
+   assert.equal(realAb.required, true);
+   assert.match(realAb.text, /真实/);
+   assert.match(realAb.text, /checkpoint/);
+   assert.match(realAb.text, /假输出/);
+-  const week7 = plan.tasks.find(item => item.weekBudget === 7);
++  const week7 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 7);
+   assert.match(week7.workspace.inputs, /假输出/);
+   assert.match(week7.goal, /第 8 周/);
+ });
+@@ -428,6 +461,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
+   assert.doesNotMatch(home, /project-start/);
+   assert.doesNotMatch(home, /projects\/(?:log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark)/);
+   assert.doesNotMatch(home, /给定声明和证据，只做判定/);
++  assert.doesNotMatch(home, /在冻结语料里检索证据/);
++  assert.doesNotMatch(home, /按固定顺序做检索、阅读和判定/);
+   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
+   assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
+   const retired = pages.projects();
+@@ -473,6 +508,9 @@ test('home can switch to the claim-agent stage without advancing the lab', () =>
+   assert.match(home, /23\.17/);
+   assert.match(home, /#\/llm-eval\?section=/);
+   assert.match(home, /data-stage="claim-agent"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-stage="claim-agent"/);
++  assert.match(home, /data-week="2"/);
++  assert.match(home, /data-week="3"/);
++  assert.match(home, /固定语料检索/);
+   assert.match(home, /拓展（不挡完成）/);
+   assert.match(home, /不写 Agent|不实现 Agent|不要改去做 Agent/);
+   assert.doesNotMatch(home, /手写因果多头注意力/);
+@@ -485,6 +523,37 @@ test('home can switch to the claim-agent stage without advancing the lab', () =>
+   assert.doesNotMatch(lab, /给定声明和证据，只做判定/);
+ });
+ 
++test('home can open claim-agent retrieval and the fixed workflow', () => {
++  const plan = require('../content/learning-plan.json');
++  const retrieve = loadPages(plan, null, { selectedTaskId: 'claim.retrieve.fixed-corpus' }).home(null);
++  assert.match(retrieve, /技术声明核验助手/);
++  assert.match(retrieve, /在冻结语料里检索证据，对照两种方法/);
++  assert.match(retrieve, /28\.5/);
++  assert.match(retrieve, /28\.8/);
++  assert.match(retrieve, /#\/rag-engineering\?section=/);
++  assert.match(retrieve, /检索命中不是结论正确/);
++  assert.match(retrieve, /data-week="2"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-week="2"/);
++  assert.match(retrieve, /拓展（不挡完成）/);
++  assert.doesNotMatch(retrieve, /手写因果多头注意力/);
++  assert.doesNotMatch(retrieve, /给定声明和证据，只做判定/);
++  assert.doesNotMatch(retrieve, /进入下一任务/);
++  assert.doesNotMatch(retrieve, /mini-swe-agent|Pydantic AI|Inspect AI/);
++  assert.doesNotMatch(retrieve, /taskId|criterionId|claim\.retrieve|<code>/);
++  const workflow = loadPages(plan, null, { selectedTaskId: 'claim.workflow.retrieve-read-judge' }).home(null);
++  assert.match(workflow, /按固定顺序做检索、阅读和判定/);
++  assert.match(workflow, /28\.10/);
++  assert.match(workflow, /23\.17/);
++  assert.match(workflow, /#\/rag-engineering\?section=/);
++  assert.match(workflow, /#\/llm-eval\?section=/);
++  assert.match(workflow, /不写 Agent|不实现 Agent|不要改去做 Agent|本周不写 Agent/);
++  assert.match(workflow, /data-week="3"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-week="3"/);
++  assert.doesNotMatch(workflow, /手写因果多头注意力/);
++  assert.doesNotMatch(workflow, /进入下一任务/);
++  assert.doesNotMatch(workflow, /mini-swe-agent|Pydantic AI/);
++  assert.match(workflow, /不要求写出 FastAPI|不要去做 FastAPI/);
++  assert.doesNotMatch(workflow, /taskId|criterionId|claim\.workflow|<code>/);
++});
++
+ test('phase 3 design docs keep completion rules after the record layer', () => {
+   const os = fs.readFileSync(path.resolve(__dirname, '..', 'docs/PERSONAL_LEARNING_OS.md'), 'utf8');
+   const year = fs.readFileSync(path.resolve(__dirname, '..', 'docs/LEARNING_PLAN.md'), 'utf8');
+@@ -532,10 +601,13 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
+   assert.doesNotMatch(impl, /3b 整段尚未收尾/);
+   assert.match(impl, /4-1/);
+   assert.match(impl, /阶段 4-1 已通过/);
+-  assert.match(impl, /本步（4-1）不做/);
++  assert.match(impl, /4-2/);
++  assert.match(impl, /本步（4-2）不做/);
++  assert.match(os, /阶段 4-2 已写入/);
+   assert.match(impl, /阶段 4 整段尚未完成/);
+   assert.match(impl, /不开始阶段 5/);
+   assert.doesNotMatch(impl, /本阶段仍不做：.*检索作业/);
++  assert.doesNotMatch(impl, /本步（4-2）不做：.*检索作业/);
+   assert.doesNotMatch(impl, /不要自动进入阶段 4/);
+   assert.doesNotMatch(impl, /不开始 3b-4/);
+ });
+@@ -843,6 +915,53 @@ test('home stage picker opens the claim-agent exercise and can return to lab', a
+   assert.doesNotMatch(app.text(), /给定声明和证据，只做判定/);
+ });
+ 
++test('claim-agent week picker opens retrieval then the fixed workflow', async () => {
++  const week2 = 'lab.decoder.min-lm';
++  const app = harness.bootApp({
++    hash: '#/',
++    storage: {
++      'llm-course-current-task': 'lab.attention.causal-mha',
++      [learningModule.KEY]: JSON.stringify({
++        version: 1,
++        criteria: {
++          [week2 + '::norm-rope-read']: {
++            current: { result: 'user_passed', source: 'user_reported', evidence: '看过 10.4', at: 1 },
++            history: []
++          }
++        },
++        concepts: {},
++        reviews: {}
++      })
++    }
++  });
++  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
++  app.content.querySelector('[data-stage="claim-agent"]').click();
++  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
++  assert.ok(app.content.querySelector('[data-week="2"]'));
++  assert.ok(app.content.querySelector('[data-week="3"]'));
++  app.content.querySelector('[data-week="2"]').click();
++  await harness.waitFor(() => /在冻结语料里检索证据/.test(app.text()));
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.retrieve.fixed-corpus');
++  assert.match(app.text(), /28\.5/);
++  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
++  assert.doesNotMatch(app.text(), /进入下一任务/);
++  app.content.querySelector('[data-week="3"]').click();
++  await harness.waitFor(() => /按固定顺序做检索、阅读和判定/.test(app.text()));
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.workflow.retrieve-read-judge');
++  assert.match(app.text(), /28\.10/);
++  assert.doesNotMatch(app.text(), /进入下一任务/);
++  assert.doesNotMatch(app.text(), /mini-swe-agent|Pydantic AI/);
++  app.content.querySelector('[data-week="1"]').click();
++  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
++  app.content.querySelector('[data-stage="lab"]').click();
++  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
++  app.content.querySelector('[data-week="2"]').click();
++  await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
++  assert.equal(app.content.querySelector('textarea[data-evidence="norm-rope-read"]').value, '看过 10.4');
++  const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
++  assert.equal(still.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
++});
++
+ test('home due queue stays off the current exercise and can save a review', async () => {
+   const later = Date.now() + 20 * 24 * 60 * 60 * 1000;
+   const week1 = 'lab.attention.causal-mha';
+@@ -1154,8 +1273,15 @@ test('learning completes a task only when every required item is currently user-
+   const storage = memoryStorage();
+   const learning = learningModule.create({ storage });
+   learning.load();
+-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
+-  const week2 = plan.tasks.find(item => item.weekBudget === 2);
++  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
++  const week2 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 2);
++  const claim1 = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
++  const claim2 = plan.tasks.find(item => item.id === 'claim.retrieve.fixed-corpus');
++  const claim3 = plan.tasks.find(item => item.id === 'claim.workflow.retrieve-read-judge');
++  assert.equal(learning.nextTask(plan, claim1).id, claim2.id);
++  assert.equal(learning.nextTask(plan, claim2).id, claim3.id);
++  assert.equal(learning.nextTask(plan, claim3), null);
++  assert.equal(learning.nextTask(plan, week1).id, week2.id);
+   assert.equal(learning.isTaskComplete(week1), false);
+   assert.equal(learning.recordCriterion(week1.id, 'numeric', 'user_passed', ''), false);
+   assert.equal(learning.currentResult(week1.id, 'numeric'), 'unchecked');
+@@ -1209,6 +1335,15 @@ test('learning completes a task only when every required item is currently user-
+   assert.match(done, /数值对照失败，位置 attn.py/);
+   assert.doesNotMatch(done, /自动测试通过/);
+   assert.doesNotMatch(done, /taskId|criterionId|lab\.attention|<code>/);
++
++  ['fixed-pipeline', 'cite-and-judge', 'split-stale'].forEach(id => {
++    learning.recordCriterion(claim3.id, id, 'user_passed', '依据 ' + id);
++  });
++  const claimDone = loadPages(plan, null, { learning, selectedTaskId: claim3.id }).home(null);
++  assert.match(claimDone, /目前计划里这一阶段还没有下一项已写入的练习/);
++  assert.match(claimDone, /不会自动打开 Agent/);
++  assert.doesNotMatch(claimDone, /进入下一任务/);
++  assert.doesNotMatch(claimDone, /mini-swe-agent/);
+ });
+ 
+ test('home record forms keep failures, isolate progress, and wait for confirm-next', async () => {
+@@ -1373,7 +1508,7 @@ test('review state is separate from task evidence and only lists due concepts',
+   assert.deepEqual(day, [1, 3, 7, 21]);
+   const t0 = 1700000000000;
+   const DAY = 24 * 60 * 60 * 1000;
+-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
++  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
+   const storage = memoryStorage({
+     'llm-course-current-task': week1.id,
+     [learningModule.KEY]: JSON.stringify({
+@@ -1454,7 +1589,7 @@ test('the same review form still advances when a later round is due', () => {
+   const plan = require('../content/learning-plan.json');
+   const t0 = 1700000000000;
+   const DAY = 24 * 60 * 60 * 1000;
+-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
++  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
+   const storage = memoryStorage({
+     'llm-course-current-task': week1.id,
+     [learningModule.KEY]: JSON.stringify({
