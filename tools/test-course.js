@@ -602,12 +602,17 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /4-1/);
   assert.match(impl, /阶段 4-1 已通过/);
   assert.match(impl, /4-2/);
+  assert.match(impl, /阶段 4-2 已通过/);
   assert.match(impl, /本步（4-2）不做/);
-  assert.match(os, /阶段 4-2 已写入/);
+  assert.match(impl, /进入 Agent 前需拍板/);
+  assert.match(impl, /可重复运行的工作流基线/);
+  assert.match(os, /阶段 4-2 已通过/);
+  assert.match(os, /可重复运行的工作流基线/);
   assert.match(impl, /阶段 4 整段尚未完成/);
   assert.match(impl, /不开始阶段 5/);
   assert.doesNotMatch(impl, /本阶段仍不做：.*检索作业/);
   assert.doesNotMatch(impl, /本步（4-2）不做：.*检索作业/);
+  assert.doesNotMatch(impl, /不要自动进入 Agent 或阶段 4/);
   assert.doesNotMatch(impl, /不要自动进入阶段 4/);
   assert.doesNotMatch(impl, /不开始 3b-4/);
 });
