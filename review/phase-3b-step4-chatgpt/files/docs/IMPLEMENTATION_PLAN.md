@@ -1,0 +1,186 @@
+# 分阶段实施方案
+
+需求见 [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)（含学习机制）。一年计划见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。本文件只指导工程顺序。**阶段 0 已完成。阶段 1 已在仓库落地。阶段 2 已落地。阶段 3 已完成。** `main` 推送会触发 GitHub Pages；**未运行** `tools/publish.sh` 时自有服务器不会更新。不要把这两件事写成同一句「没有发布」。不要自动进入阶段 4。未明确要求时不要再次推送或发布。
+
+学习机制分三层，**不要并进阶段 1**：
+
+| 机制层 | 做什么 | 落在哪一工程阶段 |
+|---|---|---|
+| A 展示 | 当前主要任务、补基础、教材、通过条件、知识点名称 | 阶段 1 |
+| B 记录 | 四个独立维度、验收结果（未检查／未通过／用户自报通过）、来源（user_reported / auto）、卡点；任务完成只看全部必需验收项；概念记录可复用但不是第二套门槛 | 阶段 3（与前八周数据一起） |
+| C 复习 | 解释/回忆/复写队列；默认间隔 1/3/7/21 天可调；失败记薄弱点并重练，不改写旧证据 | 阶段 3 完成之后、阶段 4 之前 |
+
+## 生成文件（全程）
+
+改源文件后重新生成，禁止手改：
+
+- `tools/build-static.js` → `chapters/*.html`、`sitemap.xml`、`robots.txt`、`llms.txt`、`index.html` 中的静态目录区块
+- `tools/build-dist.js` → `dist/`（gitignore）
+
+发布脚本 `tools/publish.sh` 只在明确要求时运行。
+
+## 阶段 0 — 文档与方案（已完成）
+
+**范围：** 仓库约定、计划归档、学习机制设计（展示 / 记录 / 复习分层）。
+
+**写入：** [`../AGENTS.md`](../AGENTS.md)、[`LEARNING_PLAN.md`](LEARNING_PLAN.md)、[`research/PROJECT_RESEARCH.md`](research/PROJECT_RESEARCH.md)、[`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md)、本文件。
+
+**完成条件：** 上述文件在仓库中；OS 含知识点—任务、证据来源、Attention 示例与机制三层。阶段 1 开始前已纠正机制来源归属，并把 taskId+criterionId 数据边界写入约定。
+
+## 旧项目审计（执行删除前只作记录）
+
+不要整体搬到 `legacy/`。不要为了留代码让新主线依赖六个作业。物理删除放在阶段 5，且仅在引用清零之后。
+
+### 逐项
+
+| 项目 | 删除（作为作业） | 值得并入新主线的部分 | 受影响的章节、链接、测试、CI、构建 |
+|---|---|---|---|
+| **log-analyzer** | starter、41 测、主导航卡片、把「训练日志 CLI」当第一份作业 | CLI / pytest / parser→stats 分层，可改写成「分析自己的训练或 Agent 日志」小练习，**不是**独立项目 | `content/25-python-engineering.md` 与 `content/references/25-python-engineering.md`；`validate-guided.js`（10 步 / log-analyzer）；CI `python-unit` 与 `guided-starters` |
+| **hf-mini-lab** | 平行作业卡、38 测 Guided Build 作为主线必做 | chat template、left padding、response-only mask、LoRA save/load：作为第 6–8 周 SFT/HF **参考片段**，不是项目卡 | `content/26-huggingface.md`、huggingface 参考手册；CI hf starter 红灯与 `guided-hf-full` / integration |
+| **llm-eval** | 79 步作业卡、把完整 harness 当 Capstone 1 必修 | scorer、逐样本记录、异常与零分分开：服务第 7 周 C3/XCOPA **简化** evaluator | `content/27-capstone-eval.md`；`validate-jobs.js` 测试计数；算法线把评测放在 RL 之后的 `tracks.json` |
+| **rag-service** | 作为第二份简历项目、22 条查询作业当主线 | 切分 / BM25 / 精排 / 引用思路留给第 3–4 月核验助手；**按同一核验任务重做**，不沿用该仓库当主线依赖 | `content/28-rag-engineering.md`、`29-capstone-rag.md`；CI `docker-build` 与 integration |
+| **sft-lora** | 独立 Capstone 卡、48+12 指令作业当主线完成物 | held-out、response-only、experiment.md 协议并入第 6–8 周基础 SFT 和第 7 月专项 | `content/30-capstone-sft.md`；与 llm-eval 的交叉引用 |
+| **inference-benchmark** | 独立作业与「完成推理基准」进度 | profiler / 计时口径、`NOT EXECUTED ON CUDA` 纪律留给 Infra 专项 | `content/31-capstone-infra.md`；CI `python-unit` |
+
+### 共同波及（阶段 1–2 就会碰到，阶段 5 才删目录）
+
+- [`../README.md`](../README.md)：六项目表、Learn/Guided/Reference 作为作业分层的表述
+- [`../content/tracks.json`](../content/tracks.json) 的 `tracks` 与 `projects`
+- [`../content/projects.json`](../content/projects.json)
+- [`../js/pages.js`](../js/pages.js) 首页「实战项目」、`projectPage`；[`../index.html`](../index.html) 顶栏 `#/projects` 与静态目录文案
+- [`../js/app.js`](../js/app.js) `path === "projects"`
+- `content/00-map.md`、`content/24-job-ready.md`
+- [`../tools/validate-portfolio.js`](../tools/validate-portfolio.js)、[`../tools/validate-jobs.js`](../tools/validate-jobs.js)、[`../tools/validate-guided.js`](../tools/validate-guided.js)
+- [`../projects/README.md`](../projects/README.md)
+- [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) 的 python-unit matrix、guided-starters、docker-build、integration、guided-hf-full
+
+`tools/build-static.js` / `build-dist.js` 本身不绑定项目名；章节 Markdown 改完后必须重跑构建，否则 `chapters/*.html` 仍指向旧路径。
+
+## 阶段 1 — 展示当前任务 + 旧项目退出主入口（已完成）
+
+**目标：** 能看见当前任务「小模型学习实验室—Attention」；六个旧项目退出主要学习入口。只做机制层 A（展示）。物理目录仍留着。Attention 页必须可执行：写在哪里、输入输出、先单头后多头、如何检查，并链接到真实教材小节；不代写核心算法。
+
+**范围：**
+
+- 新增发布数据 `content/learning-plan.json`：同一主线的三个阶段、周预算、任务 id、知识点 id、criterion id、标题、教材链接、实现任务、明文通过条件。首条任务固定为第 1 周 Attention。计划 JSON 写入数据边界约定，本阶段不实现证据系统。
+- 首页改成「我的学习」：**一个**主要任务 + 必要补基础链接；当前阶段文案是「同一主线的阶段」，不是第三条平行路线。
+- 顶栏去掉「实战项目」；`#/projects` 保留为「已退出主线」说明页，避免旧书签死链。首页去掉六张项目卡和「三条路线选一条」作为唯一开始方式。
+- 日历不改变当前任务。本阶段当前任务写死为 Attention。
+- 继续加载旧 `llm-course-progress` 只用于已读显示。禁止把 `read: true` 写成实现/验证/解释。
+- 同步更新本阶段涉及的 [`../DESIGN.md`](../DESIGN.md) 与 [`../README.md`](../README.md)。
+
+**影响文件：** `content/learning-plan.json`、`js/pages.js`、`js/app.js`、`js/course.js`、`index.html` 顶栏、`css/course.css`、`tools/test-course.js`、`tools/build-static.js` 静态目录文案。改完后跑 `build-static.js`。
+
+**必要验证：**
+
+- 本地打开主入口：当前任务为 Attention / 小模型学习实验室；能看到教材、实现步骤、通过条件、知识点名称；教材链接落到真实小节。
+- 主导航与主线任务区没有六个旧项目名，没有「N 个可运行项目」完成条。`#/projects` 仍可打开。
+- 刷新后已读章节仍显示已读，且没有被标成已掌握。
+- 不出现证据表单、复习到期列表、或「自动测试通过」文案。
+- 手机与桌面布局可读。
+- `learning-plan.json` 失败时首页可重试，目录与搜索仍可用；计划稍后返回时，已打开的章节/目录/参考手册不重绘。
+- `node --test tools/test-course.js`；按改动范围跑现有 validator（本阶段仍留下 `projects/` 目录，不要为了过门禁把新主线接回六项目）。
+
+**完成条件：** [`PERSONAL_LEARNING_OS.md`](PERSONAL_LEARNING_OS.md) 第 8 节验收满足。不删 `projects/`。完成后停止，不进入阶段 2。GitHub Pages 可由 `main` 推送自动部署；自有服务器仍只在明确运行 `tools/publish.sh` 时更新。
+
+**本阶段明确不做：** 机制层 B/C；改写 25/26/27 的全部 Guided 步骤；新 Attention 练习仓库；启用 92 项选修库 UI；拷贝 Repo-Mastery / Atlas / Study Agent / continuous-learning 的代码。未核验的 Atlas 机制按本站设计实现，不阻塞本阶段。
+
+## 阶段 2 — 切断指向旧目录的操作指南（已完成）
+
+**范围：** 第 25 / 26 / 27 章及两份参考手册：改写、迁移或移除 `:::lab` / `:::step` 中 `cd projects/<旧目录>`。第 28–31 章去掉「配套项目 = 主线作业」的入口，保留原理。更新 `validate-guided.js`、`validate-jobs.js`、`validate-portfolio.js`、CI，使门禁不再把六个作业当必修。`projects/` 目录可暂留，避免半删导致 CI 与链接不一致。
+
+**本轮实际完成：**
+
+- 第 25–27 章删除 Guided Build 作业块；改为原理 + 历史实测 + 可选参考（标明非当前作业）。
+- 第 0、24、28–31 章与两份参考手册不再把六个旧项目当必修 Checkpoint / Capstone。
+- `tracks.json` 降为查阅分组文案；`projects.json` 标明 archived；README / `projects/README.md` / `#/projects` 说明页统一「可选参考，非当前作业」。
+- CI 去掉 `guided-starters` 与 `guided-hf-full`。`python-unit` 与 `docker-build` 仅核对残留代码，直到阶段 5。
+- 教材构建产物由 `node tools/build-static.js` 再生，未手改 `chapters/`。
+
+**验证：** 全文搜索六个路径与 starter；主线 Markdown 无「按此完成作业」指令；残留链接标明非当前作业；CI 不再要求 starter 红灯矩阵。
+
+**完成条件：** 按文档操作不会走进即将删除的作业流程。完成后停止，不进入阶段 3。
+
+## 阶段 3 — 前八周任务 + 状态、证据与卡点（机制层 B）
+
+**进入本阶段前：** [issue #1](https://github.com/xhr0417/llm-course/issues/1) 的 7.6 对称性口径与 README Pages 入口；[issue #2](https://github.com/xhr0417/llm-course/issues/2) 不再把共享 Q/K 写成无法计算；[issue #3](https://github.com/xhr0417/llm-course/issues/3) 的学习设计（验收／失败、求助、必需／拓展、八周难度）。未完成这些不要开始实现本阶段功能。
+
+**本阶段实际完成：** 教材任务上下文导航与首页信息分层已通过终审。跨章搜索专项已封板。前八周任务写入与最小记录层已通过验收（含组装后整模型因果性、next-token 对齐、真实 A/B 预测）。`evidenceSystemImplemented` 已为 `true`。第三步已通过：从练习进入教材后显示当前任务、返回当前练习、下一相关小节；首页把当前目标和主操作放在前面，详细验收、历史与参考按需展开；章内目录与搜索定位同步更新任务条；吸顶条按实测高度给标题留白；同章搜索原地定位；跨章搜索改路由后再定位，搜索结果链接带目标小节。沿用已验收记录规则：完成只看全部必需项的当前用户自报通过且每条有简短依据；「保存本条记录」；有变化才写入历史，完全相同不重复追加；无依据不能算通过。issue #3 / issue #4 的设计与任务文案仍有效。第 0／24 章遗留修改仍单独处理。终审未独立重跑 375／768／1280，不阻挡第三步收尾。阶段 3 第一步、第二步、第三步均已通过；跨章搜索专项已封板。**阶段 3 已完成。**
+
+**开工后的实现顺序（可验收小步，不扩大功能）：**
+
+1. 前八周任务数据、真实教材小节链接、手动选择当前任务。
+2. 最小验收记录、证据、卡点与本地保存。
+3. 教材任务上下文导航，以及首页信息分层。
+
+第 3.7 节求助规范、小变式、短记录说明**写入任务文案**，不另开工程阶段、不建题库或评分引擎。学习代码继续在站外空文件／学习目录中完成，网站负责说明和记录。
+
+**范围：** 把 [`LEARNING_PLAN.md`](LEARNING_PLAN.md) 第 5 节八周写入计划 JSON，并标明每条验收的必需／拓展。链到现有章：第 7（Attention）、9–13（GPT / 现代架构 / PyTorch / 手写组件与训练）、21（SFT 概念）、23（评测）、必要时 26 的 API 说明作参考。Python / PyTorch 列为并行补充，不挡 Attention。第 6–7 周写入基础 SFT 与简化评测。第 13 章 RL 标选修。第 1 周只把 causal single-head → multi-head 作为硬完成标准；第 2 周核心是简单固定结构的最小 LM forward，并检查组装后整模型因果性；第 3 周从第一次更新起使用正确 next-token 对齐，再打通 loss／backward／参数更新，然后逐个换现代组件。**GQA 为拓展项**，未完成不阻挡核心任务。第 8 周用 A/B 真实权重取得预测再交给已核对的 scorer。不把前八周扩到 DDP、FlashAttention 或 GRPO。
+
+同一知识点 id 被多周任务引用（例如 `tensor-shape` 出现在 Attention 与 decoder 任务中），**概念记录共用**，但不是第二套推进门槛。任务完成只依据该任务的**全部必需验收项**（从任务定义读取，不硬编码条数）。任务验收证据必须带 `taskId + criterionId`，可选 `conceptId`。过去的概念证据不得自动完成新任务的 criterion。
+
+机制层 B：新存储键（例如 `llm-course-learning`）保存知识点的四个独立维度、任务验收结果、卡点。每条验收区分结果（未检查／未通过／用户自报通过）与来源（`user_reported` / `auto`）。`user_reported` 表示来源，不表示成功。本阶段没有自动脚本则只允许 `user_reported`，不得显示成自动验证通过。失败后追加新结果并保留原错误；完成看**当前**结果。未通过验收不锁教材。全部必需项当前通过后，提示用户确认进入下一任务，不随日历或勾选自动推进。允许手动改当前阶段。短记录默认：做了什么、检查结果及代码位置、下一步。
+
+进入任务教材时增加较高优先级的任务上下文（返回当前练习、材料在任务中的位置、下一个必要小节、写完后对照哪一节）；全书上一课/下一课降为次级，不删 32 章手册。首页突出下一动作，详细 workspace / steps / criteria 可分层或折叠，但不要删掉新手所需说明。
+
+**验证：** 「我的学习」能从第 1 周走到第 8 周；未完成时当前主要任务不变、不随日历跳周；无预填；同一知识点在两个任务页看到同一套四个独立维度；失败记录保存后任务仍未完成，修正后可追加用户自报通过；概念历史不能自动完成新任务，也不要求再勾概念才能推进；GQA 等拓展未完成不挡核心任务；网站未执行测试时界面不显示自动验证通过；保存失败明确提示。刷新不丢新记录，旧 `llm-course-progress` 已读不变。从当前练习打开必要教材后，章节页显示当前练习、返回当前练习，以及该小节的下一相关小节；全书上一课/下一课仍在。章内目录或搜索定位后任务条跟着当前小节更新（7.14 为必要教材 6/6、下一相关小节 7.12；非任务小节不显示错误的下一步）；目标标题按实测吸顶高度留白，在 375／768／1280 下不被挡住。首页搜索与从另一章点搜索结果都能进入目标章并落到目标小节；搜索结果自身的链接也带目标小节，新标签打开时不会只停在章首。首页当前目标与主按钮保持可见，详细验收、历史与参考在折叠块中仍可展开，记录规则不变。
+
+**完成条件：** 前八周每条都有教材 + 实现 + 验收（含必需／拓展）；记录层可用；不指向已退出主线的六作业。
+
+**本阶段仍不做：** 复习队列（机制层 C）；自动掌握度 / 自动评分；扩 92 项项目清单；GraphRAG / 多 Agent / GUI Agent；重新设计核验 Agent 题目；引入 continuous-learning 等参考仓库的整套代码；删除 `projects/`。
+
+第 0／24 章遗留修改单独处理，不假定已提交。
+
+## 阶段 3b — 复习队列（机制层 C）
+
+排在阶段 3 之后、阶段 4 之前。到期复习：解释、回忆或复写。默认间隔 1/3/7/21 天，可改（这是本站默认，不是 study-agent 的 1→3→7→16→35）。失败则记录薄弱知识点并建议重练，**保留**原实现/验证证据。复习入口不得打开新的主线任务（对齐 Repo-Mastery README 所写 `/review` 只刷到期项——此处仅作行为参考，不引入其引擎）。
+
+**本步实际完成（阶段 3b-1 数据模型，已封板）：** 阶段 3 已完成。复习按 concept 存储，不复制 task；默认间隔 1/3/7/21 天；只把已到期项算进队列；三种形式为解释、闭卷回忆、复写核心函数；结果只有通过／未通过。失败记下薄弱知识点。是否新一轮只看当前时间是否已到 `dueAt`，不把相同形式与结果当成重复提交。未到期或刚提交后立即再记不得推进。复习不得删除或改写原实现/验证记录，不得把历史 `user_reported` 改成失败，不得改首页当前任务，不得因到期打开新的主线任务。
+
+**本步实际完成（阶段 3b-2 到期队列展示，已通过）：** 3b-1 已封板。首页在当前练习主按钮之后列出已经到期的知识点名称；未到期不出现。相关验收用户自报通过后才安排第一次到期。到期列表不更换当前练习。对照 [`058548a`](https://github.com/xhr0417/llm-course/commit/058548a)，补审 CI [35831271837](https://github.com/xhr0417/llm-course/actions/runs/35831271837) success。
+
+**本步实际完成（阶段 3b-3 通过／失败记录，已通过）：** 到期项可保存复习形式（解释／闭卷回忆／复写）和通过／未通过；点「保存本次复习」才写入。未选形式或结果、以及未到期时，明确提示没有写入，不把 `recordReview` 的 true 当成保存成功。保存后该项离开到期列表。立即重复提交不再次推进。失败记下薄弱点，不删除或改写原实现/验证记录，不把历史 `user_reported` 改成失败，不改首页当前任务。证据提交 [`f86f86c`](https://github.com/xhr0417/llm-course/commit/f86f86c)，CI [35830406090](https://github.com/xhr0417/llm-course/actions/runs/35830406090) success。
+
+**本轮（阶段 3b-4 失败后重练入口）：** 3b-2、3b-3 均已通过。本轮只给失败记下的薄弱知识点提供重练入口：指向当前练习，或同一主线上更早、包含该知识点的更小任务。点了才会更换练习说明；不会按日历打开新的主线任务，也不会打开更晚的周。不删除或改写原实现/验证记录，不把历史 `user_reported` 改成失败，不改首页当前任务除非使用者点了更小任务。不做自动评分、LLM judge、SM-2、题库、streak、dashboard、通知。不开始阶段 4。**3b 整段尚未收尾。** 第 0／24 章遗留修改仍单独处理。
+
+**实现顺序：**
+
+1. 数据模型与到期计算。
+2. 到期队列展示。
+3. 通过／失败记录界面。
+4. 失败后重练入口。
+
+**验证：** 失败一次复习后，旧的 `user_reported` 实现记录仍在；首页主要任务不因复习失败被日历推进。3b-1 另验：未到期不进队列；通过后间隔按 1/3/7/21 前进并停在 21；相同形式连续通过也按新一轮推进；未到期或刚提交后立即再记不得推进；失败回到 1 天并记薄弱点；旧存储没有 `reviews` 仍能加载且任务证据不变。3b-2 另验：无到期项时首页不出现到期复习区；到期项显示知识点中文名；未到期概念不进该列表；列表在主按钮之后、详细折叠之前；当前练习文案不变。3b-3 已验：到期项可保存通过或未通过；保存成功后该项离开列表；未选形式/结果或未到期会提示没有写入；立即重复提交不再次推进；保存复习后任务证据、概念四维和当前任务不变。本轮另验：失败后出现重练入口；入口指向当前或更小任务，不指向更晚的周；未点击时当前任务不变；点更小任务只更换练习说明；原验收依据、失败历史和概念四维不变。
+
+**本阶段仍不做：** 自动评分、LLM judge、SM-2、题库、streak、dashboard、通知；阶段 4 核验助手。
+
+## 阶段 4 — 核验助手 / 单 Agent
+
+**范围：** 计划数据增加第 3–6 月任务。教材用第 23 / 28 章等；Hello-Agents 作主题阅读；CHEF 作任务设计参考。最小循环本人实现后再指向 mini-swe-agent。Pydantic AI / Inspect AI 仅在任务需要时引入。不为框架做主项目卡。不为 Study Agent 等机制仓库做项目卡。
+
+**验证：** 主线当前阶段可手动切到核验助手；92 项与四个机制参考仓库仍只在文档中出现。未核验的 Atlas 机制继续按本站设计，不引入其代码。
+
+## 阶段 5 — 专项实验与物理删除
+
+**范围：** 第 7 月起算法或 Infra 二选一加深。TRL 或 vLLM 按方向引入，仍不是新的主项目卡。引用清零后删除不再需要的 `projects/<六目录>` 代码、更新 README / sitemap 相关叙述、精简 CI。
+
+**验证：** `rg` 无失效 `projects/<已删>`；`build-static` + 全部门禁；抽查章节无死链。
+
+**完成条件：** 磁盘上只剩新主线仍在用的代码；没有为了过旧测试而复活作业项目。
+
+```mermaid
+flowchart LR
+  docs[阶段0_文档] --> p1[阶段1_展示Attention]
+  p1 --> p2[阶段2_切断旧作业入口]
+  p2 --> p3[阶段3_前八周与记录]
+  p3 --> p3b[阶段3b_复习队列]
+  p3b --> p4[阶段4_核验Agent]
+  p4 --> p5[阶段5_专项与物理删除]
+```
+
+## 仍需产品拍板（不阻塞阶段 1）
+
+1. 三条旧路线（`tracks.json`）是完全隐藏，还是继续作为「全部章节」之外的查阅分组？（阶段 1 选择：路由保留，降为查阅，不进主导航。）
+2. ~~`#/projects` 过渡期~~ **已定：** 说明页「已退出主线」，保留路由以免死链。
+3. Attention 的「自己实现」是只在站外空文件，还是阶段 3 再给仓库内最小练习目录（不是旧 six-project 结构）？（阶段 1 选择：只说明站外空文件。）
+4. 第 25 章 Python 是拆成嵌入主线的小任务，还是整章改为参考手册（与现有 `:::reference` 一致）？
