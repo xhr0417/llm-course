@@ -14,7 +14,8 @@
       failedHistory: function () { return []; },
       passBlocked: function () { return ""; },
       nextTask: function () { return null; },
-      dueReviews: function () { return []; }
+      dueReviews: function () { return []; },
+      weakConcepts: function () { return []; }
     };
     function chapter(id) { return chapters.find(function (item) { return item.id === id; }); }
     function referenceFor(chapterId) { return references.find(function (item) { return item.chapter === chapterId; }) || null; }
@@ -67,8 +68,9 @@
         }).join("") +
         '</div><p class="page-note">点某一周只更换练习说明。不会把前面的周标成完成，也不会按日期自动跳周。</p>';
     }
-    function fold(title, inner, open) {
-      return '<details class="home-fold"' + (open ? " open" : "") + "><summary>" + escape(title) +
+    function fold(title, inner, open, id) {
+      return '<details class="home-fold"' + (id ? ' id="' + escape(id) + '"' : "") +
+        (open ? " open" : "") + "><summary>" + escape(title) +
         '</summary><div class="fold-body">' + inner + "</div></details>";
     }
     function roleLabel(role) {
@@ -265,6 +267,43 @@
               "</li>";
           }).join("") + "</ul></section>";
       }
+      function retryTarget(conceptId) {
+        var currentWeek = task.weekBudget || 0;
+        var matches = (plan.tasks || []).filter(function (item) {
+          return item.stageId === task.stageId &&
+            (item.weekBudget || 0) <= currentWeek &&
+            (item.conceptIds || []).indexOf(conceptId) >= 0;
+        }).slice().sort(function (a, b) {
+          return (a.weekBudget || 0) - (b.weekBudget || 0);
+        });
+        if (!matches.length) return null;
+        var target = matches[0];
+        return { task: target, kind: target.id === task.id ? "current" : "smaller" };
+      }
+      function retryQueue() {
+        var ids = learning.weakConcepts ? learning.weakConcepts() : [];
+        var rows = [];
+        ids.forEach(function (id) {
+          var target = retryTarget(id);
+          if (!target) return;
+          var concept = conceptsById[id];
+          var name = concept && concept.name ? concept.name : "未命名概念";
+          var label = target.kind === "current"
+            ? "重练当前练习"
+            : "重练更小的任务：" + target.task.title;
+          var button = target.kind === "current"
+            ? '<button type="button" class="btn" data-retry="' + escape(id) +
+              '" data-retry-current="1">' + escape(label) + "</button>"
+            : '<button type="button" class="btn" data-retry="' + escape(id) +
+              '" data-week="' + String(target.task.weekBudget) + '">' + escape(label) + "</button>";
+          rows.push('<li><p class="review-name">' + escape(name) + "</p><p>" + button + "</p></li>");
+        });
+        if (!rows.length) return "";
+        return '<section class="task-panel review-retry" aria-label="建议重练">' +
+          '<span class="page-label">建议重练</span>' +
+          '<p class="page-note">失败后建议重练当前或更小的任务。点了才会更换练习说明。不会改原来的实现记录，也不会按日历打开新的主线任务。</p>' +
+          '<ul class="task-list">' + rows.join("") + "</ul></section>";
+      }
       var notes = fold("短记录",
         '<p class="page-note">默认只写三句：做了什么、检查结果及代码位置、下一步。来源是自己填写，不是本站跑过的自动检查。</p>' +
         '<label class="note-field">做了什么<textarea data-note="what" rows="3">' + escape(learning.note(task.id, "what")) + "</textarea></label>" +
@@ -301,6 +340,7 @@
         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
         '</section>' +
         dueQueue() +
+        retryQueue() +
         advance +
         fold("必要教材",
           '<ol class="task-list">' +
@@ -326,7 +366,8 @@
           "</ol>" +
           (stretchCriteria(task).length ? '<h3>拓展（不挡完成）</h3><ol class="task-list">' +
             stretchCriteria(task).map(function (item) { return criterionItem(item, true); }).join("") + "</ol>" : ""),
-          criteriaOpen) +
+          criteriaOpen,
+          "home-criteria") +
         fold("相关概念",
           '<ul class="concept-list">' + task.conceptIds.map(conceptRow).join("") + "</ul>") +
         notes +

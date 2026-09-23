@@ -23,9 +23,9 @@
 .resume-panel, .task-panel { padding: var(--space-8); background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius); }
 .resume-panel h2, .task-panel h2 { margin-top: var(--space-2); }
 .resume-panel p, .task-panel p { color: var(--text-soft); max-width: 38em; margin: var(--space-2) 0 var(--space-6); }
-.review-queue .task-list { list-style: none; padding-left: 0; }
-.review-queue .task-list li { display: block; margin: 0 0 var(--space-6); }
-.review-queue .review-name { margin: 0 0 var(--space-2); font-weight: 600; }
+.review-queue .task-list, .review-retry .task-list { list-style: none; padding-left: 0; }
+.review-queue .task-list li, .review-retry .task-list li { display: block; margin: 0 0 var(--space-6); }
+.review-queue .review-name, .review-retry .review-name { margin: 0 0 var(--space-2); font-weight: 600; }
 .review-record {
   margin: var(--space-3) 0 0;
   padding: 0;

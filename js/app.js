@@ -369,6 +369,14 @@
         saveReview(button.getAttribute("data-save-review"));
       });
     });
+    root.querySelectorAll("[data-retry-current]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var fold = byId("home-criteria");
+        if (!fold) return;
+        fold.open = true;
+        if (fold.scrollIntoView) fold.scrollIntoView({ block: "start" });
+      });
+    });
     root.querySelectorAll("input[data-concept]").forEach(function (input) {
       input.addEventListener("change", function () {
         learning.setConceptDim(input.getAttribute("data-concept"), input.getAttribute("data-dim"), input.checked);

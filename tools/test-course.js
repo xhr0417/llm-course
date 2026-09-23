@@ -481,11 +481,12 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(os, /只展示已到期项/);
   assert.match(impl, /3b-2/);
   assert.match(impl, /已封板/);
-  assert.match(impl, /仍待正式确认/);
+  assert.doesNotMatch(impl, /仍待正式确认/);
   assert.match(impl, /3b-3/);
   assert.match(impl, /已通过/);
+  assert.match(impl, /3b-4/);
   assert.match(impl, /3b 整段尚未收尾/);
-  assert.match(impl, /不开始 3b-4/);
+  assert.doesNotMatch(impl, /不开始 3b-4/);
 });
 
 test('home keeps the current goal visible and folds detailed checks', () => {
@@ -536,13 +537,18 @@ test('home lists due review concepts without replacing the current exercise', ()
   const none = loadPages(plan, null, { learning, now: t0 }).home(null);
   assert.match(none, /手写因果多头注意力/);
   assert.doesNotMatch(none, /到期复习/);
+  assert.match(none, /建议重练/);
+  assert.match(none, /data-retry="attention"/);
+  assert.match(none, /重练当前练习/);
   const home = loadPages(plan, null, { learning, now: t0 + DAY }).home(null);
   const primaryAt = home.indexOf('打开必要教材');
   const dueAt = home.indexOf('review-queue');
+  const retryAt = home.indexOf('review-retry');
   const foldAt = home.indexOf('class="home-fold"');
-  assert.ok(primaryAt >= 0 && dueAt > primaryAt && foldAt > dueAt);
+  assert.ok(primaryAt >= 0 && dueAt > primaryAt && retryAt > dueAt && foldAt > retryAt);
   assert.match(home, /手写因果多头注意力/);
-  const queue = home.slice(dueAt, foldAt);
+  const queue = home.slice(dueAt, retryAt);
+  const retry = home.slice(retryAt, foldAt);
   assert.match(queue, /缩放点积注意力/);
   assert.match(queue, /上次未通过/);
   assert.match(queue, /不会更换当前练习/);
@@ -551,8 +557,20 @@ test('home lists due review concepts without replacing the current exercise', ()
   assert.match(queue, /data-save-review=/);
   assert.match(queue, /不是自动评分/);
   assert.doesNotMatch(queue, /因果掩码/);
-  assert.doesNotMatch(queue, /保存本条记录|重练|进入下一任务/);
+  assert.doesNotMatch(queue, /保存本条记录|进入下一任务/);
+  assert.match(retry, /重练当前练习/);
+  assert.match(retry, /data-retry="attention"/);
+  assert.match(retry, /data-retry-current=/);
   assert.doesNotMatch(home, /还不记录通过或失败/);
+  const week2 = loadPages(plan, null, {
+    learning,
+    now: t0 + DAY,
+    selectedTaskId: 'lab.decoder.min-lm'
+  }).home(null);
+  assert.match(week2, /拼最小 decoder/);
+  assert.match(week2, /重练更小的任务：手写因果多头注意力/);
+  assert.match(week2, /data-retry="attention"/);
+  assert.match(week2, /data-week="1"/);
 });
 
 test('textbook chapters show the current task and the next related section', () => {
@@ -798,6 +816,10 @@ test('home due queue stays off the current exercise and can save a review', asyn
   await harness.waitFor(() => !app.content.querySelector('.review-queue'));
   assert.match(app.text(), /手写因果多头注意力/);
   assert.doesNotMatch(app.text(), /到期复习/);
+  assert.match(app.text(), /建议重练/);
+  const retryNow = app.content.querySelector('[data-retry="attention"]');
+  assert.ok(retryNow);
+  assert.equal(retryNow.getAttribute('data-retry-current'), '1');
   const saved = JSON.parse(app.localStorage.getItem(learningModule.KEY));
   assert.equal(saved.criteria[week1 + '::rewrite'].current.result, 'user_passed');
   assert.equal(saved.criteria[week1 + '::rewrite'].current.evidence, '对照通过');
@@ -807,11 +829,25 @@ test('home due queue stays off the current exercise and can save a review', asyn
   assert.equal(saved.reviews.attention.current.form, 'recall');
   assert.equal(saved.reviews.attention.weak, true);
   assert.equal(app.localStorage.getItem('llm-course-current-task'), week1);
+  const criteriaFold = app.content.querySelector('#home-criteria');
+  assert.ok(criteriaFold);
+  assert.ok(!criteriaFold.open);
+  retryNow.click();
+  assert.equal(app.content.querySelector('#home-criteria').open, true);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), week1);
   const week2 = app.content.querySelector('[data-week="2"]');
   week2.click();
   await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
   assert.doesNotMatch(app.text(), /到期复习/);
+  assert.match(app.text(), /重练更小的任务：手写因果多头注意力/);
   assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.decoder.min-lm');
+  const retrySmaller = app.content.querySelector('[data-retry="attention"]');
+  retrySmaller.click();
+  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), week1);
+  const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.equal(still.criteria[week1 + '::rewrite'].current.evidence, '对照通过');
+  assert.equal(still.reviews.attention.weak, true);
 });
 
 test('saving a passed check arms a review that is not due yet', async () => {
