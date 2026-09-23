@@ -485,6 +485,8 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /3b-3/);
   assert.match(impl, /已通过/);
   assert.match(impl, /3b-4/);
+  assert.match(impl, /3b-4 暂不收尾/);
+  assert.match(impl, /criteria\[\]\.conceptId/);
   assert.match(impl, /3b 整段尚未收尾/);
   assert.doesNotMatch(impl, /不开始 3b-4/);
 });
@@ -848,6 +850,73 @@ test('home due queue stays off the current exercise and can save a review', asyn
   const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
   assert.equal(still.criteria[week1 + '::rewrite'].current.evidence, '对照通过');
   assert.equal(still.reviews.attention.weak, true);
+});
+
+test('week-2 extension concept retry stays on the current exercise', async () => {
+  const plan = require('../content/learning-plan.json');
+  const week2Task = plan.tasks.find(item => item.id === 'lab.decoder.min-lm');
+  const stretch = week2Task.criteria.find(item => item.id === 'norm-rope-read');
+  assert.ok(!week2Task.conceptIds.includes('modern-block'));
+  assert.equal(stretch.conceptId, 'modern-block');
+  assert.equal(stretch.required, false);
+
+  const week2 = 'lab.decoder.min-lm';
+  const app = harness.bootApp({
+    hash: '#/',
+    storage: {
+      'llm-course-current-task': week2,
+      [learningModule.KEY]: JSON.stringify({
+        version: 1,
+        criteria: {
+          [week2 + '::norm-rope-read']: {
+            current: { result: 'user_passed', source: 'user_reported', evidence: '看过 10.4', at: 1 },
+            history: []
+          }
+        },
+        concepts: { 'modern-block': { read: true, explained: true } },
+        reviews: {
+          'modern-block': { dueAt: 1, intervalIndex: 0, weak: false, current: null, history: [] }
+        }
+      })
+    }
+  });
+  await harness.waitFor(() => /到期复习/.test(app.text()));
+  assert.match(app.text(), /拼最小 decoder/);
+  assert.match(app.text(), /RMSNorm \/ RoPE \/ SwiGLU/);
+  assert.doesNotMatch(app.text(), /进入下一任务/);
+  const queue = app.content.querySelector('.review-queue');
+  assert.ok(queue.querySelector('[data-save-review="modern-block"]'));
+  const form = app.content.querySelector('input[data-review-form="modern-block"][value="recall"]');
+  const result = app.content.querySelector('input[data-review-result="modern-block"][value="failed"]');
+  form.click();
+  result.click();
+  app.content.querySelector('[data-save-review="modern-block"]').click();
+  await harness.waitFor(() => !app.content.querySelector('.review-queue'));
+  assert.match(app.text(), /建议重练/);
+  assert.doesNotMatch(app.text(), /到期复习/);
+  const retryNow = app.content.querySelector('[data-retry="modern-block"]');
+  assert.ok(retryNow);
+  assert.equal(retryNow.getAttribute('data-retry-current'), '1');
+  assert.match(retryNow.textContent, /重练当前练习/);
+  assert.doesNotMatch(app.text(), /进入下一任务/);
+  const saved = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.equal(saved.criteria[week2 + '::norm-rope-read'].current.result, 'user_passed');
+  assert.equal(saved.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
+  assert.equal(saved.reviews['modern-block'].weak, true);
+  assert.equal(saved.concepts['modern-block'].explained, true);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), week2);
+  const criteriaFold = app.content.querySelector('#home-criteria');
+  assert.ok(criteriaFold);
+  assert.ok(!criteriaFold.open);
+  retryNow.click();
+  assert.equal(app.content.querySelector('#home-criteria').open, true);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), week2);
+  assert.match(app.text(), /拼最小 decoder/);
+  assert.equal(app.content.querySelector('textarea[data-evidence="norm-rope-read"]').value, '看过 10.4');
+  const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.equal(still.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
+  assert.equal(still.reviews['modern-block'].weak, true);
+  assert.doesNotMatch(app.text(), /进入下一任务/);
 });
 
 test('saving a passed check arms a review that is not due yet', async () => {

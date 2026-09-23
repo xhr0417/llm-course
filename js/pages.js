@@ -267,12 +267,18 @@
               "</li>";
           }).join("") + "</ul></section>";
       }
+      function taskHasConcept(item, conceptId) {
+        if ((item.conceptIds || []).indexOf(conceptId) >= 0) return true;
+        return (item.criteria || []).some(function (criterion) {
+          return criterion.conceptId === conceptId;
+        });
+      }
       function retryTarget(conceptId) {
         var currentWeek = task.weekBudget || 0;
         var matches = (plan.tasks || []).filter(function (item) {
           return item.stageId === task.stageId &&
             (item.weekBudget || 0) <= currentWeek &&
-            (item.conceptIds || []).indexOf(conceptId) >= 0;
+            taskHasConcept(item, conceptId);
         }).slice().sort(function (a, b) {
           return (a.weekBudget || 0) - (b.weekBudget || 0);
         });
