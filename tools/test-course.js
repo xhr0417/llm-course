@@ -287,10 +287,26 @@ test('learning plan current task is executable Attention and points at real head
     assert.ok(chapter, item.chapterId);
     assert.ok(headingsFor(chapter.file).includes(item.section), `${item.chapterId} 缺少小节 ${item.section}`);
   });
-  assert.equal(plan.tasks.length, 8);
-  assert.equal(new Set(plan.tasks.map(item => item.id)).size, 8);
-  const weeks = plan.tasks.map(item => item.weekBudget).sort((a, b) => a - b);
-  assert.deepEqual(weeks, [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(plan.tasks.filter(item => item.stageId === 'lab').length, 8);
+  assert.equal(new Set(plan.tasks.map(item => item.id)).size, plan.tasks.length);
+  const labWeeks = plan.tasks.filter(item => item.stageId === 'lab').map(item => item.weekBudget).sort((a, b) => a - b);
+  assert.deepEqual(labWeeks, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const claimTask = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
+  assert.ok(claimTask);
+  assert.equal(claimTask.stageId, 'claim-agent');
+  assert.equal(claimTask.weekBudget, 1);
+  assert.match(claimTask.title, /给定声明和证据，只做判定/);
+  assert.match(claimTask.goal, /不做检索/);
+  assert.match(claimTask.goal, /Agent 循环/);
+  assert.match(claimTask.goal, /CHEF/);
+  ['claim-label', 'evidence-span', 'insufficient-evidence'].forEach(id => {
+    assert.ok(claimTask.conceptIds.includes(id), id);
+  });
+  const claimRequired = claimTask.criteria.filter(item => item.required !== false);
+  assert.equal(claimRequired.length, 3);
+  const claimStretch = claimTask.criteria.find(item => item.id === 'agent-reading');
+  assert.equal(claimStretch.required, false);
+  assert.match(claimStretch.text, /不阻挡/);
   const conceptIds = new Set(plan.concepts.map(item => item.id));
   plan.tasks.forEach(item => {
     assert.ok(item.workspace && item.workspace.where && item.workspace.inputs && item.workspace.outputs, item.id);
@@ -314,7 +330,7 @@ test('learning plan current task is executable Attention and points at real head
       assert.ok(headingsFor(chapter.file).includes(material.section), `${item.id} ${material.chapterId} 缺少小节 ${material.section}`);
     });
   });
-  const week3 = plan.tasks.find(item => item.weekBudget === 3);
+  const week3 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 3);
   const gqa = week3.criteria.find(item => item.id === 'gqa-heads');
   assert.equal(gqa.required, false);
   assert.match(gqa.text, /不能阻挡|不阻挡/);
@@ -394,6 +410,9 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.doesNotMatch(home, /7\.12[\s\S]{0,80}1e-5|1e-5[\s\S]{0,80}7\.12/);
   assert.match(home, /第 8 周/);
   assert.match(home, /data-week="2"/);
+  assert.match(home, /data-stage="lab"/);
+  assert.match(home, /data-stage="claim-agent"/);
+  assert.match(home, /选择当前阶段/);
   assert.doesNotMatch(home, /自动测试通过/);
   assert.match(home, /未检查/);
   assert.match(home, /用户自报通过/);
@@ -407,7 +426,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.match(home, /小变式/);
   assert.doesNotMatch(home, /拓展（不挡完成）/);
   assert.doesNotMatch(home, /project-start/);
-  assert.doesNotMatch(home, /log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark/);
+  assert.doesNotMatch(home, /projects\/(?:log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark)/);
+  assert.doesNotMatch(home, /给定声明和证据，只做判定/);
   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
   assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
   const retired = pages.projects();
@@ -443,6 +463,26 @@ test('home can show another week without treating that as earlier completion', (
   assert.match(week8, /假输出/);
   assert.match(week8, /拓展（不挡完成）/);
   assert.doesNotMatch(week8, /自动测试通过/);
+});
+
+test('home can switch to the claim-agent stage without advancing the lab', () => {
+  const plan = require('../content/learning-plan.json');
+  const home = loadPages(plan, null, { selectedTaskId: 'claim.judge.given-evidence' }).home(null);
+  assert.match(home, /技术声明核验助手/);
+  assert.match(home, /给定声明和证据，只做判定/);
+  assert.match(home, /23\.17/);
+  assert.match(home, /#\/llm-eval\?section=/);
+  assert.match(home, /data-stage="claim-agent"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-stage="claim-agent"/);
+  assert.match(home, /拓展（不挡完成）/);
+  assert.match(home, /不写 Agent|不实现 Agent|不要改去做 Agent/);
+  assert.doesNotMatch(home, /手写因果多头注意力/);
+  assert.doesNotMatch(home, /进入下一任务/);
+  assert.doesNotMatch(home, /mini-swe-agent|Pydantic AI|Inspect AI/);
+  assert.doesNotMatch(home, /taskId|criterionId|claim\.judge|<code>/);
+  assert.doesNotMatch(home, /自动测试通过/);
+  const lab = loadPages(plan).home(null);
+  assert.match(lab, /手写因果多头注意力/);
+  assert.doesNotMatch(lab, /给定声明和证据，只做判定/);
 });
 
 test('phase 3 design docs keep completion rules after the record layer', () => {
@@ -490,6 +530,10 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(impl, /阶段 3b 已完成/);
   assert.doesNotMatch(impl, /3b-4 暂不收尾/);
   assert.doesNotMatch(impl, /3b 整段尚未收尾/);
+  assert.match(impl, /4-1/);
+  assert.match(impl, /阶段 4 整段尚未完成/);
+  assert.match(impl, /不开始阶段 5/);
+  assert.doesNotMatch(impl, /不要自动进入阶段 4/);
   assert.doesNotMatch(impl, /不开始 3b-4/);
 });
 
@@ -776,6 +820,24 @@ test('home week picker switches the current exercise and remembers it', async ()
   });
   await harness.waitFor(() => /拼最小 decoder/.test(restored.text()));
   assert.doesNotMatch(restored.text(), /手写因果多头注意力/);
+});
+
+test('home stage picker opens the claim-agent exercise and can return to lab', async () => {
+  const app = harness.bootApp({ hash: '#/' });
+  await harness.waitFor(() => /小模型学习实验室—Attention/.test(app.text()));
+  const toClaim = app.content.querySelector('[data-stage="claim-agent"]');
+  assert.ok(toClaim);
+  toClaim.click();
+  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
+  assert.match(app.text(), /技术声明核验助手/);
+  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.judge.given-evidence');
+  assert.equal(app.content.querySelector('[data-stage="claim-agent"]').getAttribute('aria-pressed'), 'true');
+  const toLab = app.content.querySelector('[data-stage="lab"]');
+  toLab.click();
+  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.attention.causal-mha');
+  assert.doesNotMatch(app.text(), /给定声明和证据，只做判定/);
 });
 
 test('home due queue stays off the current exercise and can save a review', async () => {

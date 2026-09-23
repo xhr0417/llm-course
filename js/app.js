@@ -330,11 +330,32 @@
     updateStorageNotice();
     var retryPlan = byId("retryPlan");
     if (retryPlan) retryPlan.addEventListener("click", loadLearningPlan);
+    root.querySelectorAll("[data-stage]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (!learningPlan) return;
+        var stageId = button.getAttribute("data-stage");
+        var task = learningPlan.tasks.filter(function (item) {
+          return item.stageId === stageId;
+        }).slice().sort(function (a, b) {
+          return (a.weekBudget || 0) - (b.weekBudget || 0);
+        })[0];
+        if (!task) return;
+        syncDraftsFromDom();
+        selectedTaskId = task.id;
+        remember("llm-course-current-task", task.id);
+        pages = CoursePages(pageOptions(learningPlan, planError));
+        route();
+      });
+    });
     root.querySelectorAll("[data-week]").forEach(function (button) {
       button.addEventListener("click", function () {
         if (!learningPlan) return;
         var week = Number(button.getAttribute("data-week"));
-        var task = learningPlan.tasks.find(function (item) { return item.weekBudget === week; });
+        var current = currentPlanTask();
+        var stageId = current && current.stageId;
+        var task = learningPlan.tasks.find(function (item) {
+          return item.weekBudget === week && (!stageId || item.stageId === stageId);
+        });
         if (!task) return;
         syncDraftsFromDom();
         selectedTaskId = task.id;

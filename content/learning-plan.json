@@ -97,6 +97,18 @@
     {
       "id": "kv-cache",
       "name": "KV Cache 生成对照"
+    },
+    {
+      "id": "claim-label",
+      "name": "声明标签与标注准则"
+    },
+    {
+      "id": "evidence-span",
+      "name": "证据位置"
+    },
+    {
+      "id": "insufficient-evidence",
+      "name": "证据不足时拒绝"
     }
   ],
   "tasks": [
@@ -1023,6 +1035,124 @@
           "required": false,
           "conceptId": "kv-cache",
           "text": "拓展：有/无 KV cache 的生成输出对照。速度数字不是本周硬门槛。"
+        }
+      ]
+    },
+    {
+      "id": "claim.judge.given-evidence",
+      "stageId": "claim-agent",
+      "weekBudget": 1,
+      "shortTitle": "给定证据判定",
+      "title": "给定声明和证据，只做判定",
+      "goal": "在固定的少量「声明 + 一段证据」上，先写出标注准则，再给出支持／不支持／证据不足，并标出证据位置。本周不做检索，也不写 Agent 循环。CHEF 只用来理解任务形态，不能把自写样本混进去冒充 CHEF 分数。",
+      "conceptIds": ["claim-label", "evidence-span", "insufficient-evidence", "eval-scorer"],
+      "workspace": {
+        "where": "在本机新建空文件，例如 ~/llm-lab/claim_judge.jsonl。不要写进本站 projects/ 下的六个旧作业目录。本页只给练习说明，不代写标注。",
+        "inputs": "自己准备 8–12 条「一条声明 + 一段固定证据」。证据来自你正在读的官方文档、README 或实验记录的摘录；不要用实时网页搜索。若阅读 CHEF 论文/说明，只用来对照任务形态，不要把 CHEF 样本与自写样本混成一份官方分数。",
+        "outputs": "一份标注准则（标签含义、何时判证据不足）；每条样本的标签、证据起止位置、一句理由、准则版本。至少有一条判为证据不足。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败样本分类"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.11 Human Evaluation：什么时候必须用人",
+          "label": "23.11 人工评估要有规则"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.9 LLM-as-a-Judge：开放式回答怎么评",
+          "label": "23.9 不要把 LLM 裁判当金标准"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "llm-eval",
+          "section": "23.13 Contamination：与数据管线闭环",
+          "label": "23.13 数据泄漏与混集（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "href": "https://aclanthology.org/2022.naacl-main.246/",
+          "external": true,
+          "label": "CHEF 论文（任务形态对照，不是本周分数）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/THU-BPM/CHEF",
+          "external": true,
+          "label": "CHEF 上游仓库（对照用，不是本周作业仓库）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/datawhalechina/hello-agents",
+          "external": true,
+          "label": "Hello-Agents（可开始读循环主题，本周不实现 Agent）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读判定所需教材",
+          "body": "打开第 23 章 23.17、23.11、23.9。先搞清失败类型为什么要分开记、人工评估为什么要有书面规则，以及 LLM 裁判有哪些偏差。不要用另一个模型的意见当作本周的金标准。"
+        },
+        {
+          "title": "写下标注准则",
+          "body": "在空文件里先写标签含义：支持、不支持、证据不足。写清证据不足的条件，例如证据没提到关键限定、版本对不上、或只能间接推测。先留下一次准则草稿，再去标样本。"
+        },
+        {
+          "title": "在固定证据上判定",
+          "body": "准备 8–12 条声明，每条只配一段已经给定的证据。为每条写下标签、证据起止（句子或行号）和一句理由。本周不要检索，也不要让模型替你找证据。"
+        },
+        {
+          "title": "检查拒绝和位置",
+          "body": "至少一条判为证据不足。抽两条支持／不支持，能指出证据里对应的句子。换一条把关键限定删掉，确认准则会改成证据不足，而不是硬判对或错。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "自检通过后再看 CHEF 说明是建议顺序，不是禁令。卡住时：先请人解释标签边界或给反例；仍卡住再对照 CHEF 如何定义证据。看过后合上参考，用自己的声明集重写准则并换两条样本再标。独立实现指最终能脱离答案完成标注，不是学习期间从未接受帮助。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把证据里的版本号改掉，看标签是否应变成证据不足；或者故意把结论写进声明、把出处写进证据，说清哪一条检查会失败。下一次打开练习时，可用几分钟口述准则里「证据不足」的条件。"
+        },
+        {
+          "title": "对照而不是抄分数",
+          "body": "CHEF 用来理解「声明—证据—判断」，不能把自写样本混进 CHEF 后冒充官方分数。Hello-Agents 可开始读循环与工具主题，但本周不要改去做 Agent 循环，也不要走进六个旧作业项目。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "rubric",
+          "label": "标注准则",
+          "required": true,
+          "conceptId": "claim-label",
+          "text": "写下支持／不支持／证据不足的含义，以及何时必须判证据不足。准则在标注前就有一版，不是标完再补。"
+        },
+        {
+          "id": "spans",
+          "label": "判定与证据位置",
+          "required": true,
+          "conceptId": "evidence-span",
+          "text": "对固定的声明+证据给出标签，并能指出证据中的对应位置。本周不检索。不是自动评分。"
+        },
+        {
+          "id": "abstain",
+          "label": "证据不足时拒绝",
+          "required": true,
+          "conceptId": "insufficient-evidence",
+          "text": "至少一条判为证据不足，并能说明缺了什么。不能用另一个 LLM 的意见代替这条判断。"
+        },
+        {
+          "id": "agent-reading",
+          "label": "Agent 主题选读",
+          "required": false,
+          "conceptId": "claim-label",
+          "text": "拓展：开始读 Hello-Agents 的循环或工具主题。未完成不阻挡本周核心任务，本周也不要求写出 Agent。"
         }
       ]
     }

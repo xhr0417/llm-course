@@ -54,6 +54,26 @@
       var match = selected && plan.tasks.find(function (item) { return item.id === selected; });
       return match || plan.tasks.find(function (item) { return item.id === plan.currentTaskId; });
     }
+    function resolveStage(plan, task) {
+      if (task) {
+        var fromTask = plan.stages.find(function (item) { return item.id === task.stageId; });
+        if (fromTask) return fromTask;
+      }
+      return plan.stages.find(function (item) { return item.id === plan.currentStageId; });
+    }
+    function stageButtons(plan, stage) {
+      var stages = (plan.stages || []).filter(function (item) {
+        return (plan.tasks || []).some(function (task) { return task.stageId === item.id; });
+      }).slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+      if (stages.length < 2) return "";
+      return '<div class="week-picker" data-stage-picker role="group" aria-label="选择当前阶段">' +
+        stages.map(function (item) {
+          var on = item.id === stage.id;
+          return '<button type="button" class="week-pick" data-stage="' + escape(item.id) +
+            '" aria-pressed="' + on + '">' + escape(item.title) + "</button>";
+        }).join("") +
+        '</div><p class="page-note">点某一阶段只更换练习说明。不会按日历打开新阶段，也不会把前面的阶段标成完成。</p>';
+    }
     function weekButtons(plan, stage, task) {
       var weeks = plan.tasks.filter(function (item) { return item.stageId === stage.id; })
         .slice()
@@ -144,8 +164,8 @@
           '<p><button class="btn primary" id="retryPlan" type="button">重新加载当前练习</button></p></section>' +
           '<p class="page-note">目录、章节和搜索仍然可用。也可以先浏览<a href="#/catalog">全部章节</a>。</p>';
       }
-      var stage = plan && plan.stages.find(function (item) { return item.id === plan.currentStageId; });
       var task = plan && resolveTask(plan);
+      var stage = plan && resolveStage(plan, task);
       var conceptsById = {};
       (plan && plan.concepts || []).forEach(function (item) { conceptsById[item.id] = item; });
       if (!stage || !task) {
@@ -342,6 +362,7 @@
         "我的学习") +
         '<section class="task-panel"><span class="page-label">当前练习</span><h2>' + escape(task.title) + '</h2>' +
         '<p>' + escape(task.goal) + '</p>' +
+        stageButtons(plan, stage) +
         weekButtons(plan, stage, task) +
         (start ? action("打开必要教材：" + start.label, materialHref(start)) : "") +
         '</section>' +
