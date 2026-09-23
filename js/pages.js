@@ -344,7 +344,7 @@
           (next
             ? '<p><button class="btn primary" id="advanceTask" type="button">进入下一任务</button></p>' +
               '<p class="page-note">需要你确认才会更换练习，不会自动跳转。</p>'
-            : '<p class="page-note">这是本阶段最后一项练习。</p>') +
+            : '<p class="page-note">目前计划里这一阶段还没有下一项已写入的练习。不会自动打开 Agent 或新阶段。</p>') +
           "</section>"
         : "";
       var criteriaOpen = !!(learning.passBlocked && learning.passBlocked()) ||

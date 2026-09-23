@@ -291,6 +291,8 @@ test('learning plan current task is executable Attention and points at real head
   assert.equal(new Set(plan.tasks.map(item => item.id)).size, plan.tasks.length);
   const labWeeks = plan.tasks.filter(item => item.stageId === 'lab').map(item => item.weekBudget).sort((a, b) => a - b);
   assert.deepEqual(labWeeks, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const claimWeeks = plan.tasks.filter(item => item.stageId === 'claim-agent').map(item => item.weekBudget).sort((a, b) => a - b);
+  assert.deepEqual(claimWeeks, [1, 2, 3]);
   const claimTask = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
   assert.ok(claimTask);
   assert.equal(claimTask.stageId, 'claim-agent');
@@ -307,6 +309,37 @@ test('learning plan current task is executable Attention and points at real head
   const claimStretch = claimTask.criteria.find(item => item.id === 'agent-reading');
   assert.equal(claimStretch.required, false);
   assert.match(claimStretch.text, /不阻挡/);
+  const retrieveTask = plan.tasks.find(item => item.id === 'claim.retrieve.fixed-corpus');
+  assert.ok(retrieveTask);
+  assert.equal(retrieveTask.stageId, 'claim-agent');
+  assert.equal(retrieveTask.weekBudget, 2);
+  assert.match(retrieveTask.title, /在冻结语料里检索证据，对照两种方法/);
+  assert.match(retrieveTask.goal, /检索命中不是结论正确/);
+  assert.match(retrieveTask.goal, /Agent 循环/);
+  assert.match(retrieveTask.workspace.where, /rag-service/);
+  assert.match(retrieveTask.workspace.inputs, /不要用实时网页搜索/);
+  ['bm25-vs-dense', 'retrieval-metrics'].forEach(id => {
+    assert.ok(retrieveTask.conceptIds.includes(id), id);
+  });
+  assert.equal(retrieveTask.criteria.filter(item => item.required !== false).length, 3);
+  assert.equal(retrieveTask.criteria.find(item => item.id === 'rerank-read').required, false);
+  assert.ok(retrieveTask.materials.some(item => item.chapterId === 'rag-engineering' && item.section.startsWith('28.5')));
+  const workflowTask = plan.tasks.find(item => item.id === 'claim.workflow.retrieve-read-judge');
+  assert.ok(workflowTask);
+  assert.equal(workflowTask.stageId, 'claim-agent');
+  assert.equal(workflowTask.weekBudget, 3);
+  assert.match(workflowTask.title, /按固定顺序做检索、阅读和判定/);
+  assert.match(workflowTask.goal, /Agent 循环/);
+  assert.match(workflowTask.workspace.where, /FastAPI/);
+  ['retrieve-read-judge', 'citation-locate', 'stale-conflict'].forEach(id => {
+    assert.ok(workflowTask.conceptIds.includes(id), id);
+  });
+  assert.equal(workflowTask.criteria.filter(item => item.required !== false).length, 3);
+  assert.equal(workflowTask.criteria.find(item => item.id === 'service-reading').required, false);
+  assert.match(workflowTask.criteria.find(item => item.id === 'cite-and-judge').text, /第 1 周/);
+  assert.match(workflowTask.criteria.find(item => item.id === 'split-stale').text, /过期或冲突/);
+  assert.ok(workflowTask.materials.some(item => item.chapterId === 'rag-engineering' && item.section.startsWith('28.10')));
+  assert.ok(workflowTask.materials.some(item => item.chapterId === 'llm-eval' && item.section.startsWith('23.17')));
   const conceptIds = new Set(plan.concepts.map(item => item.id));
   plan.tasks.forEach(item => {
     assert.ok(item.workspace && item.workspace.where && item.workspace.inputs && item.workspace.outputs, item.id);
@@ -345,7 +378,7 @@ test('learning plan current task is executable Attention and points at real head
   assert.match(week3Text, /不启用梯度累积/);
   assert.match(week3Text, /下一 token|下一 token 标签/);
   assert.doesNotMatch(week3Text, /细节放到下周|先用同一序列做 next-token/);
-  const week2 = plan.tasks.find(item => item.weekBudget === 2);
+  const week2 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 2);
   assert.match(week2.workspace.outputs, /\[B, T, V\]/);
   assert.equal(week2.criteria.find(item => item.id === 'norm-rope-read').required, false);
   const assembled = week2.criteria.find(item => item.id === 'assembled-causal');
@@ -356,14 +389,14 @@ test('learning plan current task is executable Attention and points at real head
   const week2Text = week2.steps.map(step => step.title + step.body).concat(week2.criteria.map(row => row.text)).join('\n');
   assert.doesNotMatch(week2Text, /因果已在上周验|不要求本周再验因果|本周不用再验因果/);
   assert.match(week2Text, /不必重写 Attention|不要求重写 Attention/);
-  const week8 = plan.tasks.find(item => item.weekBudget === 8);
+  const week8 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 8);
   assert.equal(week8.criteria.find(item => item.id === 'cache-speed').required, false);
   const realAb = week8.criteria.find(item => item.id === 'real-ab-preds');
   assert.equal(realAb.required, true);
   assert.match(realAb.text, /真实/);
   assert.match(realAb.text, /checkpoint/);
   assert.match(realAb.text, /假输出/);
-  const week7 = plan.tasks.find(item => item.weekBudget === 7);
+  const week7 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 7);
   assert.match(week7.workspace.inputs, /假输出/);
   assert.match(week7.goal, /第 8 周/);
 });
@@ -428,6 +461,8 @@ test('primary entry shows the Attention lab and retires homework projects from m
   assert.doesNotMatch(home, /project-start/);
   assert.doesNotMatch(home, /projects\/(?:log-analyzer|hf-mini-lab|llm-eval|rag-service|sft-lora|inference-benchmark)/);
   assert.doesNotMatch(home, /给定声明和证据，只做判定/);
+  assert.doesNotMatch(home, /在冻结语料里检索证据/);
+  assert.doesNotMatch(home, /按固定顺序做检索、阅读和判定/);
   assert.doesNotMatch(home, /taskId|criterionId|lab\.attention|<code>/);
   assert.doesNotMatch(home, /阶段 1|周预算|停在这里|自动切换/);
   const retired = pages.projects();
@@ -473,6 +508,9 @@ test('home can switch to the claim-agent stage without advancing the lab', () =>
   assert.match(home, /23\.17/);
   assert.match(home, /#\/llm-eval\?section=/);
   assert.match(home, /data-stage="claim-agent"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-stage="claim-agent"/);
+  assert.match(home, /data-week="2"/);
+  assert.match(home, /data-week="3"/);
+  assert.match(home, /固定语料检索/);
   assert.match(home, /拓展（不挡完成）/);
   assert.match(home, /不写 Agent|不实现 Agent|不要改去做 Agent/);
   assert.doesNotMatch(home, /手写因果多头注意力/);
@@ -483,6 +521,37 @@ test('home can switch to the claim-agent stage without advancing the lab', () =>
   const lab = loadPages(plan).home(null);
   assert.match(lab, /手写因果多头注意力/);
   assert.doesNotMatch(lab, /给定声明和证据，只做判定/);
+});
+
+test('home can open claim-agent retrieval and the fixed workflow', () => {
+  const plan = require('../content/learning-plan.json');
+  const retrieve = loadPages(plan, null, { selectedTaskId: 'claim.retrieve.fixed-corpus' }).home(null);
+  assert.match(retrieve, /技术声明核验助手/);
+  assert.match(retrieve, /在冻结语料里检索证据，对照两种方法/);
+  assert.match(retrieve, /28\.5/);
+  assert.match(retrieve, /28\.8/);
+  assert.match(retrieve, /#\/rag-engineering\?section=/);
+  assert.match(retrieve, /检索命中不是结论正确/);
+  assert.match(retrieve, /data-week="2"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-week="2"/);
+  assert.match(retrieve, /拓展（不挡完成）/);
+  assert.doesNotMatch(retrieve, /手写因果多头注意力/);
+  assert.doesNotMatch(retrieve, /给定声明和证据，只做判定/);
+  assert.doesNotMatch(retrieve, /进入下一任务/);
+  assert.doesNotMatch(retrieve, /mini-swe-agent|Pydantic AI|Inspect AI/);
+  assert.doesNotMatch(retrieve, /taskId|criterionId|claim\.retrieve|<code>/);
+  const workflow = loadPages(plan, null, { selectedTaskId: 'claim.workflow.retrieve-read-judge' }).home(null);
+  assert.match(workflow, /按固定顺序做检索、阅读和判定/);
+  assert.match(workflow, /28\.10/);
+  assert.match(workflow, /23\.17/);
+  assert.match(workflow, /#\/rag-engineering\?section=/);
+  assert.match(workflow, /#\/llm-eval\?section=/);
+  assert.match(workflow, /不写 Agent|不实现 Agent|不要改去做 Agent|本周不写 Agent/);
+  assert.match(workflow, /data-week="3"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-week="3"/);
+  assert.doesNotMatch(workflow, /手写因果多头注意力/);
+  assert.doesNotMatch(workflow, /进入下一任务/);
+  assert.doesNotMatch(workflow, /mini-swe-agent|Pydantic AI/);
+  assert.match(workflow, /不要求写出 FastAPI|不要去做 FastAPI/);
+  assert.doesNotMatch(workflow, /taskId|criterionId|claim\.workflow|<code>/);
 });
 
 test('phase 3 design docs keep completion rules after the record layer', () => {
@@ -532,10 +601,13 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.doesNotMatch(impl, /3b 整段尚未收尾/);
   assert.match(impl, /4-1/);
   assert.match(impl, /阶段 4-1 已通过/);
-  assert.match(impl, /本步（4-1）不做/);
+  assert.match(impl, /4-2/);
+  assert.match(impl, /本步（4-2）不做/);
+  assert.match(os, /阶段 4-2 已写入/);
   assert.match(impl, /阶段 4 整段尚未完成/);
   assert.match(impl, /不开始阶段 5/);
   assert.doesNotMatch(impl, /本阶段仍不做：.*检索作业/);
+  assert.doesNotMatch(impl, /本步（4-2）不做：.*检索作业/);
   assert.doesNotMatch(impl, /不要自动进入阶段 4/);
   assert.doesNotMatch(impl, /不开始 3b-4/);
 });
@@ -841,6 +913,53 @@ test('home stage picker opens the claim-agent exercise and can return to lab', a
   await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
   assert.equal(app.localStorage.getItem('llm-course-current-task'), 'lab.attention.causal-mha');
   assert.doesNotMatch(app.text(), /给定声明和证据，只做判定/);
+});
+
+test('claim-agent week picker opens retrieval then the fixed workflow', async () => {
+  const week2 = 'lab.decoder.min-lm';
+  const app = harness.bootApp({
+    hash: '#/',
+    storage: {
+      'llm-course-current-task': 'lab.attention.causal-mha',
+      [learningModule.KEY]: JSON.stringify({
+        version: 1,
+        criteria: {
+          [week2 + '::norm-rope-read']: {
+            current: { result: 'user_passed', source: 'user_reported', evidence: '看过 10.4', at: 1 },
+            history: []
+          }
+        },
+        concepts: {},
+        reviews: {}
+      })
+    }
+  });
+  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
+  app.content.querySelector('[data-stage="claim-agent"]').click();
+  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
+  assert.ok(app.content.querySelector('[data-week="2"]'));
+  assert.ok(app.content.querySelector('[data-week="3"]'));
+  app.content.querySelector('[data-week="2"]').click();
+  await harness.waitFor(() => /在冻结语料里检索证据/.test(app.text()));
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.retrieve.fixed-corpus');
+  assert.match(app.text(), /28\.5/);
+  assert.doesNotMatch(app.text(), /手写因果多头注意力/);
+  assert.doesNotMatch(app.text(), /进入下一任务/);
+  app.content.querySelector('[data-week="3"]').click();
+  await harness.waitFor(() => /按固定顺序做检索、阅读和判定/.test(app.text()));
+  assert.equal(app.localStorage.getItem('llm-course-current-task'), 'claim.workflow.retrieve-read-judge');
+  assert.match(app.text(), /28\.10/);
+  assert.doesNotMatch(app.text(), /进入下一任务/);
+  assert.doesNotMatch(app.text(), /mini-swe-agent|Pydantic AI/);
+  app.content.querySelector('[data-week="1"]').click();
+  await harness.waitFor(() => /给定声明和证据，只做判定/.test(app.text()));
+  app.content.querySelector('[data-stage="lab"]').click();
+  await harness.waitFor(() => /手写因果多头注意力/.test(app.text()));
+  app.content.querySelector('[data-week="2"]').click();
+  await harness.waitFor(() => /拼最小 decoder/.test(app.text()));
+  assert.equal(app.content.querySelector('textarea[data-evidence="norm-rope-read"]').value, '看过 10.4');
+  const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
+  assert.equal(still.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
 });
 
 test('home due queue stays off the current exercise and can save a review', async () => {
@@ -1154,8 +1273,15 @@ test('learning completes a task only when every required item is currently user-
   const storage = memoryStorage();
   const learning = learningModule.create({ storage });
   learning.load();
-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
-  const week2 = plan.tasks.find(item => item.weekBudget === 2);
+  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
+  const week2 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 2);
+  const claim1 = plan.tasks.find(item => item.id === 'claim.judge.given-evidence');
+  const claim2 = plan.tasks.find(item => item.id === 'claim.retrieve.fixed-corpus');
+  const claim3 = plan.tasks.find(item => item.id === 'claim.workflow.retrieve-read-judge');
+  assert.equal(learning.nextTask(plan, claim1).id, claim2.id);
+  assert.equal(learning.nextTask(plan, claim2).id, claim3.id);
+  assert.equal(learning.nextTask(plan, claim3), null);
+  assert.equal(learning.nextTask(plan, week1).id, week2.id);
   assert.equal(learning.isTaskComplete(week1), false);
   assert.equal(learning.recordCriterion(week1.id, 'numeric', 'user_passed', ''), false);
   assert.equal(learning.currentResult(week1.id, 'numeric'), 'unchecked');
@@ -1209,6 +1335,15 @@ test('learning completes a task only when every required item is currently user-
   assert.match(done, /数值对照失败，位置 attn.py/);
   assert.doesNotMatch(done, /自动测试通过/);
   assert.doesNotMatch(done, /taskId|criterionId|lab\.attention|<code>/);
+
+  ['fixed-pipeline', 'cite-and-judge', 'split-stale'].forEach(id => {
+    learning.recordCriterion(claim3.id, id, 'user_passed', '依据 ' + id);
+  });
+  const claimDone = loadPages(plan, null, { learning, selectedTaskId: claim3.id }).home(null);
+  assert.match(claimDone, /目前计划里这一阶段还没有下一项已写入的练习/);
+  assert.match(claimDone, /不会自动打开 Agent/);
+  assert.doesNotMatch(claimDone, /进入下一任务/);
+  assert.doesNotMatch(claimDone, /mini-swe-agent/);
 });
 
 test('home record forms keep failures, isolate progress, and wait for confirm-next', async () => {
@@ -1373,7 +1508,7 @@ test('review state is separate from task evidence and only lists due concepts', 
   assert.deepEqual(day, [1, 3, 7, 21]);
   const t0 = 1700000000000;
   const DAY = 24 * 60 * 60 * 1000;
-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
+  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
   const storage = memoryStorage({
     'llm-course-current-task': week1.id,
     [learningModule.KEY]: JSON.stringify({
@@ -1454,7 +1589,7 @@ test('the same review form still advances when a later round is due', () => {
   const plan = require('../content/learning-plan.json');
   const t0 = 1700000000000;
   const DAY = 24 * 60 * 60 * 1000;
-  const week1 = plan.tasks.find(item => item.weekBudget === 1);
+  const week1 = plan.tasks.find(item => item.stageId === 'lab' && item.weekBudget === 1);
   const storage = memoryStorage({
     'llm-course-current-task': week1.id,
     [learningModule.KEY]: JSON.stringify({

@@ -109,6 +109,26 @@
     {
       "id": "insufficient-evidence",
       "name": "证据不足时拒绝"
+    },
+    {
+      "id": "bm25-vs-dense",
+      "name": "BM25 与向量检索对照"
+    },
+    {
+      "id": "retrieval-metrics",
+      "name": "检索指标与人工核对"
+    },
+    {
+      "id": "retrieve-read-judge",
+      "name": "检索—阅读—判定工作流"
+    },
+    {
+      "id": "citation-locate",
+      "name": "引用可定位"
+    },
+    {
+      "id": "stale-conflict",
+      "name": "过期与冲突证据"
     }
   ],
   "tasks": [
@@ -1153,6 +1173,242 @@
           "required": false,
           "conceptId": "claim-label",
           "text": "拓展：开始读 Hello-Agents 的循环或工具主题。未完成不阻挡本周核心任务，本周也不要求写出 Agent。"
+        }
+      ]
+    },
+    {
+      "id": "claim.retrieve.fixed-corpus",
+      "stageId": "claim-agent",
+      "weekBudget": 2,
+      "shortTitle": "固定语料检索",
+      "title": "在冻结语料里检索证据，对照两种方法",
+      "goal": "在一份冻结的本地语料上，对同一批查询同时跑关键词/BM25 和向量检索。报告 Recall@k 或 MRR，并人工核对这些命中是否真能支持声明。检索命中不是结论正确。本周不写判定工作流，也不写 Agent 循环。",
+      "conceptIds": ["bm25-vs-dense", "retrieval-metrics"],
+      "workspace": {
+        "where": "在本机新建目录，例如 ~/llm-lab/claim_retrieve/。不要写进本站 projects/ 下的六个旧作业目录，也不要去改 rag-service。本页只给练习说明，不代写检索代码。",
+        "inputs": "冻结 20–40 个文档块（官方文档、README 或实验记录摘录），每块记下文件名、版本或日期。准备 8–12 条查询，尽量接上第 1 周的声明。不要用实时网页搜索，也不要把 CHEF 样本混进这份语料后冒充官方分数。",
+        "outputs": "两套排序结果（BM25 与向量）；每个方法的 Hit@k / Recall@k 或 MRR；对 top-k 的人工相关判断。至少一条：检索命中相关，但仍不能支持声明。向量检索可用现成库或 numpy，不要求 FAISS。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.5 BM25：关键词检索不是落后技术",
+          "label": "28.5 BM25 不是落后技术"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.3 Embedding：把语义变成几何",
+          "label": "28.3 向量检索在比什么"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
+          "label": "28.8 检索和生成分开评"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "rag-engineering",
+          "section": "28.2 Chunking：最不起眼、最影响上限的一步",
+          "label": "28.2 切块（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "rag-engineering",
+          "section": "28.4 向量检索：FAISS 最小实现",
+          "label": "28.4 FAISS 最小实现（可对照，不要求）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "rag-engineering",
+          "section": "28.6 Hybrid Retrieval：小孩子才做选择",
+          "label": "28.6 混合检索（可开始读）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/THU-BPM/CHEF",
+          "external": true,
+          "label": "CHEF 上游仓库（对照任务形态，不是本周语料）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读检索所需教材",
+          "body": "打开第 28 章 28.5、28.3、28.8。先搞清 BM25 何时更强、向量在比什么几何，以及为什么必须把检索指标和最终判定拆开。章内表格是课程旧实验，不能当成你这周的分数。"
+        },
+        {
+          "title": "冻结语料和查询",
+          "body": "先留下一份语料清单：每块的来源、版本或日期、切块边界。查询写清楚，并标出你认为相关的文档。切块可先用固定长度；写完后再对照 28.2。"
+        },
+        {
+          "title": "对照两种检索",
+          "body": "对同一批查询分别跑 BM25（或等价关键词检索）和向量检索。记下每条查询的 top-k。本周不要接生成，也不要让模型替你找网页。"
+        },
+        {
+          "title": "报告指标并人工核对",
+          "body": "至少报告一种 k 下的 Hit/Recall 或 MRR。对 top-k 做人工相关判断。单独标出：相关但并不能支持声明的命中。不要把检索命中写成「结论正确」。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一次自己的对照表。卡住时请人解释 BM25 打分、切块边界或指标公式；仍卡住再看 28.4 / 28.6 局部。合上参考后重跑对照，并换两条查询再算。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把某块的版本号改掉再查；或者把查询里的精确术语改成同义说法，看 BM25 与向量谁掉得更狠。这不是额外门槛。"
+        },
+        {
+          "title": "对照而不是抄旧分数",
+          "body": "第 28 章的 22 条查询表只说明「dense 不一定更好」。不要复制那张表当作本周结果，也不要走进 rag-service 或六个旧作业。Hello-Agents 仍可阅读，本周不要改去做 Agent。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "frozen-corpus",
+          "label": "冻结本地语料",
+          "required": true,
+          "conceptId": "retrieval-metrics",
+          "text": "语料来自冻结的本地文档块，带版本或日期。没有实时网页搜索。不是自动评分。"
+        },
+        {
+          "id": "two-retrievers",
+          "label": "两种检索对照",
+          "required": true,
+          "conceptId": "bm25-vs-dense",
+          "text": "同一批查询同时有关键词/BM25 和向量检索的排序结果。能说明哪类查询上谁更强。不要求 FAISS。"
+        },
+        {
+          "id": "metrics-human",
+          "label": "指标与人工核对",
+          "required": true,
+          "conceptId": "retrieval-metrics",
+          "text": "报告 Hit@k / Recall@k 或 MRR，并对 top-k 做人工相关判断。至少一条命中相关但不能支持声明。检索命中不是结论正确。"
+        },
+        {
+          "id": "rerank-read",
+          "label": "精排选读",
+          "required": false,
+          "conceptId": "bm25-vs-dense",
+          "text": "拓展：读 28.6 / 28.7，能解释混合或精排会改什么。未完成不阻挡本周核心任务，本周也不要求接上生成或 Agent。"
+        }
+      ]
+    },
+    {
+      "id": "claim.workflow.retrieve-read-judge",
+      "stageId": "claim-agent",
+      "weekBudget": 3,
+      "shortTitle": "检索阅读判定",
+      "title": "按固定顺序做检索、阅读和判定",
+      "goal": "用固定工作流处理声明：先检索冻结语料，再阅读命中段落，再沿用第 1 周准则给出支持／不支持／证据不足，并标出可定位引用。能处理过期或冲突证据。检索失败和判定失败要分开记。本周不让模型自己决定下一步工具，也不写 Agent 循环。",
+      "conceptIds": ["retrieve-read-judge", "citation-locate", "stale-conflict", "claim-label", "insufficient-evidence", "retrieval-metrics"],
+      "workspace": {
+        "where": "在本机新建空文件，例如 ~/llm-lab/claim_workflow.jsonl。沿用 ~/llm-lab/claim_retrieve/ 的冻结语料和第 1 周准则。不要写进六个旧作业目录，也不要去做 FastAPI 服务。",
+        "inputs": "第 2 周的冻结语料与检索结果（或对同一语料重跑一次检索）；第 1 周的标注准则。查询仍是技术声明，不要实时联网。",
+        "outputs": "每条样本的固定轨迹：检索到的文档、读过的段落、标签、可定位引用、错误类型（检索未命中／证据不足／过期或冲突／判定问题）。至少一条证据不足，至少一条过期或冲突。"
+      },
+      "materials": [
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.8 检索评测：把「检索」与「生成」拆开评",
+          "label": "28.8 检索失败还是判定失败"
+        },
+        {
+          "role": "required",
+          "chapterId": "rag-engineering",
+          "section": "28.10 失败案例：四类，各有各的修法",
+          "label": "28.10 失败类型分开修"
+        },
+        {
+          "role": "required",
+          "chapterId": "llm-eval",
+          "section": "23.17 Failure Case Analysis：分数之外",
+          "label": "23.17 失败样本分类"
+        },
+        {
+          "role": "check-after",
+          "chapterId": "llm-eval",
+          "section": "23.13 Contamination：与数据管线闭环",
+          "label": "23.13 数据泄漏与混集（写完后再对照）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "capstone-rag",
+          "section": "29.2 Pipeline 架构与实测数字",
+          "label": "29.2 管线顺序（对照用，不是本周服务作业）"
+        },
+        {
+          "role": "reference",
+          "chapterId": "capstone-rag",
+          "section": "29.1 从「跑通检索」到「能对外服务」",
+          "label": "29.1 服务化原理（可开始读，本周不交服务）"
+        },
+        {
+          "role": "reference",
+          "href": "https://github.com/datawhalechina/hello-agents",
+          "external": true,
+          "label": "Hello-Agents（可读循环主题，本周不实现 Agent）"
+        }
+      ],
+      "steps": [
+        {
+          "title": "先读工作流所需教材",
+          "body": "打开 28.8、28.10、23.17。先搞清检索命中、阅读之后仍不足、以及胡编之间的差别。第 29 章可以对照管线顺序，但本周不要改去做 FastAPI 服务。"
+        },
+        {
+          "title": "固定三步顺序",
+          "body": "对每条声明只按检索 → 阅读 → 判定走。先留下检索到的文档 id，再摘出你真正读过的句子，最后才写标签。不要跳过阅读，也不要让模型自己决定要不要再搜。"
+        },
+        {
+          "title": "沿用准则并给出引用",
+          "body": "判定必须沿用第 1 周的支持／不支持／证据不足准则，需要改准则时记下版本。每条给出可定位引用（文件名 + 句子或行号）。至少一条判为证据不足。"
+        },
+        {
+          "title": "分开记失败，处理过期和冲突",
+          "body": "检索没找到、找到了但不能支持、版本过期、两段证据冲突，要分开记。至少构造一条过期或冲突样本，说明准则如何处理，而不是硬判对或错。"
+        },
+        {
+          "title": "卡住时可以分层求助",
+          "body": "先留下一条完整轨迹。卡住时请人解释失败该记在哪一步；仍卡住再对照 28.10 的类型。合上参考后换两条声明重走三步。"
+        },
+        {
+          "title": "用一个小变式检查能否迁移",
+          "body": "任选一项即可，不是额外门槛：把检索 k 缩小到 1，看证据不足是否增加；或者故意加入一段过期 README，看冲突规则会不会被触发。"
+        },
+        {
+          "title": "对照而不是改去做 Agent",
+          "body": "Hello-Agents 和第 29 章只说明以后会碰到循环与服务。本周不要实现 Agent 循环、MCP 或 rag-service。也不要把自写轨迹混进 CHEF 冒充官方分数。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "fixed-pipeline",
+          "label": "固定三步顺序",
+          "required": true,
+          "conceptId": "retrieve-read-judge",
+          "text": "每条样本能看出先检索、再阅读、再判定。没有跳过阅读，也没有让模型自选下一步工具。本周不写 Agent。"
+        },
+        {
+          "id": "cite-and-judge",
+          "label": "判定与可定位引用",
+          "required": true,
+          "conceptId": "citation-locate",
+          "text": "沿用第 1 周准则给出标签，并能指出引用位置。至少一条证据不足。不是自动评分。"
+        },
+        {
+          "id": "split-stale",
+          "label": "失败分类与过期冲突",
+          "required": true,
+          "conceptId": "stale-conflict",
+          "text": "检索未命中与判定问题分开记。至少一条过期或冲突证据，并能说明准则如何处理。"
+        },
+        {
+          "id": "service-reading",
+          "label": "服务化选读",
+          "required": false,
+          "conceptId": "retrieve-read-judge",
+          "text": "拓展：开始读第 29 章管线或超时原理。未完成不阻挡本周核心任务，本周也不要求写出 FastAPI 服务或 Agent。"
         }
       ]
     }
