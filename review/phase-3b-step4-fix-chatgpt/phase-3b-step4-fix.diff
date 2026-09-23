@@ -1,0 +1,177 @@
+diff --git a/DESIGN.md b/DESIGN.md
+index a4581ea..d85731d 100644
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -16,7 +16,7 @@ New spacing tokens: `--space-1:4px`, `--space-2:8px`, `--space-3:12px`, `--space
+ - Page header: eyebrow, single title, short description. No repeated H1 from Markdown.
+ - Primary action: existing `.btn`, one prominent start/resume action per entry page. Hover, pressed and keyboard focus visible. Links navigate; buttons change state. On「我的学习」, the primary button opens the current task’s first required textbook section; parallel basics are secondary links. On a task textbook heading,「下一相关小节」is the forward action;「返回当前练习」is a secondary button.
+ - Route list: the home page no longer presents three job tracks as the main choice. Remaining track pages are lookup groupings, not the progress spine.
+-- Lesson list: the current task comes from `content/learning-plan.json`. Review state is stored by concept, separate from task evidence; recording a review must not rewrite `user_reported` checks, concept dimensions, or the current exercise. When review items are due,「我的学习」lists their names after the current-task action and before detailed folds; items that are not due stay off that list. Each due item can record 解释 / 闭卷回忆 / 复写 and 通过 / 未通过 with「保存本次复习」. A save that is not due, or that lacks a form or result, must say it was not written. Weak concepts get a retry entry for the current or a smaller same-spine task. The retry control does not change the current exercise until it is clicked, and it must not open a later mainline task. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. The home page keeps the current goal, week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. In-chapter table of contents and search jumps update that bar to the heading now in view; a heading that is not on the current exercise does not keep a stale next-section action. The sticky bar is compact, and heading scroll offset uses the measured bar height so the target title is not covered. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
++- Lesson list: the current task comes from `content/learning-plan.json`. Review state is stored by concept, separate from task evidence; recording a review must not rewrite `user_reported` checks, concept dimensions, or the current exercise. When review items are due,「我的学习」lists their names after the current-task action and before detailed folds; items that are not due stay off that list. Each due item can record 解释 / 闭卷回忆 / 复写 and 通过 / 未通过 with「保存本次复习」. A save that is not due, or that lacks a form or result, must say it was not written. Weak concepts get a retry entry for the current or a smaller same-spine task that lists the concept in `conceptIds` or `criteria[].conceptId`. The retry control does not change the current exercise until it is clicked, and it must not open a later mainline task. Stretch criteria still do not block completion. On「我的学习」, the reader can manually pick another week of the same spine; this only changes which exercise is shown and does not mark earlier weeks complete. The home page keeps the current goal, week picker and primary textbook action visible. Detailed materials, workspace, steps, checks, history, concepts, notes and references sit in collapsed native disclosures and are not deleted. Required checks use 未检查 / 未通过 / 用户自报通过; stretch uses the same choices and does not block completion. Each check has「保存本条记录」, which writes that check’s current result and evidence together. Marking 用户自报通过 requires a short evidence note for that check. Unsaved edits stay visible with a notice and are not silently discarded when the home page redraws. A new submit that changes result or evidence keeps the previous snapshot; an identical submit is not stored twice. Concept dimensions are independent checkboxes and are not a second gate. After every required item is currently self-reported as passed with evidence, a confirmation control appears; the page does not auto-advance. Catalog and track lists may still use `content/tracks.json` or the full book. Read status is text as well as color and means only “read”, never “task complete”. Footer navigation retains route context when a lookup track is open. Catalog navigation explicitly follows the full book. When a textbook chapter is open, a higher-priority task context stays visible with the current exercise, a return to「我的学习」, and the next related section when this heading belongs to the exercise. In-chapter table of contents and search jumps update that bar to the heading now in view; a heading that is not on the current exercise does not keep a stale next-section action. The sticky bar is compact, and heading scroll offset uses the measured bar height so the target title is not covered. Book-wide previous/next remains available and is labeled as 全书 when that context is shown.
+ - Reference disclosure: native `details/summary` using `.fold`; collapsed by default, keyboard operable, linked headings automatically open ancestor disclosures before scrolling.
+ - Guided project: existing `.guided-lab`, `.guided-step`, `.gs-btn`, `.gl-bar` primitives. One step progress summary; native details at end contains final run/explanation self-checks. Preserve stored legacy read/lab/project/guided data. Opening a solution does not complete a step.
+ - Secondary navigation:「我的学习」/「全部章节」, current page marked with `aria-current`. The six homework projects are not in primary navigation. `#/projects` remains a retired-mainline explanation page so old bookmarks do not 404. No empty home TOC.
+diff --git a/docs/IMPLEMENTATION_PLAN.md b/docs/IMPLEMENTATION_PLAN.md
+index 81ba12b..9b41975 100644
+--- a/docs/IMPLEMENTATION_PLAN.md
++++ b/docs/IMPLEMENTATION_PLAN.md
+@@ -141,7 +141,7 @@
+ 
+ **本步实际完成（阶段 3b-3 通过／失败记录，已通过）：** 到期项可保存复习形式（解释／闭卷回忆／复写）和通过／未通过；点「保存本次复习」才写入。未选形式或结果、以及未到期时，明确提示没有写入，不把 `recordReview` 的 true 当成保存成功。保存后该项离开到期列表。立即重复提交不再次推进。失败记下薄弱点，不删除或改写原实现/验证记录，不把历史 `user_reported` 改成失败，不改首页当前任务。证据提交 [`f86f86c`](https://github.com/xhr0417/llm-course/commit/f86f86c)，CI [35830406090](https://github.com/xhr0417/llm-course/actions/runs/35830406090) success。
+ 
+-**本轮（阶段 3b-4 失败后重练入口）：** 3b-2、3b-3 均已通过。本轮只给失败记下的薄弱知识点提供重练入口：指向当前练习，或同一主线上更早、包含该知识点的更小任务。点了才会更换练习说明；不会按日历打开新的主线任务，也不会打开更晚的周。不删除或改写原实现/验证记录，不把历史 `user_reported` 改成失败，不改首页当前任务除非使用者点了更小任务。不做自动评分、LLM judge、SM-2、题库、streak、dashboard、通知。不开始阶段 4。**3b 整段尚未收尾。** 第 0／24 章遗留修改仍单独处理。
++**本轮（阶段 3b-4 失败后重练入口，暂不收尾）：** 3b-2、3b-3 均已通过。本轮只给失败记下的薄弱知识点提供重练入口：指向当前练习，或同一主线上更早、包含该知识点的更小任务。匹配同时看任务的 `conceptIds` 和 `criteria[].conceptId`（第 2 周拓展「归一化与位置」关联 `modern-block`，不在本周 `conceptIds` 里）。点了才会更换练习说明；不会按日历打开新的主线任务，也不会打开更晚的周。不删除或改写原实现/验证记录，不把历史 `user_reported` 改成失败，不改首页当前任务除非使用者点了更小任务。拓展仍不阻挡任务完成。不做自动评分、LLM judge、SM-2、题库、streak、dashboard、通知。不开始阶段 4。**3b-4 暂不收尾。3b 整段尚未收尾。** 第 0／24 章遗留修改仍单独处理。
+ 
+ **实现顺序：**
+ 
+@@ -150,7 +150,7 @@
+ 3. 通过／失败记录界面。
+ 4. 失败后重练入口。
+ 
+-**验证：** 失败一次复习后，旧的 `user_reported` 实现记录仍在；首页主要任务不因复习失败被日历推进。3b-1 另验：未到期不进队列；通过后间隔按 1/3/7/21 前进并停在 21；相同形式连续通过也按新一轮推进；未到期或刚提交后立即再记不得推进；失败回到 1 天并记薄弱点；旧存储没有 `reviews` 仍能加载且任务证据不变。3b-2 另验：无到期项时首页不出现到期复习区；到期项显示知识点中文名；未到期概念不进该列表；列表在主按钮之后、详细折叠之前；当前练习文案不变。3b-3 已验：到期项可保存通过或未通过；保存成功后该项离开列表；未选形式/结果或未到期会提示没有写入；立即重复提交不再次推进；保存复习后任务证据、概念四维和当前任务不变。本轮另验：失败后出现重练入口；入口指向当前或更小任务，不指向更晚的周；未点击时当前任务不变；点更小任务只更换练习说明；原验收依据、失败历史和概念四维不变。
++**验证：** 失败一次复习后，旧的 `user_reported` 实现记录仍在；首页主要任务不因复习失败被日历推进。3b-1 另验：未到期不进队列；通过后间隔按 1/3/7/21 前进并停在 21；相同形式连续通过也按新一轮推进；未到期或刚提交后立即再记不得推进；失败回到 1 天并记薄弱点；旧存储没有 `reviews` 仍能加载且任务证据不变。3b-2 另验：无到期项时首页不出现到期复习区；到期项显示知识点中文名；未到期概念不进该列表；列表在主按钮之后、详细折叠之前；当前练习文案不变。3b-3 已验：到期项可保存通过或未通过；保存成功后该项离开列表；未选形式/结果或未到期会提示没有写入；立即重复提交不再次推进；保存复习后任务证据、概念四维和当前任务不变。本轮另验：失败后出现重练入口；入口指向当前或更小任务，不指向更晚的周；未点击时当前任务不变；点更小任务只更换练习说明；原验收依据、失败历史和概念四维不变。第 2 周拓展知识点复习失败后，当前仍在第 2 周时出现「重练当前练习」；点击只展开验收，依据不变；拓展未完成不阻挡任务完成。
+ 
+ **本阶段仍不做：** 自动评分、LLM judge、SM-2、题库、streak、dashboard、通知；阶段 4 核验助手。
+ 
+diff --git a/docs/PERSONAL_LEARNING_OS.md b/docs/PERSONAL_LEARNING_OS.md
+index f8635f9..811e5eb 100644
+--- a/docs/PERSONAL_LEARNING_OS.md
++++ b/docs/PERSONAL_LEARNING_OS.md
+@@ -105,7 +105,7 @@
+ 
+ ### 3.5 主动复习
+ 
+-复习形式：解释、闭卷回忆、或复写核心函数。默认间隔 1 / 3 / 7 / 21 天，可改。复习按 concept 排队，不复制 task。只展示已到期项。结果只有通过 / 未通过。失败记下薄弱知识点，建议重练**当前或更小的任务**；**不删除、不改写**此前真实的实现和验证记录，也不把历史 `user_reported` 改成失败。复习不得按日历推进或倒退首页主任务，也不得因到期打开新的主线任务。任务证据与复习状态是两套数据。3b-1 数据模型已封板。3b-2、3b-3 已通过。3b-4 失败后给出当前或更小任务的重练入口；未到期时界面不得显示成保存成功。3b 整段尚未收尾。
++复习形式：解释、闭卷回忆、或复写核心函数。默认间隔 1 / 3 / 7 / 21 天，可改。复习按 concept 排队，不复制 task。只展示已到期项。结果只有通过 / 未通过。失败记下薄弱知识点，建议重练**当前或更小的任务**；**不删除、不改写**此前真实的实现和验证记录，也不把历史 `user_reported` 改成失败。复习不得按日历推进或倒退首页主任务，也不得因到期打开新的主线任务。任务证据与复习状态是两套数据。3b-1 数据模型已封板。3b-2、3b-3 已通过。3b-4 失败后给出当前或更小任务的重练入口，匹配 `conceptIds` 和验收关联的 `conceptId`；未到期时界面不得显示成保存成功。3b-4 暂不收尾。3b 整段尚未收尾。
+ 
+ ### 3.6 机制落地节奏（禁止一次做完）
+ 
+@@ -126,7 +126,7 @@
+ 3. 仍卡住时可以看局部示例或参考实现。
+ 4. 看过后关闭参考，重新实现关键部分，并换输入验证。
+ 
+-每个任务安排一个适当的小变式，检查能否迁移即可，不建设题库或评分引擎。下一次学习开始可用几分钟解释或复写一个关键步骤；这是练习说明。到期复习队列在阶段 3b；3b-2、3b-3 已通过，3b-4 提供失败后的重练入口，3b 整段尚未收尾。
++每个任务安排一个适当的小变式，检查能否迁移即可，不建设题库或评分引擎。下一次学习开始可用几分钟解释或复写一个关键步骤；这是练习说明。到期复习队列在阶段 3b；3b-2、3b-3 已通过，3b-4 提供失败后的重练入口且暂不收尾，3b 整段尚未收尾。
+ 
+ ## 4. 完整示例：小模型学习实验室 — Attention
+ 
+@@ -231,7 +231,7 @@
+ 
+ ## 10. DESIGN.md 随第一功能阶段更新的条目
+ 
+-功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入。3b 整段尚未收尾。
++功能实施时改下列条目；未列出的视觉与无障碍约定全部保留。第 5 节四个独立维度与第 3.3 节证据来源／检查结果已在阶段 3 第二步写入 DESIGN 的记录控件约定；教材任务上下文导航与首页分层已在阶段 3 第三步写入并通过。复习状态按 concept 与任务证据分开存储，已在阶段 3b-1 写入并通过；到期队列展示已在阶段 3b-2 写入并通过；通过／失败记录已在阶段 3b-3 写入并通过；失败后重练入口已在阶段 3b-4 写入，匹配 `conceptIds` 和 `criteria[].conceptId`。3b-4 暂不收尾。3b 整段尚未收尾。
+ 
+ **本阶段要改（并已在 DESIGN.md 更新）**
+ 
+diff --git a/js/pages.js b/js/pages.js
+index 2fe40ec..5c6db17 100644
+--- a/js/pages.js
++++ b/js/pages.js
+@@ -267,12 +267,18 @@
+               "</li>";
+           }).join("") + "</ul></section>";
+       }
++      function taskHasConcept(item, conceptId) {
++        if ((item.conceptIds || []).indexOf(conceptId) >= 0) return true;
++        return (item.criteria || []).some(function (criterion) {
++          return criterion.conceptId === conceptId;
++        });
++      }
+       function retryTarget(conceptId) {
+         var currentWeek = task.weekBudget || 0;
+         var matches = (plan.tasks || []).filter(function (item) {
+           return item.stageId === task.stageId &&
+             (item.weekBudget || 0) <= currentWeek &&
+-            (item.conceptIds || []).indexOf(conceptId) >= 0;
++            taskHasConcept(item, conceptId);
+         }).slice().sort(function (a, b) {
+           return (a.weekBudget || 0) - (b.weekBudget || 0);
+         });
+diff --git a/tools/test-course.js b/tools/test-course.js
+index 9012bdf..ad01b2c 100644
+--- a/tools/test-course.js
++++ b/tools/test-course.js
+@@ -485,6 +485,8 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
+   assert.match(impl, /3b-3/);
+   assert.match(impl, /已通过/);
+   assert.match(impl, /3b-4/);
++  assert.match(impl, /3b-4 暂不收尾/);
++  assert.match(impl, /criteria\[\]\.conceptId/);
+   assert.match(impl, /3b 整段尚未收尾/);
+   assert.doesNotMatch(impl, /不开始 3b-4/);
+ });
+@@ -850,6 +852,73 @@ test('home due queue stays off the current exercise and can save a review', asyn
+   assert.equal(still.reviews.attention.weak, true);
+ });
+ 
++test('week-2 extension concept retry stays on the current exercise', async () => {
++  const plan = require('../content/learning-plan.json');
++  const week2Task = plan.tasks.find(item => item.id === 'lab.decoder.min-lm');
++  const stretch = week2Task.criteria.find(item => item.id === 'norm-rope-read');
++  assert.ok(!week2Task.conceptIds.includes('modern-block'));
++  assert.equal(stretch.conceptId, 'modern-block');
++  assert.equal(stretch.required, false);
++
++  const week2 = 'lab.decoder.min-lm';
++  const app = harness.bootApp({
++    hash: '#/',
++    storage: {
++      'llm-course-current-task': week2,
++      [learningModule.KEY]: JSON.stringify({
++        version: 1,
++        criteria: {
++          [week2 + '::norm-rope-read']: {
++            current: { result: 'user_passed', source: 'user_reported', evidence: '看过 10.4', at: 1 },
++            history: []
++          }
++        },
++        concepts: { 'modern-block': { read: true, explained: true } },
++        reviews: {
++          'modern-block': { dueAt: 1, intervalIndex: 0, weak: false, current: null, history: [] }
++        }
++      })
++    }
++  });
++  await harness.waitFor(() => /到期复习/.test(app.text()));
++  assert.match(app.text(), /拼最小 decoder/);
++  assert.match(app.text(), /RMSNorm \/ RoPE \/ SwiGLU/);
++  assert.doesNotMatch(app.text(), /进入下一任务/);
++  const queue = app.content.querySelector('.review-queue');
++  assert.ok(queue.querySelector('[data-save-review="modern-block"]'));
++  const form = app.content.querySelector('input[data-review-form="modern-block"][value="recall"]');
++  const result = app.content.querySelector('input[data-review-result="modern-block"][value="failed"]');
++  form.click();
++  result.click();
++  app.content.querySelector('[data-save-review="modern-block"]').click();
++  await harness.waitFor(() => !app.content.querySelector('.review-queue'));
++  assert.match(app.text(), /建议重练/);
++  assert.doesNotMatch(app.text(), /到期复习/);
++  const retryNow = app.content.querySelector('[data-retry="modern-block"]');
++  assert.ok(retryNow);
++  assert.equal(retryNow.getAttribute('data-retry-current'), '1');
++  assert.match(retryNow.textContent, /重练当前练习/);
++  assert.doesNotMatch(app.text(), /进入下一任务/);
++  const saved = JSON.parse(app.localStorage.getItem(learningModule.KEY));
++  assert.equal(saved.criteria[week2 + '::norm-rope-read'].current.result, 'user_passed');
++  assert.equal(saved.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
++  assert.equal(saved.reviews['modern-block'].weak, true);
++  assert.equal(saved.concepts['modern-block'].explained, true);
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), week2);
++  const criteriaFold = app.content.querySelector('#home-criteria');
++  assert.ok(criteriaFold);
++  assert.ok(!criteriaFold.open);
++  retryNow.click();
++  assert.equal(app.content.querySelector('#home-criteria').open, true);
++  assert.equal(app.localStorage.getItem('llm-course-current-task'), week2);
++  assert.match(app.text(), /拼最小 decoder/);
++  assert.equal(app.content.querySelector('textarea[data-evidence="norm-rope-read"]').value, '看过 10.4');
++  const still = JSON.parse(app.localStorage.getItem(learningModule.KEY));
++  assert.equal(still.criteria[week2 + '::norm-rope-read'].current.evidence, '看过 10.4');
++  assert.equal(still.reviews['modern-block'].weak, true);
++  assert.doesNotMatch(app.text(), /进入下一任务/);
++});
++
+ test('saving a passed check arms a review that is not due yet', async () => {
+   const app = harness.bootApp({ hash: '#/' });
+   await harness.waitFor(() => /保存本条记录/.test(app.text()));
