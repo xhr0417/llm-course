@@ -481,7 +481,10 @@ test('phase 3 design docs keep completion rules after the record layer', () => {
   assert.match(os, /只展示已到期项/);
   assert.match(impl, /3b-2/);
   assert.match(impl, /已封板/);
+  assert.match(impl, /仍待正式确认/);
   assert.match(impl, /3b-3/);
+  assert.match(impl, /已通过/);
+  assert.match(impl, /3b 整段尚未收尾/);
   assert.match(impl, /不开始 3b-4/);
 });
 
